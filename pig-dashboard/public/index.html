@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="-1">
+  <title>수안푸드 지육가 대시보드</title>
+  <script>
+    const INJECTED_BUILD = 'REPLACE_BUILD_ID';
+    (function() {
+      const stored = sessionStorage.getItem('pigBuildId');
+      if (stored && stored !== INJECTED_BUILD) {
+        sessionStorage.setItem('pigBuildId', INJECTED_BUILD);
+        location.replace(location.pathname + '?_v=' + INJECTED_BUILD);
+      } else { sessionStorage.setItem('pigBuildId', INJECTED_BUILD); }
+    })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; background: #0f172a; color: #e2e8f0;
+      font-family: 'Segoe UI', 'Apple SD Gothic Neo', system-ui, sans-serif;
+      font-size: 14px;
+    }
+    .container { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── 헤더 ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 20px; background: #1e293b;
+      border-bottom: 1px solid #334155; position: sticky; top: 0; z-index: 100;
+    }
+    .logo-area { display: flex; align-items: center; gap: 12px; }
+    .logo-title { font-size: 1.05rem; font-weight: 700; color: #f1f5f9; }
+    .live-badge { background: #16a34a; color: #fff; font-size: 0.63rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 4px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .asof { font-size: 0.68rem; color: #64748b; }
+
+    /* ── 탭 ── */
+    .tab-nav { display: flex; gap: 4px; padding: 10px 20px;
+      background: #1e293b; border-bottom: 1px solid #334155; }
+    .tab-btn { padding: 8px 20px; border-radius: 6px; border: 1px solid #334155;
+      background: transparent; color: #94a3b8; font-size: 0.82rem; font-weight: 700;
+      cursor: pointer; transition: all 0.2s; }
+    .tab-btn:hover { background: #334155; color: #e2e8f0; }
+    .tab-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+    /* ── 페이지 ── */
+    .page { display: none; padding: 16px 20px; }
+    .page.active { display: block; }
+
+    /* ── 페이지 헤더 ── */
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .page-title { font-size: 1.1rem; font-weight: 700; color: #f1f5f9; }
+    .page-sub { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+    .period-badge { font-size: 0.63rem; font-weight: 700; padding: 3px 8px;
+      border-radius: 4px; background: #1e3a5f; color: #60a5fa; }
+
+    /* ── 그리드 ── */
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 14px; }
+    @media(max-width:1100px){ .grid-3 { grid-template-columns: 1fr 1fr; } }
+    @media(max-width:750px){
+      .grid-3, .grid-2, .grid-4 { grid-template-columns: 1fr; }
+    }
+
+    /* ── 카드 ── */
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .card-title { font-size: 0.85rem; font-weight: 700; color: #f1f5f9; }
+    .tag { font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+    .tag-blue   { background: #1e3a5f; color: #60a5fa; }
+    .tag-green  { background: #14532d; color: #86efac; }
+    .tag-orange { background: #431407; color: #fb923c; }
+    .tag-purple { background: #3b0764; color: #d8b4fe; }
+    .tag-gray   { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+    .chart-wrap { width: 100%; height: 180px; position: relative; }
+
+    /* ── KPI ── */
+    .kpi-card { background: #0f172a; border-radius: 8px; padding: 12px; }
+    .kpi-lbl { font-size: 0.65rem; color: #64748b; margin-bottom: 4px; }
+    .kpi-val { font-size: 1.15rem; font-weight: 700; color: #f1f5f9; }
+    .kpi-unit { font-size: 0.62rem; color: #475569; margin-top: 2px; }
+    .kpi-chg { font-size: 0.68rem; margin-top: 3px; font-weight: 600; }
+    .up   { color: #4ade80; }
+    .down { color: #f87171; }
+    .flat { color: #94a3b8; }
+
+    /* ── 수치 테이블 ── */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+    .data-table th { background: #0f172a; color: #64748b; padding: 7px 10px;
+      text-align: center; font-weight: 600; border-bottom: 1px solid #334155; white-space: nowrap; }
+    .data-table td { padding: 6px 10px; border-bottom: 1px solid #1e293b;
+      color: #cbd5e1; text-align: center; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table td.num { font-variant-numeric: tabular-nums; }
+    .data-table td.date { color: #64748b; font-size: 0.72rem; }
+    .chg-up   { color: #4ade80; font-weight: 600; }
+    .chg-down { color: #f87171; font-weight: 600; }
+
+    /* ── AI 분석 박스 ── */
+    .ai-section { margin-top: 14px; }
+    .ai-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .ai-title { font-size: 0.9rem; font-weight: 700; color: #f1f5f9; }
+    .ai-model-badge { font-size: 0.62rem; padding: 2px 7px; border-radius: 4px;
+      background: #1e293b; color: #64748b; border: 1px solid #334155; }
+    .ai-btn { width: 100%; padding: 9px; background: #1e293b; color: #94a3b8;
+      border: 1px solid #334155; border-radius: 7px; font-size: 0.82rem; font-weight: 700;
+      cursor: pointer; transition: all 0.2s; margin-bottom: 10px; }
+    .ai-btn:hover { background: #334155; color: #e2e8f0; }
+    .ai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-box { background: #0f172a; border-radius: 8px; padding: 14px;
+      min-height: 60px; max-height: 480px; overflow-y: auto; }
+    .ai-box h3 { font-size: 0.85rem; color: #60a5fa; margin: 10px 0 5px; }
+    .ai-box h4 { font-size: 0.8rem; color: #93c5fd; margin: 8px 0 4px; }
+    .ai-box p  { font-size: 0.78rem; color: #cbd5e1; line-height: 1.7; margin-bottom: 6px; }
+    .ai-box ul, .ai-box ol { padding-left: 16px; margin-bottom: 6px; }
+    .ai-box li { font-size: 0.78rem; color: #cbd5e1; line-height: 1.7; }
+    .ai-box strong { color: #f1f5f9; }
+    .ai-placeholder { font-size: 0.78rem; color: #475569; text-align: center; padding: 20px 0; }
+
+    /* ── 타이밍 ── */
+    .timing-verdict { font-size: 1.0rem; font-weight: 700; padding: 12px 16px;
+      border-radius: 8px; background: #0f172a; margin-bottom: 10px; text-align: center; }
+    .timing-tips { list-style: none; }
+    .timing-tips li { padding: 5px 0; border-bottom: 1px solid #1e293b;
+      font-size: 0.78rem; color: #cbd5e1; line-height: 1.6; }
+    .timing-tips li:last-child { border-bottom: none; }
+
+    /* ── 기타 ── */
+    .divider { height: 1px; background: #1e293b; margin: 12px 0; }
+    .foot-note { font-size: 0.62rem; color: #475569; margin-top: 8px; }
+    .loading { display: flex; align-items: center; justify-content: center;
+      gap: 6px; color: #475569; font-size: 0.78rem; padding: 20px 0; }
+    .spin { display: inline-block; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .more-btn { background: transparent; border: 1px solid #334155; color: #64748b;
+      padding: 5px 14px; border-radius: 5px; font-size: 0.73rem; cursor: pointer;
+      margin-top: 8px; transition: all 0.2s; }
+    .more-btn:hover { background: #334155; color: #e2e8f0; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- 헤더 -->
+  <header>
+    <div class="logo-area">
+      <div>
+        <div class="logo-title">🐷 수안푸드 지육가 대시보드</div>
+      </div>
+      <span class="live-badge">LIVE</span>
+    </div>
+    <div class="header-right">
+      <span class="asof" id="asof">—</span>
+    </div>
+  </header>
+
+  <!-- 탭 -->
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="weekly"  onclick="switchTab('weekly',this)">주간 보고서</button>
+    <button class="tab-btn"        data-tab="monthly" onclick="switchTab('monthly',this)">월간 보고서</button>
+    <button class="tab-btn"        data-tab="yearly"  onclick="switchTab('yearly',this)">연간 보고서</button>
+  </div>
+
+  <!-- ══════ 주간 보고서 ══════ -->
+  <div id="page-weekly" class="page active">
+    <div class="page-header">
+      <div>
+        <div class="page-title">주간 보고서</div>
+        <div class="page-sub" id="weekly-range">로딩 중...</div>
+      </div>
+      <span class="period-badge">Weekly Report</span>
+    </div>
+
+    <!-- KPI 4개 -->
+    <div class="grid-4" id="weekly-kpi">
+      <div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span> 시세 로딩 중...</div>
+    </div>
+
+    <!-- 차트 3개 -->
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🇺🇸 CME Lean Hog 주간 추이</span>
+          <span class="tag tag-orange">직전 주</span>
+        </div>
+        <div class="chart-wrap"><canvas id="wc-lh"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🇰🇷 국내 지육 도매가 주간 추이</span>
+          <span class="tag tag-blue">직전 주</span>
+        </div>
+        <div class="chart-wrap"><canvas id="wc-kamis"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🌾 사료 원료가 주간 추이</span>
+          <span class="tag tag-green">옥수수/대두</span>
+        </div>
+        <div class="chart-wrap"><canvas id="wc-feed"></canvas></div>
+      </div>
+    </div>
+
+    <!-- 수치 테이블 2개 -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">CME Lean Hog 일별 시세</span>
+          <span class="tag tag-gray" id="wt-lh-range">—</span>
+        </div>
+        <div id="wt-lh"><div class="loading"><span class="spin">⏳</span></div></div>
+        <button class="more-btn" onclick="openPig333()">pig333.com 더보기 →</button>
+        <p class="foot-note">3월 1일 ~ 전전 주 데이터</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">국내 지육 도매가 일별 시세</span>
+          <span class="tag tag-gray" id="wt-kamis-range">—</span>
+        </div>
+        <div id="wt-kamis"><div class="loading"><span class="spin">⏳</span></div></div>
+        <button class="more-btn" onclick="openKamis()">KAMIS 더보기 →</button>
+        <p class="foot-note">3월 1일 ~ 전전 주 데이터</p>
+      </div>
+    </div>
+
+    <!-- AI 분석 -->
+    <div class="card ai-section">
+      <div class="ai-header">
+        <span class="ai-title">주간 보고서 AI 분석</span>
+        <span class="ai-model-badge" id="ai-weekly-model">—</span>
+      </div>
+      <button class="ai-btn" id="ai-weekly-btn" onclick="runAI('weekly')">분석 실행</button>
+      <div class="ai-box" id="ai-weekly-box">
+        <p class="ai-placeholder">버튼을 누르면 주간 지육가·사료 원료·환율을 종합 분석합니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ 월간 보고서 ══════ -->
+  <div id="page-monthly" class="page">
+    <div class="page-header">
+      <div>
+        <div class="page-title">월간 보고서</div>
+        <div class="page-sub" id="monthly-range">로딩 중...</div>
+      </div>
+      <span class="period-badge">Monthly Report</span>
+    </div>
+
+    <div class="grid-4" id="monthly-kpi">
+      <div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span></div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🇺🇸 CME Lean Hog 월간 추이</span>
+          <span class="tag tag-orange">30일</span>
+        </div>
+        <div class="chart-wrap"><canvas id="mc-lh"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🇰🇷 국내 지육 도매가 월간</span>
+          <span class="tag tag-blue">30일</span>
+        </div>
+        <div class="chart-wrap"><canvas id="mc-kamis"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🌾 사료 원료가 월간</span>
+          <span class="tag tag-green">옥수수/대두</span>
+        </div>
+        <div class="chart-wrap"><canvas id="mc-feed"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">CME Lean Hog 월간 시세표</span>
+          <span class="tag tag-gray" id="mt-lh-range">—</span>
+        </div>
+        <div id="mt-lh"><div class="loading"><span class="spin">⏳</span></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">국내 도매가 월간 시세표</span>
+          <span class="tag tag-gray" id="mt-kamis-range">—</span>
+        </div>
+        <div id="mt-kamis"><div class="loading"><span class="spin">⏳</span></div></div>
+      </div>
+    </div>
+
+    <!-- 매입 타이밍 -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-head">
+        <span class="card-title">📅 2~3개월 후 매입 타이밍 분석</span>
+        <span class="tag tag-green">수안푸드 전용</span>
+      </div>
+      <div id="timing-wrap">
+        <div class="loading"><span class="spin">⏳</span> 분석 중...</div>
+      </div>
+    </div>
+
+    <div class="card ai-section">
+      <div class="ai-header">
+        <span class="ai-title">월간 보고서 AI 분석</span>
+        <span class="ai-model-badge" id="ai-monthly-model">—</span>
+      </div>
+      <button class="ai-btn" id="ai-monthly-btn" onclick="runAI('monthly')">분석 실행</button>
+      <div class="ai-box" id="ai-monthly-box">
+        <p class="ai-placeholder">월간 지육가 동향과 매입 타이밍을 분석합니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ 연간 보고서 ══════ -->
+  <div id="page-yearly" class="page">
+    <div class="page-header">
+      <div>
+        <div class="page-title">연간 보고서</div>
+        <div class="page-sub" id="yearly-range">로딩 중...</div>
+      </div>
+      <span class="period-badge">Yearly Report</span>
+    </div>
+
+    <div class="grid-4" id="yearly-kpi">
+      <div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span></div>
+    </div>
+
+    <!-- 연간 차트 (크게) -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🇺🇸 CME Lean Hog 1년 추이</span>
+          <span class="tag tag-orange">365일</span>
+        </div>
+        <div style="width:100%;height:220px;position:relative;"><canvas id="yc-lh"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🇰🇷 국내 지육 도매가 1년 추이</span>
+          <span class="tag tag-blue">365일</span>
+        </div>
+        <div style="width:100%;height:220px;position:relative;"><canvas id="yc-kamis"></canvas></div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🌽 옥수수 선물 1년 추이</span>
+          <span class="tag tag-green">ZC=F</span>
+        </div>
+        <div style="width:100%;height:200px;position:relative;"><canvas id="yc-zc"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🫘 대두 선물 1년 추이</span>
+          <span class="tag tag-purple">ZS=F</span>
+        </div>
+        <div style="width:100%;height:200px;position:relative;"><canvas id="yc-zs"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card ai-section">
+      <div class="ai-header">
+        <span class="ai-title">연간 보고서 AI 분석</span>
+        <span class="ai-model-badge" id="ai-yearly-model">—</span>
+      </div>
+      <button class="ai-btn" id="ai-yearly-btn" onclick="runAI('yearly')">분석 실행</button>
+      <div class="ai-box" id="ai-yearly-box">
+        <p class="ai-placeholder">1년간 지육가·사료 원료가 종합 트렌드를 분석합니다.</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ─── 전역 ────────────────────────────────────────────
+const charts = {};
+let currentData = null;
+let historyCache = { LH:{}, ZC:{}, ZS:{}, KAMIS:{} };
+
+// ─── 탭 전환 ─────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ─── 차트 컬러 팔레트 ────────────────────────────────
+const COLORS = {
+  LH:    { line: '#fb923c', fill: 'rgba(251,146,60,0.15)'   },
+  KAMIS: { line: '#60a5fa', fill: 'rgba(96,165,250,0.15)'   },
+  ZC:    { line: '#86efac', fill: 'rgba(134,239,172,0.12)'  },
+  ZS:    { line: '#d8b4fe', fill: 'rgba(216,180,254,0.12)'  },
+};
+
+// ─── Chart.js 공통 옵션 ──────────────────────────────
+function makeChartOpts(title, unit, color) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1e293b',
+        titleColor: '#94a3b8', bodyColor: '#f1f5f9',
+        borderColor: '#334155', borderWidth: 1,
+        callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)} ${unit}` }
+      }
+    },
+    scales: {
+      x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', maxTicksLimit: 7, font: { size: 10 } } },
+      y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } } }
+    }
+  };
+}
+
+function drawChart(canvasId, rows, sym, unit) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (charts[canvasId]) { charts[canvasId].destroy(); }
+
+  const labels = rows.map(r => {
+    const d = new Date(r.time * 1000);
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  });
+  const vals = rows.map(r => r.close);
+  const c = COLORS[sym] || { line: '#94a3b8', fill: 'rgba(148,163,184,0.1)' };
+
+  charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        borderColor: c.line, backgroundColor: c.fill,
+        borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3,
+        pointHoverRadius: 4, fill: true, tension: 0.3,
+      }]
+    },
+    options: makeChartOpts(sym, unit, c.line)
+  });
+}
+
+// 복합 차트 (옥수수 + 대두)
+function drawFeedChart(canvasId, zcRows, zsRows) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (charts[canvasId]) charts[canvasId].destroy();
+
+  // 날짜 기준 합치기
+  const dateMap = new Map();
+  zcRows.forEach(r => dateMap.set(r.time, { time: r.time, zc: r.close }));
+  zsRows.forEach(r => {
+    const d = dateMap.get(r.time) || { time: r.time };
+    d.zs = r.close;
+    dateMap.set(r.time, d);
+  });
+  const merged = Array.from(dateMap.values()).sort((a,b) => a.time - b.time);
+  const labels = merged.map(r => {
+    const d = new Date(r.time * 1000);
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  });
+
+  charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '옥수수', data: merged.map(r => r.zc), borderColor: '#86efac',
+          backgroundColor: 'rgba(134,239,172,0.08)', borderWidth: 2,
+          pointRadius: merged.length > 60 ? 0 : 2, fill: true, tension: 0.3, yAxisID: 'y' },
+        { label: '대두', data: merged.map(r => r.zs), borderColor: '#d8b4fe',
+          backgroundColor: 'rgba(216,180,254,0.08)', borderWidth: 2,
+          pointRadius: merged.length > 60 ? 0 : 2, fill: true, tension: 0.3, yAxisID: 'y2' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top',
+          labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 12 } },
+        tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9',
+          borderColor: '#334155', borderWidth: 1 }
+      },
+      scales: {
+        x:  { grid: { color: '#1e293b' }, ticks: { color: '#475569', maxTicksLimit: 7, font: { size: 10 } } },
+        y:  { grid: { color: '#1e293b' }, ticks: { color: '#86efac', font: { size: 10 } }, position: 'left' },
+        y2: { grid: { drawOnChartArea: false }, ticks: { color: '#d8b4fe', font: { size: 10 } }, position: 'right' }
+      }
+    }
+  });
+}
+
+// ─── 수치 테이블 렌더 ────────────────────────────────
+function renderTable(containerId, rows, unit, maxRows = 7) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<p style="text-align:center;color:#475569;padding:16px;font-size:0.78rem;">데이터 없음</p>';
+    return;
+  }
+  const shown = [...rows].reverse().slice(0, maxRows);
+  let html = `<table class="data-table"><thead>
+    <tr><th>날짜</th><th>시세</th><th>전일대비</th><th>고가</th><th>저가</th></tr>
+  </thead><tbody>`;
+  shown.forEach((r, i) => {
+    const prev = shown[i + 1];
+    const chg  = prev ? r.close - prev.close : null;
+    const chgPct = prev ? ((chg / prev.close) * 100) : null;
+    const chgClass = chg > 0 ? 'chg-up' : chg < 0 ? 'chg-down' : '';
+    const chgStr  = chg !== null
+      ? `<span class="${chgClass}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)} (${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)</span>`
+      : '<span style="color:#475569">—</span>';
+    const d = new Date(r.time * 1000);
+    const dateStr = `${d.getMonth()+1}/${d.getDate()}(${['일','월','화','수','목','금','토'][d.getDay()]})`;
+    html += `<tr>
+      <td class="date">${dateStr}</td>
+      <td class="num" style="font-weight:700;">${r.close.toFixed(2)}</td>
+      <td class="num">${chgStr}</td>
+      <td class="num">${(r.high || r.close).toFixed(2)}</td>
+      <td class="num">${(r.low  || r.close).toFixed(2)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+// ─── KPI 렌더 ────────────────────────────────────────
+function renderKpi(containerId, data) {
+  const el = document.getElementById(containerId);
+  if (!el || !data) return;
+  const items = [
+    { key: 'LH',     icon: '🇺🇸', label: 'CME Lean Hog' },
+    { key: 'KAMIS',  icon: '🇰🇷', label: '국내 도매가'   },
+    { key: 'ZC',     icon: '🌽',  label: '옥수수 선물'   },
+    { key: 'ZS',     icon: '🫘',  label: '대두 선물'     },
+  ];
+  el.innerHTML = items.map(item => {
+    const d = data[item.key];
+    if (!d) return `<div class="kpi-card"><div class="kpi-lbl">${item.icon} ${item.label}</div><div class="kpi-val" style="color:#475569;">—</div></div>`;
+    return `<div class="kpi-card">
+      <div class="kpi-lbl">${item.icon} ${item.label}</div>
+      <div class="kpi-val">${Number(d.price).toLocaleString()}</div>
+      <div class="kpi-unit">${d.unit}${d.date ? ' · ' + d.date : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── 데이터 로드 ─────────────────────────────────────
+async function getHist(sym, period) {
+  const key = sym + '_' + period;
+  if (historyCache[sym][period]) return historyCache[sym][period];
+  const res  = await fetch(`/api/history?sym=${sym}&period=${period}`);
+  const json = await res.json();
+  if (json.ok) {
+    historyCache[sym][period] = json;
+    return json;
+  }
+  return { rows: [], rangeLabel: '데이터 없음' };
+}
+
+async function loadPeriod(period) {
+  // 현재 시세
+  if (!currentData) {
+    const res = await fetch('/api/current');
+    const json = await res.json();
+    if (json.ok) {
+      currentData = json.data;
+      document.getElementById('asof').textContent = json.fetchedAt || '';
+    }
+  }
+
+  const prefix = period[0]; // w / m / y
+
+  // KPI
+  renderKpi(prefix + 'eckly-kpi' === 'weekly-kpi' ? 'weekly-kpi'
+    : period + '-kpi', currentData);
+
+  // KPI id 정확하게
+  const kpiId = period === 'weekly' ? 'weekly-kpi'
+              : period === 'monthly' ? 'monthly-kpi' : 'yearly-kpi';
+  renderKpi(kpiId, currentData);
+
+  // 히스토리 병렬 로드
+  const [lhH, kamisH, zcH, zsH] = await Promise.all([
+    getHist('LH',    period),
+    getHist('KAMIS', period),
+    getHist('ZC',    period),
+    getHist('ZS',    period),
+  ]);
+
+  const rangeLabel = lhH.rangeLabel || '';
+
+  if (period === 'weekly') {
+    document.getElementById('weekly-range').textContent = rangeLabel;
+    drawChart('wc-lh',    lhH.rows,    'LH',    'cents/lb');
+    drawChart('wc-kamis', kamisH.rows, 'KAMIS', '원/kg');
+    drawFeedChart('wc-feed', zcH.rows, zsH.rows);
+    renderTable('wt-lh',    lhH.rows,    'cents/lb');
+    renderTable('wt-kamis', kamisH.rows, '원/kg');
+    document.getElementById('wt-lh-range').textContent    = rangeLabel;
+    document.getElementById('wt-kamis-range').textContent = rangeLabel;
+
+  } else if (period === 'monthly') {
+    document.getElementById('monthly-range').textContent = rangeLabel;
+    drawChart('mc-lh',    lhH.rows,    'LH',    'cents/lb');
+    drawChart('mc-kamis', kamisH.rows, 'KAMIS', '원/kg');
+    drawFeedChart('mc-feed', zcH.rows, zsH.rows);
+    renderTable('mt-lh',    lhH.rows,    'cents/lb', 10);
+    renderTable('mt-kamis', kamisH.rows, '원/kg',    10);
+    document.getElementById('mt-lh-range').textContent    = rangeLabel;
+    document.getElementById('mt-kamis-range').textContent = rangeLabel;
+    loadTiming();
+
+  } else { // yearly
+    document.getElementById('yearly-range').textContent = rangeLabel;
+    drawChart('yc-lh',    lhH.rows,    'LH',    'cents/lb');
+    drawChart('yc-kamis', kamisH.rows, 'KAMIS', '원/kg');
+    drawChart('yc-zc',    zcH.rows,    'ZC',    'cents/bu');
+    drawChart('yc-zs',    zsH.rows,    'ZS',    'cents/bu');
+  }
+}
+
+// ─── 매입 타이밍 ─────────────────────────────────────
+async function loadTiming() {
+  const wrap = document.getElementById('timing-wrap');
+  if (!wrap) return;
+  try {
+    const res  = await fetch('/api/timing');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    wrap.innerHTML = `
+      <div class="timing-verdict">${json.verdict}</div>
+      <ul class="timing-tips">
+        ${json.tips.map(t => `<li>${t.replace(/\n/g,'<br>')}</li>`).join('')}
+      </ul>`;
+  } catch (e) {
+    wrap.innerHTML = `<p style="color:#f87171;font-size:0.78rem;">타이밍 분석 실패: ${e.message}</p>`;
+  }
+}
+
+// ─── AI 분석 ─────────────────────────────────────────
+async function runAI(period) {
+  const btn   = document.getElementById(`ai-${period}-btn`);
+  const box   = document.getElementById(`ai-${period}-box`);
+  const badge = document.getElementById(`ai-${period}-model`);
+  btn.disabled = true;
+  btn.textContent = '분석 중...';
+  box.innerHTML = '<p class="ai-placeholder">⏳ Gemini AI가 분석 중입니다...</p>';
+
+  try {
+    const res  = await fetch(`/api/analysis/${period}`);
+    const json = await res.json();
+    const md   = json.analysis || '분석 결과 없음';
+    box.innerHTML = marked.parse(md);
+    badge.textContent = json.model
+      ? (json.cached ? `${json.model} · 캐시` : json.model)
+      : (json.fallback ? 'fallback' : '—');
+  } catch (e) {
+    box.innerHTML = `<p style="color:#f87171;font-size:0.78rem;">AI 분석 실패: ${e.message}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '분석 실행';
+  }
+}
+
+// ─── 외부 링크 ───────────────────────────────────────
+function openPig333() { window.open('https://www.pig333.com/markets_and_prices/', '_blank'); }
+function openKamis()  { window.open('https://www.kamis.or.kr/consumer/price/price/itemPriceList.do', '_blank'); }
+
+// ─── 탭 전환 시 데이터 로드 ──────────────────────────
+const loadedTabs = new Set();
+function switchTab(name, btn) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (!loadedTabs.has(name)) {
+    loadedTabs.add(name);
+    loadPeriod(name).catch(e => console.error(e));
+  }
+}
+
+// ─── 초기화 ──────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadedTabs.add('weekly');
+  loadPeriod('weekly').catch(e => console.error(e));
+  // 10분마다 현재가 갱신
+  setInterval(() => { currentData = null; }, 10 * 60 * 1000);
+});
+</script>
+</body>
+</html>
