@@ -628,7 +628,7 @@ async function loadMarket() {
   // 수입량 바
   const maxS = Math.max(...IMPORT.countries.map(c=>c.s));
   document.getElementById('import-bars').innerHTML = IMPORT.countries.map(c=>{
-    const chg = ((c.v25-(c.v25/1.08))/（c.v25/1.08)*100).toFixed(1);
+    const chg = ((c.v25-(c.v25/1.08))/(c.v25/1.08)*100).toFixed(1);
     const yoy = ((c.v25 - c.v25/1.09)/c.v25/1.09*100);
     return `<div class="cb-row">
       <span class="cb-name">${c.n}</span>
