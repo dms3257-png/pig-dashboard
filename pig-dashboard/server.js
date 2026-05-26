@@ -73,7 +73,7 @@ async function callGemini(prompt) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
+            generationConfig: { temperature: 0.4, maxOutputTokens: 8192 }
           }),
           signal: AbortSignal.timeout(30000),
         }
