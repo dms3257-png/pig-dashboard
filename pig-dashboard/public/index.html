@@ -1,133 +1,119 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0">
-  <title>수안푸드 지육가 대시보드</title>
-  <script>
-    const B='REPLACE_BUILD_ID';
-    (()=>{const s=sessionStorage.getItem('pb');if(s&&s!==B){sessionStorage.setItem('pb',B);location.replace(location.pathname+'?_v='+B);}else sessionStorage.setItem('pb',B);})();
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html,body{height:100%;background:#0f172a;color:#e2e8f0;font-family:'Segoe UI','Apple SD Gothic Neo',system-ui,sans-serif;font-size:14px}
-    /* 헤더 */
-    header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:#1e293b;border-bottom:1px solid #334155;position:sticky;top:0;z-index:100}
-    .logo{font-size:1.05rem;font-weight:700;color:#f1f5f9}
-    .live{background:#16a34a;color:#fff;font-size:.63rem;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:8px;animation:pulse 2s infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-    .asof{font-size:.68rem;color:#64748b}
-    /* 탭 */
-    .tab-nav{display:flex;gap:4px;padding:10px 20px;background:#1e293b;border-bottom:1px solid #334155;flex-wrap:wrap}
-    .tab-btn{padding:8px 18px;border-radius:6px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .2s}
-    .tab-btn:hover{background:#334155;color:#e2e8f0}
-    .tab-btn.active{background:#2563eb;color:#fff;border-color:#2563eb}
-    .tab-btn.highlight{border-color:#16a34a;color:#86efac}
-    .tab-btn.highlight.active{background:#15803d}
-    /* 페이지 */
-    .page{display:none;padding:16px 20px}
-    .page.active{display:block}
-    .pg-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
-    .pg-title{font-size:1.1rem;font-weight:700;color:#f1f5f9}
-    .pg-sub{font-size:.72rem;color:#64748b;margin-top:2px}
-    .badge{font-size:.63rem;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap}
-    .badge-blue{background:#1e3a5f;color:#60a5fa}
-    .badge-green{background:#14532d;color:#86efac}
-    /* 그리드 */
-    .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
-    .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
-    .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
-    @media(max-width:1100px){.g3{grid-template-columns:1fr 1fr}.g5{grid-template-columns:repeat(3,1fr)}}
-    @media(max-width:750px){.g2,.g3,.g4,.g5{grid-template-columns:1fr}}
-    /* 카드 */
-    .card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px}
-    .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-    .card-title{font-size:.85rem;font-weight:700;color:#f1f5f9}
-    .tag{font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:4px}
-    .t-blue{background:#1e3a5f;color:#60a5fa}
-    .t-green{background:#14532d;color:#86efac}
-    .t-orange{background:#431407;color:#fb923c}
-    .t-purple{background:#3b0764;color:#d8b4fe}
-    .t-red{background:#7f1d1d;color:#fca5a5}
-    .t-gray{background:#1e293b;color:#64748b;border:1px solid #334155}
-    .cw{width:100%;height:185px;position:relative}
-    .cw-lg{width:100%;height:225px;position:relative}
-    /* KPI */
-    .kpi{background:#0f172a;border-radius:8px;padding:12px}
-    .kpi-l{font-size:.65rem;color:#64748b;margin-bottom:4px}
-    .kpi-v{font-size:1.15rem;font-weight:700;color:#f1f5f9}
-    .kpi-u{font-size:.62rem;color:#475569;margin-top:2px}
-    .kpi-chg{font-size:.68rem;margin-top:3px;font-weight:600}
-    .up{color:#4ade80}.down{color:#f87171}.flat{color:#94a3b8}
-    /* 타이밍 박스 - 핵심 UI */
-    .timing-box{background:#0f172a;border-radius:10px;padding:16px;margin-bottom:14px}
-    .timing-verdict{font-size:1.15rem;font-weight:700;padding:14px 18px;border-radius:8px;text-align:center;margin-bottom:14px;letter-spacing:.3px}
-    .tv-green{background:#052e16;border:1px solid #16a34a;color:#4ade80}
-    .tv-yellow{background:#1c1400;border:1px solid #ca8a04;color:#fbbf24}
-    .tv-red{background:#1f0808;border:1px solid #dc2626;color:#f87171}
-    .timing-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-    .timing-item{background:#1e293b;border-radius:7px;padding:10px}
-    .timing-item-label{font-size:.63rem;color:#64748b;margin-bottom:4px}
-    .timing-item-val{font-size:.95rem;font-weight:700;color:#f1f5f9}
-    .timing-item-sub{font-size:.63rem;color:#475569;margin-top:2px}
-    .analysis-list{list-style:none}
-    .analysis-list li{padding:6px 0;border-bottom:1px solid #1e293b;font-size:.78rem;color:#cbd5e1;line-height:1.6}
-    .analysis-list li:last-child{border-bottom:none}
-    .forecast-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-    .forecast-label{width:90px;font-size:.72rem;color:#94a3b8;flex-shrink:0}
-    .forecast-range{flex:1;background:#334155;border-radius:4px;height:24px;position:relative;overflow:hidden}
-    .forecast-fill{height:100%;background:linear-gradient(90deg,rgba(37,99,235,.3),rgba(37,99,235,.7));border-radius:4px;display:flex;align-items:center;justify-content:center}
-    .forecast-val{font-size:.72rem;font-weight:700;color:#93c5fd;white-space:nowrap}
-    /* 데이터 테이블 */
-    .dt{width:100%;border-collapse:collapse;font-size:.76rem}
-    .dt th{background:#0f172a;color:#64748b;padding:7px 10px;text-align:center;font-weight:600;border-bottom:1px solid #334155;white-space:nowrap}
-    .dt td{padding:6px 10px;border-bottom:1px solid #1e293b;color:#cbd5e1;text-align:center}
-    .dt tr:last-child td{border-bottom:none}
-    .dt td.d{color:#64748b;font-size:.72rem}
-    .cu{color:#4ade80;font-weight:600}.cd{color:#f87171;font-weight:600}
-    /* AI 박스 */
-    .ai-btn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:7px;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .2s;margin-bottom:10px}
-    .ai-btn:hover{background:#334155;color:#e2e8f0}.ai-btn:disabled{opacity:.5;cursor:not-allowed}
-    .ai-badge{font-size:.62rem;padding:2px 7px;border-radius:4px;background:#1e293b;color:#64748b;border:1px solid #334155}
-    .ai-box{background:#0f172a;border-radius:8px;padding:14px;min-height:60px;max-height:560px;overflow-y:auto}
-    .ai-box h3{font-size:.85rem;color:#60a5fa;margin:10px 0 5px}
-    .ai-box h4{font-size:.8rem;color:#93c5fd;margin:8px 0 4px}
-    .ai-box p{font-size:.78rem;color:#cbd5e1;line-height:1.7;margin-bottom:6px}
-    .ai-box ul,.ai-box ol{padding-left:16px;margin-bottom:6px}
-    .ai-box li{font-size:.78rem;color:#cbd5e1;line-height:1.7}
-    .ai-box strong{color:#f1f5f9}
-    .ai-ph{font-size:.78rem;color:#475569;text-align:center;padding:20px 0}
-    /* 수입국 바 */
-    .cb-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-    .cb-name{width:90px;font-size:.72rem;color:#94a3b8;flex-shrink:0;text-align:right}
-    .cb-bg{flex:1;background:#0f172a;border-radius:4px;height:20px;overflow:hidden}
-    .cb-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding:0 7px;transition:width .6s ease}
-    .cb-val{font-size:.68rem;font-weight:700;color:#fff;white-space:nowrap}
-    .cb-chg{width:55px;font-size:.68rem;text-align:right;flex-shrink:0;font-weight:600}
-    /* 이슈 */
-    .issue{padding:9px 0;border-bottom:1px solid #1e293b}
-    .issue:last-child{border-bottom:none}
-    .issue-badge{display:inline-block;font-size:.62rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-bottom:4px}
-    .issue-title{font-size:.78rem;font-weight:600;color:#f1f5f9;margin-bottom:3px}
-    .issue-desc{font-size:.72rem;color:#94a3b8;line-height:1.6}
-    /* 기타 */
-    .divider{height:1px;background:#1e293b;margin:12px 0}
-    .fn{font-size:.62rem;color:#475569;margin-top:8px}
-    .loading{display:flex;align-items:center;justify-content:center;gap:6px;color:#475569;font-size:.78rem;padding:20px 0}
-    .spin{display:inline-block;animation:spin 1s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .more-btn{background:transparent;border:1px solid #334155;color:#64748b;padding:5px 14px;border-radius:5px;font-size:.73rem;cursor:pointer;margin-top:8px}
-    .more-btn:hover{background:#334155;color:#e2e8f0}
-    .sec-label{font-size:.72rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
-    .source-naver{font-size:.62rem;color:#16a34a;margin-left:4px}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0">
+<title>수안푸드 지육가 대시보드</title>
+<script>
+  const _B='REPLACE_BUILD_ID';
+  (()=>{const s=sessionStorage.getItem('_b');if(s&&s!==_B){sessionStorage.setItem('_b',_B);location.replace(location.pathname+'?v='+_B);}else sessionStorage.setItem('_b',_B);})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0f172a;color:#e2e8f0;font-family:'Segoe UI','Apple SD Gothic Neo',system-ui,sans-serif;font-size:14px}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:#1e293b;border-bottom:1px solid #334155;position:sticky;top:0;z-index:100}
+.logo{font-size:1.05rem;font-weight:700;color:#f1f5f9}
+.live{background:#16a34a;color:#fff;font-size:.63rem;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:8px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.asof{font-size:.68rem;color:#64748b}
+.tab-nav{display:flex;gap:4px;padding:10px 20px;background:#1e293b;border-bottom:1px solid #334155;flex-wrap:wrap}
+.tab-btn{padding:8px 18px;border-radius:6px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .2s}
+.tab-btn:hover{background:#334155;color:#e2e8f0}
+.tab-btn.active{background:#2563eb;color:#fff;border-color:#2563eb}
+.tab-btn.hl{border-color:#16a34a;color:#86efac}
+.tab-btn.hl.active{background:#15803d;border-color:#15803d}
+.page{display:none;padding:16px 20px}
+.page.active{display:block}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.pt{font-size:1.1rem;font-weight:700;color:#f1f5f9}
+.ps{font-size:.72rem;color:#64748b;margin-top:2px}
+.bdg{font-size:.63rem;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:#1e3a5f;color:#60a5fa}
+.bdg-g{background:#14532d;color:#86efac}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.g5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:1100px){.g3{grid-template-columns:1fr 1fr}.g5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:750px){.g2,.g3,.g4,.g5{grid-template-columns:1fr}}
+.card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;margin-bottom:0}
+.ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ct{font-size:.85rem;font-weight:700;color:#f1f5f9}
+.tag{font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:4px}
+.tb{background:#1e3a5f;color:#60a5fa}
+.tg{background:#14532d;color:#86efac}
+.to{background:#431407;color:#fb923c}
+.tp{background:#3b0764;color:#d8b4fe}
+.tr{background:#7f1d1d;color:#fca5a5}
+.tz{background:#1e293b;color:#64748b;border:1px solid #334155}
+.cw{width:100%;height:185px;position:relative}
+.cwl{width:100%;height:225px;position:relative}
+.kpi{background:#0f172a;border-radius:8px;padding:12px}
+.kl{font-size:.65rem;color:#64748b;margin-bottom:4px}
+.kv{font-size:1.15rem;font-weight:700;color:#f1f5f9}
+.ku{font-size:.62rem;color:#475569;margin-top:2px}
+.kc{font-size:.68rem;margin-top:3px;font-weight:600}
+.up{color:#4ade80}.dn{color:#f87171}
+/* 타이밍 */
+.tbox{background:#0f172a;border-radius:10px;padding:16px;margin-bottom:14px}
+.tv{font-size:1.15rem;font-weight:700;padding:14px 18px;border-radius:8px;text-align:center;margin-bottom:14px}
+.tv-g{background:#052e16;border:1px solid #16a34a;color:#4ade80}
+.tv-y{background:#1c1400;border:1px solid #ca8a04;color:#fbbf24}
+.tv-r{background:#1f0808;border:1px solid #dc2626;color:#f87171}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.titem{background:#1e293b;border-radius:7px;padding:10px}
+.til{font-size:.63rem;color:#64748b;margin-bottom:4px}
+.tiv{font-size:.95rem;font-weight:700;color:#f1f5f9}
+.tis{font-size:.63rem;color:#475569;margin-top:2px}
+.alist{list-style:none}
+.alist li{padding:6px 0;border-bottom:1px solid #1e293b;font-size:.78rem;color:#cbd5e1;line-height:1.6}
+.alist li:last-child{border-bottom:none}
+/* 테이블 */
+.dt{width:100%;border-collapse:collapse;font-size:.76rem}
+.dt th{background:#0f172a;color:#64748b;padding:7px 10px;text-align:center;font-weight:600;border-bottom:1px solid #334155;white-space:nowrap}
+.dt td{padding:6px 10px;border-bottom:1px solid #1e293b;color:#cbd5e1;text-align:center}
+.dt tr:last-child td{border-bottom:none}
+.dt td.dd{color:#64748b;font-size:.72rem}
+.cu{color:#4ade80;font-weight:600}.cd{color:#f87171;font-weight:600}
+/* AI */
+.abtn{width:100%;padding:9px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:7px;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .2s;margin-bottom:10px}
+.abtn:hover{background:#334155;color:#e2e8f0}.abtn:disabled{opacity:.5;cursor:not-allowed}
+.amdl{font-size:.62rem;padding:2px 7px;border-radius:4px;background:#1e293b;color:#64748b;border:1px solid #334155}
+.abox{background:#0f172a;border-radius:8px;padding:14px;min-height:80px;max-height:600px;overflow-y:auto}
+.abox h3{font-size:.88rem;color:#60a5fa;margin:12px 0 5px;font-weight:700}
+.abox h4{font-size:.82rem;color:#93c5fd;margin:8px 0 4px;font-weight:700}
+.abox p{font-size:.8rem;color:#cbd5e1;line-height:1.75;margin-bottom:8px}
+.abox ul,.abox ol{padding-left:18px;margin-bottom:8px}
+.abox li{font-size:.8rem;color:#cbd5e1;line-height:1.75}
+.abox strong{color:#f1f5f9;font-weight:700}
+.abox hr{border:none;border-top:1px solid #334155;margin:10px 0}
+.aph{font-size:.78rem;color:#475569;text-align:center;padding:24px 0}
+/* 수입국 바 */
+.cbr{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.cbn{width:90px;font-size:.72rem;color:#94a3b8;flex-shrink:0;text-align:right}
+.cbb{flex:1;background:#0f172a;border-radius:4px;height:20px;overflow:hidden}
+.cbf{height:100%;border-radius:4px;display:flex;align-items:center;padding:0 7px}
+.cbv{font-size:.68rem;font-weight:700;color:#fff;white-space:nowrap}
+.cbc{width:55px;font-size:.68rem;text-align:right;flex-shrink:0;font-weight:600}
+/* 이슈 */
+.iss{padding:9px 0;border-bottom:1px solid #1e293b}
+.iss:last-child{border-bottom:none}
+.isb{display:inline-block;font-size:.62rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-bottom:4px}
+.ist{font-size:.78rem;font-weight:600;color:#f1f5f9;margin-bottom:3px}
+.isd{font-size:.72rem;color:#94a3b8;line-height:1.6}
+.divider{height:1px;background:#1e293b;margin:12px 0}
+.slb{font-size:.72rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.fn{font-size:.62rem;color:#475569;margin-top:8px}
+.lding{display:flex;align-items:center;justify-content:center;gap:6px;color:#475569;font-size:.78rem;padding:20px 0}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mbtn{background:transparent;border:1px solid #334155;color:#64748b;padding:5px 14px;border-radius:5px;font-size:.73rem;cursor:pointer;margin-top:8px}
+.mbtn:hover{background:#334155;color:#e2e8f0}
+</style>
 </head>
 <body>
-
 <header>
   <div style="display:flex;align-items:center">
     <span class="logo">🐷 수안푸드 지육가 대시보드</span>
@@ -135,616 +121,522 @@
   </div>
   <span class="asof" id="asof">—</span>
 </header>
-
 <div class="tab-nav">
-  <button class="tab-btn highlight active" onclick="switchTab('timing',this)">🎯 수입 타이밍</button>
+  <button class="tab-btn hl active" onclick="switchTab('timing',this)">🎯 수입 타이밍</button>
   <button class="tab-btn" onclick="switchTab('market',this)">🌍 수입육 시장동향</button>
   <button class="tab-btn" onclick="switchTab('weekly',this)">📊 주간 보고서</button>
   <button class="tab-btn" onclick="switchTab('monthly',this)">📅 월간 보고서</button>
   <button class="tab-btn" onclick="switchTab('yearly',this)">📈 연간 보고서</button>
 </div>
 
-<!-- ══════ 🎯 수입 타이밍 (메인) ══════ -->
+<!-- 수입 타이밍 -->
 <div id="page-timing" class="page active">
-  <div class="pg-head">
-    <div>
-      <div class="pg-title">수입 타이밍 분석</div>
-      <div class="pg-sub">계약 후 2~3개월 뒤 결제 기준 · 환율 추세 반영</div>
-    </div>
-    <span class="badge badge-green">핵심 지표</span>
+  <div class="ph">
+    <div><div class="pt">수입 타이밍 분석</div><div class="ps">계약 후 2~3개월 결제 기준 · 환율 추세 반영</div></div>
+    <span class="bdg bdg-g">핵심 지표</span>
   </div>
-
-  <!-- 현재 시세 KPI (네이버 기준) -->
-  <div class="g5" id="timing-kpi">
-    <div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span> 네이버 증권 시세 로딩 중...</div>
-  </div>
-
-  <!-- 타이밍 판단 메인 박스 -->
-  <div class="timing-box" id="timing-main">
-    <div class="loading"><span class="spin">⏳</span> 분석 중...</div>
-  </div>
-
-  <!-- 환율 추세 차트 -->
+  <div class="g5" id="kpi-timing"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span> 시세 로딩 중...</div></div>
+  <div id="timing-main" class="tbox"><div class="lding"><span class="spin">⏳</span> 분석 중...</div></div>
   <div class="g2">
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">📈 USD/KRW 30일 추이</span>
-        <span class="tag t-blue">네이버증권<span class="source-naver">●</span></span>
-      </div>
-      <div class="cw"><canvas id="tc-usd"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">📈 EUR/KRW 30일 추이</span>
-        <span class="tag t-orange">네이버증권<span class="source-naver">●</span></span>
-      </div>
-      <div class="cw"><canvas id="tc-eur"></canvas></div>
-    </div>
+    <div class="card"><div class="ch"><span class="ct">📈 USD/KRW 30일 추이</span><span class="tag tb">ExchangeRate-API</span></div><div class="cw"><canvas id="c-usd"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">📈 EUR/KRW 30일 추이</span><span class="tag to">ExchangeRate-API</span></div><div class="cw"><canvas id="c-eur"></canvas></div></div>
   </div>
-
-  <!-- CME + 국내도매가 추이 -->
   <div class="g2">
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">🐷 CME Lean Hog 30일 추이</span>
-        <span class="tag t-orange">Yahoo Finance</span>
-      </div>
-      <div class="cw"><canvas id="tc-lh"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">🇰🇷 국내 지육 도매가 30일 추이</span>
-        <span class="tag t-blue">축평원</span>
-      </div>
-      <div class="cw"><canvas id="tc-kamis"></canvas></div>
-    </div>
+    <div class="card"><div class="ch"><span class="ct">🐷 CME Lean Hog 30일</span><span class="tag to">Yahoo Finance</span></div><div class="cw"><canvas id="c-lh"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 30일</span><span class="tag tb">KAMIS</span></div><div class="cw"><canvas id="c-kamis"></canvas></div></div>
   </div>
-
-  <!-- AI 타이밍 심층 분석 -->
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:.9rem;font-weight:700;color:#f1f5f9">🤖 AI 수입 타이밍 심층 분석</span>
-      <span class="ai-badge" id="ai-timing-model">—</span>
-    </div>
-    <button class="ai-btn" id="ai-timing-btn" onclick="runAI('timing')">
-      환율 추세 + 지육가 + 결제 시점 종합 AI 분석
-    </button>
-    <div class="ai-box" id="ai-timing-box">
-      <p class="ai-ph">환율 추세·CME 선물·계절성을 종합해 2~3개월 후 최적 계약 시점을 분석합니다.</p>
-    </div>
+    <div class="ch"><span class="ct" style="font-size:.9rem">🤖 AI 수입 타이밍 심층 분석</span><span class="amdl" id="m-timing">—</span></div>
+    <button class="abtn" id="b-timing" onclick="runAI('timing')">환율 추세 + 지육가 + 결제 시점 종합 AI 분석 실행</button>
+    <div class="abox" id="ai-timing"><p class="aph">환율 추세·CME 선물·계절성을 종합해 2~3개월 후 최적 계약 시점을 분석합니다.</p></div>
   </div>
 </div>
 
-<!-- ══════ 수입육 시장동향 ══════ -->
+<!-- 수입육 시장동향 -->
 <div id="page-market" class="page">
-  <div class="pg-head">
-    <div>
-      <div class="pg-title">수입육 시장동향</div>
-      <div class="pg-sub" id="market-date">—</div>
-    </div>
-    <span class="badge badge-blue">Import Market 2025~2026</span>
+  <div class="ph">
+    <div><div class="pt">수입육 시장동향</div><div class="ps" id="mkt-date">—</div></div>
+    <span class="bdg">2025~2026 기준</span>
   </div>
-
-  <div class="g4" id="market-kpi">
-    <div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span></div>
-  </div>
-
+  <div class="g4" id="kpi-market"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
   <div class="g2">
     <div class="card">
-      <div class="card-head">
-        <span class="card-title">🏭 국가별 냉동 돼지고기 수입량</span>
-        <span class="tag t-blue">2025년 기준</span>
-      </div>
-      <div class="sec-label">수입량 점유율</div>
-      <div id="import-bars"></div>
-      <p class="fn">※ 관세청·aT FIS 공개 통계 기반 | AI 분석 갱신</p>
+      <div class="ch"><span class="ct">🏭 국가별 냉동 돼지고기 수입량</span><span class="tag tb">2025년 기준</span></div>
+      <div class="slb">수입량 점유율 (전년 대비)</div>
+      <div id="imp-bars"></div>
+      <p class="fn">※ 관세청·aT FIS 공개 통계 기반</p>
     </div>
-
     <div class="card">
-      <div class="card-head">
-        <span class="card-title">💰 국가별 평균 수입 단가</span>
-        <span class="tag t-orange">USD/kg → 원화 환산</span>
-      </div>
-      <div id="import-price-tbl"></div>
+      <div class="ch"><span class="ct">💰 국가별 평균 수입 단가</span><span class="tag to">USD/kg → 원화 환산</span></div>
+      <div id="imp-price"></div>
       <div class="divider"></div>
-      <div class="sec-label">수급 전망 (향후 6개월)</div>
-      <div id="supply-forecast"></div>
+      <div class="slb">수급 전망 (향후 6개월)</div>
+      <div id="supply"></div>
     </div>
   </div>
-
   <div class="g2">
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">📊 전년 대비 수입 현황</span>
-        <span class="tag t-green">2025 vs 2026</span>
-      </div>
-      <div class="cw"><canvas id="yoy-chart"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">⚠️ 수입육 시장 주요 이슈</span>
-        <span class="tag t-red">최신</span>
-      </div>
-      <div id="market-issues"></div>
-    </div>
+    <div class="card"><div class="ch"><span class="ct">📊 전년 대비 수입 현황</span><span class="tag tg">2025 vs 2026</span></div><div class="cw"><canvas id="c-yoy"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">⚠️ 수입육 시장 주요 이슈</span><span class="tag tr">최신</span></div><div id="issues"></div></div>
   </div>
-
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:.9rem;font-weight:700;color:#f1f5f9">🤖 수입육 시장 AI 통합 분석</span>
-      <span class="ai-badge" id="ai-market-model">—</span>
-    </div>
-    <button class="ai-btn" id="ai-market-btn" onclick="runAI('market')">AI 분석 실행</button>
-    <div class="ai-box" id="ai-market-box"><p class="ai-ph">국가별 수입량·단가·수급전망·시장이슈를 종합 분석합니다.</p></div>
+    <div class="ch"><span class="ct" style="font-size:.9rem">🤖 수입육 시장 AI 통합 분석</span><span class="amdl" id="m-market">—</span></div>
+    <button class="abtn" id="b-market" onclick="runAI('market')">AI 분석 실행 (수입량·단가·수급·이슈 종합)</button>
+    <div class="abox" id="ai-market"><p class="aph">국가별 수입량·단가·수급전망·시장이슈를 종합 분석합니다.</p></div>
   </div>
 </div>
 
-<!-- ══════ 주간 보고서 ══════ -->
+<!-- 주간 보고서 -->
 <div id="page-weekly" class="page">
-  <div class="pg-head">
-    <div><div class="pg-title">주간 보고서</div><div class="pg-sub" id="weekly-range">—</div></div>
-    <span class="badge badge-blue">Weekly Report</span>
-  </div>
-  <div class="g4" id="weekly-kpi"><div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
+  <div class="ph"><div><div class="pt">주간 보고서</div><div class="ps" id="rng-weekly">—</div></div><span class="bdg">Weekly Report</span></div>
+  <div class="g4" id="kpi-weekly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
   <div class="g3">
-    <div class="card"><div class="card-head"><span class="card-title">🇺🇸 CME Lean Hog 주간</span><span class="tag t-orange">7일</span></div><div class="cw"><canvas id="wc-lh"></canvas></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">🇰🇷 국내 지육 도매가 주간</span><span class="tag t-blue">7일</span></div><div class="cw"><canvas id="wc-kamis"></canvas></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">🌾 사료 원료가 주간</span><span class="tag t-green">옥수수/대두</span></div><div class="cw"><canvas id="wc-feed"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🐷 CME Lean Hog 주간</span><span class="tag to">7일</span></div><div class="cw"><canvas id="wc-lh"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 주간</span><span class="tag tb">7일</span></div><div class="cw"><canvas id="wc-kamis"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🌾 사료 원료가 주간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="wc-feed"></canvas></div></div>
   </div>
   <div class="g2">
     <div class="card">
-      <div class="card-head"><span class="card-title">CME Lean Hog 일별 시세</span><span class="tag t-gray" id="wt-lh-r">—</span></div>
-      <div id="wt-lh"><div class="loading"><span class="spin">⏳</span></div></div>
-      <button class="more-btn" onclick="open('https://www.pig333.com/markets_and_prices/','_blank')">pig333.com →</button>
+      <div class="ch"><span class="ct">CME Lean Hog 일별 시세</span><span class="tag tz" id="rng-wlh">—</span></div>
+      <div id="tbl-wlh"><div class="lding"><span class="spin">⏳</span></div></div>
+      <button class="mbtn" onclick="window.open('https://www.pig333.com/markets_and_prices/','_blank')">pig333.com →</button>
     </div>
     <div class="card">
-      <div class="card-head"><span class="card-title">국내 지육 도매가 일별 시세</span><span class="tag t-gray" id="wt-k-r">—</span></div>
-      <div id="wt-kamis"><div class="loading"><span class="spin">⏳</span></div></div>
-      <button class="more-btn" onclick="open('https://www.ekapepia.com','_blank')">축평원 →</button>
+      <div class="ch"><span class="ct">국내 지육 도매가 일별</span><span class="tag tz" id="rng-wk">—</span></div>
+      <div id="tbl-wk"><div class="lding"><span class="spin">⏳</span></div></div>
+      <button class="mbtn" onclick="window.open('https://www.kamis.or.kr','_blank')">KAMIS →</button>
     </div>
   </div>
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:.9rem;font-weight:700;color:#f1f5f9">주간 AI 분석</span>
-      <span class="ai-badge" id="ai-weekly-model">—</span>
-    </div>
-    <button class="ai-btn" id="ai-weekly-btn" onclick="runAI('weekly')">분석 실행</button>
-    <div class="ai-box" id="ai-weekly-box"><p class="ai-ph">주간 지육가·사료·환율 종합 분석</p></div>
+    <div class="ch"><span class="ct" style="font-size:.9rem">주간 AI 분석</span><span class="amdl" id="m-weekly">—</span></div>
+    <button class="abtn" id="b-weekly" onclick="runAI('weekly')">주간 지육가·사료·환율 AI 분석</button>
+    <div class="abox" id="ai-weekly"><p class="aph">주간 지육가·사료 원료·환율을 종합 분석합니다.</p></div>
   </div>
 </div>
 
-<!-- ══════ 월간 보고서 ══════ -->
+<!-- 월간 보고서 -->
 <div id="page-monthly" class="page">
-  <div class="pg-head">
-    <div><div class="pg-title">월간 보고서</div><div class="pg-sub" id="monthly-range">—</div></div>
-    <span class="badge badge-blue">Monthly Report</span>
-  </div>
-  <div class="g4" id="monthly-kpi"><div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
+  <div class="ph"><div><div class="pt">월간 보고서</div><div class="ps" id="rng-monthly">—</div></div><span class="bdg">Monthly Report</span></div>
+  <div class="g4" id="kpi-monthly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
   <div class="g3">
-    <div class="card"><div class="card-head"><span class="card-title">🇺🇸 CME Lean Hog 월간</span><span class="tag t-orange">30일</span></div><div class="cw"><canvas id="mc-lh"></canvas></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">🇰🇷 국내 지육 도매가 월간</span><span class="tag t-blue">30일</span></div><div class="cw"><canvas id="mc-kamis"></canvas></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">🌾 사료 원료가 월간</span><span class="tag t-green">옥수수/대두</span></div><div class="cw"><canvas id="mc-feed"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🐷 CME Lean Hog 월간</span><span class="tag to">30일</span></div><div class="cw"><canvas id="mc-lh"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 월간</span><span class="tag tb">30일</span></div><div class="cw"><canvas id="mc-kamis"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🌾 사료 원료가 월간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="mc-feed"></canvas></div></div>
   </div>
   <div class="g2">
-    <div class="card"><div class="card-head"><span class="card-title">CME Lean Hog 월간 시세표</span><span class="tag t-gray" id="mt-lh-r">—</span></div><div id="mt-lh"><div class="loading"><span class="spin">⏳</span></div></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">국내 도매가 월간 시세표</span><span class="tag t-gray" id="mt-k-r">—</span></div><div id="mt-kamis"><div class="loading"><span class="spin">⏳</span></div></div></div>
+    <div class="card"><div class="ch"><span class="ct">CME Lean Hog 월간 시세표</span><span class="tag tz" id="rng-mlh">—</span></div><div id="tbl-mlh"><div class="lding"><span class="spin">⏳</span></div></div></div>
+    <div class="card"><div class="ch"><span class="ct">국내 도매가 월간 시세표</span><span class="tag tz" id="rng-mk">—</span></div><div id="tbl-mk"><div class="lding"><span class="spin">⏳</span></div></div></div>
   </div>
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:.9rem;font-weight:700;color:#f1f5f9">월간 AI 분석</span>
-      <span class="ai-badge" id="ai-monthly-model">—</span>
-    </div>
-    <button class="ai-btn" id="ai-monthly-btn" onclick="runAI('monthly')">분석 실행</button>
-    <div class="ai-box" id="ai-monthly-box"><p class="ai-ph">월간 지육가 동향 및 매입 타이밍 분석</p></div>
+    <div class="ch"><span class="ct" style="font-size:.9rem">월간 AI 분석</span><span class="amdl" id="m-monthly">—</span></div>
+    <button class="abtn" id="b-monthly" onclick="runAI('monthly')">월간 지육가·매입 타이밍 AI 분석</button>
+    <div class="abox" id="ai-monthly"><p class="aph">월간 지육가 동향 및 매입 타이밍을 분석합니다.</p></div>
   </div>
 </div>
 
-<!-- ══════ 연간 보고서 ══════ -->
+<!-- 연간 보고서 -->
 <div id="page-yearly" class="page">
-  <div class="pg-head">
-    <div><div class="pg-title">연간 보고서</div><div class="pg-sub" id="yearly-range">—</div></div>
-    <span class="badge badge-blue">Yearly Report</span>
-  </div>
-  <div class="g4" id="yearly-kpi"><div class="loading" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
+  <div class="ph"><div><div class="pt">연간 보고서</div><div class="ps" id="rng-yearly">—</div></div><span class="bdg">Yearly Report</span></div>
+  <div class="g4" id="kpi-yearly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
   <div class="g2">
-    <div class="card"><div class="card-head"><span class="card-title">🇺🇸 CME Lean Hog 1년</span><span class="tag t-orange">365일</span></div><div class="cw-lg"><canvas id="yc-lh"></canvas></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">🇰🇷 국내 지육 도매가 1년</span><span class="tag t-blue">365일</span></div><div class="cw-lg"><canvas id="yc-kamis"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🐷 CME Lean Hog 1년</span><span class="tag to">365일</span></div><div class="cwl"><canvas id="yc-lh"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 1년</span><span class="tag tb">365일</span></div><div class="cwl"><canvas id="yc-kamis"></canvas></div></div>
   </div>
   <div class="g2">
-    <div class="card"><div class="card-head"><span class="card-title">USD/KRW 1년 추이</span><span class="tag t-blue">네이버증권</span></div><div class="cw"><canvas id="yc-usd"></canvas></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">EUR/KRW 1년 추이</span><span class="tag t-orange">네이버증권</span></div><div class="cw"><canvas id="yc-eur"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">💱 USD/KRW 1년 추이</span><span class="tag tb">환율</span></div><div class="cw"><canvas id="yc-usd"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">💱 EUR/KRW 1년 추이</span><span class="tag to">환율</span></div><div class="cw"><canvas id="yc-eur"></canvas></div></div>
   </div>
   <div class="g2">
-    <div class="card"><div class="card-head"><span class="card-title">🌽 옥수수 선물 1년</span><span class="tag t-green">ZC=F</span></div><div class="cw"><canvas id="yc-zc"></canvas></div></div>
-    <div class="card"><div class="card-head"><span class="card-title">🫘 대두 선물 1년</span><span class="tag t-purple">ZS=F</span></div><div class="cw"><canvas id="yc-zs"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🌽 옥수수 선물 1년</span><span class="tag tg">ZC=F</span></div><div class="cw"><canvas id="yc-zc"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🫘 대두 선물 1년</span><span class="tag tp">ZS=F</span></div><div class="cw"><canvas id="yc-zs"></canvas></div></div>
   </div>
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:.9rem;font-weight:700;color:#f1f5f9">연간 AI 분석</span>
-      <span class="ai-badge" id="ai-yearly-model">—</span>
-    </div>
-    <button class="ai-btn" id="ai-yearly-btn" onclick="runAI('yearly')">분석 실행</button>
-    <div class="ai-box" id="ai-yearly-box"><p class="ai-ph">1년간 지육가·사료·환율 종합 트렌드 분석</p></div>
+    <div class="ch"><span class="ct" style="font-size:.9rem">연간 AI 분석</span><span class="amdl" id="m-yearly">—</span></div>
+    <button class="abtn" id="b-yearly" onclick="runAI('yearly')">연간 지육가·사료·환율 종합 트렌드 AI 분석</button>
+    <div class="abox" id="ai-yearly"><p class="aph">1년간 지육가·사료·환율 종합 트렌드를 분석합니다.</p></div>
   </div>
 </div>
 
 <script>
-// ── 전역 ─────────────────────────────────────────────
+// ─── 전역 ────────────────────────────────────────────
 const charts = {};
-let currentData = null;
-const histCache = {};
+let curData = null;
+const hcache = {};
 const loaded = new Set();
 
-const COLORS = {
-  LH:    {l:'#fb923c',f:'rgba(251,146,60,.15)'},
-  KAMIS: {l:'#60a5fa',f:'rgba(96,165,250,.15)'},
-  ZC:    {l:'#86efac',f:'rgba(134,239,172,.12)'},
-  ZS:    {l:'#d8b4fe',f:'rgba(216,180,254,.12)'},
-  USDKRW:{l:'#60a5fa',f:'rgba(96,165,250,.12)'},
-  EURKRW:{l:'#fb923c',f:'rgba(251,146,60,.12)'},
+const CLR = {
+  LH:     {l:'#fb923c', f:'rgba(251,146,60,.15)'},
+  KAMIS:  {l:'#60a5fa', f:'rgba(96,165,250,.15)'},
+  ZC:     {l:'#86efac', f:'rgba(134,239,172,.12)'},
+  ZS:     {l:'#d8b4fe', f:'rgba(216,180,254,.12)'},
+  USDKRW: {l:'#38bdf8', f:'rgba(56,189,248,.12)'},
+  EURKRW: {l:'#fb923c', f:'rgba(251,146,60,.12)'},
 };
 
-// 수입국 데이터 (2025 실적 기준)
-const IMPORT = {
+const IMP = {
   countries:[
-    {n:'🇺🇸 미국',   s:30,v25:182,v26ytd:65, price:2.28,c:'#60a5fa'},
-    {n:'🇪🇸 스페인', s:21,v25:128,v26ytd:45, price:2.02,c:'#fb923c'},
-    {n:'🇩🇪 독일',   s:11,v25:67, v26ytd:23, price:2.12,c:'#86efac'},
-    {n:'🇨🇦 캐나다', s:13,v25:79, v26ytd:28, price:2.31,c:'#d8b4fe'},
-    {n:'🇨🇱 칠레',   s:10,v25:61, v26ytd:22, price:1.92,c:'#fbbf24'},
-    {n:'🇳🇱 네덜란드',s:8, v25:49, v26ytd:17, price:2.05,c:'#f87171'},
-    {n:'기타',        s:7, v25:43, v26ytd:15, price:1.95,c:'#94a3b8'},
+    {n:'🇺🇸 미국',    s:30, v25:182, v26:65,  p:2.28, c:'#60a5fa', yoy:'+15.2%'},
+    {n:'🇪🇸 스페인',  s:21, v25:128, v26:45,  p:2.02, c:'#fb923c', yoy:'+11.1%'},
+    {n:'🇩🇪 독일',    s:11, v25:67,  v26:23,  p:2.12, c:'#86efac', yoy:'-1.5%'},
+    {n:'🇨🇦 캐나다',  s:13, v25:79,  v26:28,  p:2.31, c:'#d8b4fe', yoy:'+8.3%'},
+    {n:'🇨🇱 칠레',    s:10, v25:61,  v26:22,  p:1.92, c:'#fbbf24', yoy:'+17.3%'},
+    {n:'🇳🇱 네덜란드',s:8,  v25:49,  v26:17,  p:2.05, c:'#f87171', yoy:'+22.5%'},
+    {n:'기타',         s:7,  v25:43,  v26:15,  p:1.95, c:'#94a3b8', yoy:'+50%'},
   ],
   issues:[
-    {lv:'HIGH',  lc:'#f87171',lb:'#7f1d1d',t:'🐷 ASF 아프리카돼지열병 확산',d:'동유럽·동남아 ASF 지속. EU 일부 국가 수출 제한 가능성. 스페인·독일 공급 안정성 점검 필요.'},
-    {lv:'HIGH',  lc:'#fb923c',lb:'#431407',t:'🇺🇸 미국 관세 정책 불확실성',d:'트럼프 관세 정책 변동으로 미국산 수입 단가 리스크. 대미 수입 비중 조정 검토.'},
-    {lv:'MEDIUM',lc:'#fbbf24',lb:'#451a03',t:'💱 원/달러 환율 변동성',d:'환율 고공행진 시 수입 원가 급등. 선물환 계약·분할 매입으로 리스크 관리 필요.'},
-    {lv:'MEDIUM',lc:'#86efac',lb:'#14532d',t:'🛒 가정간편식 수요 증가',d:'1인 가구 증가·편의성 소비 확대로 냉동 수입육 소매 수요 지속 증가 추세.'},
-    {lv:'LOW',   lc:'#94a3b8',lb:'#1e293b',t:'🔬 검역·위생 기준 강화',d:'수입 돼지고기 잔류농약·항생제 기준 강화. 공급업체 인증 재확인 필요.'},
+    {lv:'HIGH',  lc:'#f87171',lb:'#7f1d1d',t:'🐷 ASF 아프리카돼지열병',d:'동유럽·동남아 ASF 지속 확산. EU 일부 국가 수출 제한 가능성. 스페인·독일 공급 점검 필요.'},
+    {lv:'HIGH',  lc:'#fb923c',lb:'#431407',t:'🇺🇸 미국 관세 정책 불확실성',d:'미국발 관세 변동으로 수입 단가 리스크 증가. 대미 수입 비중 조정 및 대안국 검토 필요.'},
+    {lv:'MEDIUM',lc:'#fbbf24',lb:'#451a03',t:'💱 원/달러 고환율 지속',d:'USD/KRW 1480~1500원대 고공행진. 선물환 계약 또는 분할 매입으로 환율 리스크 관리 필요.'},
+    {lv:'MEDIUM',lc:'#86efac',lb:'#14532d',t:'🛒 가정간편식 수요 증가',d:'1인 가구 증가·간편식 소비 확대로 냉동 수입육 수요 지속 증가 추세.'},
+    {lv:'LOW',   lc:'#94a3b8',lb:'#1e293b',t:'🔬 검역·위생 기준 강화',d:'수입 돼지고기 잔류농약·항생제 기준 강화. 주요 공급업체 인증 상태 재확인 권장.'},
   ]
 };
 
-// ── 탭 전환 ──────────────────────────────────────────
+// ─── 탭 전환 ─────────────────────────────────────────
 function switchTab(name, btn) {
-  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
-  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
   btn.classList.add('active');
   if (!loaded.has(name)) {
     loaded.add(name);
-    if(name==='timing')      loadTiming();
-    else if(name==='market') loadMarket();
-    else loadPeriod(name).catch(console.error);
+    if (name === 'timing')      loadTiming().catch(e => console.error('timing:', e));
+    else if (name === 'market') loadMarket().catch(e => console.error('market:', e));
+    else                        loadPeriod(name).catch(e => console.error(name + ':', e));
   }
 }
 
-// ── Chart.js ─────────────────────────────────────────
-function drawLine(id, rows, sym, unit) {
-  const canvas = document.getElementById(id);
-  if(!canvas||!rows?.length) return;
-  if(charts[id]) charts[id].destroy();
-  const c = COLORS[sym]||{l:'#94a3b8',f:'rgba(148,163,184,.1)'};
-  const labels = rows.map(r=>{const d=new Date(r.time*1000);return`${d.getMonth()+1}/${d.getDate()}`;});
-  charts[id] = new Chart(canvas.getContext('2d'),{
-    type:'line',
-    data:{labels,datasets:[{data:rows.map(r=>r.close),borderColor:c.l,backgroundColor:c.f,
-      borderWidth:2,pointRadius:rows.length>60?0:3,fill:true,tension:0.3}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e293b',titleColor:'#94a3b8',
-        bodyColor:'#f1f5f9',borderColor:'#334155',borderWidth:1,
-        callbacks:{label:ctx=>` ${ctx.parsed.y.toFixed(2)} ${unit}`}}},
-      scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#475569',maxTicksLimit:8,font:{size:10}}},
-              y:{grid:{color:'#1e293b'},ticks:{color:'#475569',font:{size:10}}}}}
-  });
-}
-
-function drawFeed(id, zcR, zsR) {
-  const canvas = document.getElementById(id);
-  if(!canvas) return;
-  if(charts[id]) charts[id].destroy();
-  const map = new Map();
-  zcR.forEach(r=>map.set(r.time,{time:r.time,zc:r.close}));
-  zsR.forEach(r=>{const d=map.get(r.time)||{time:r.time};d.zs=r.close;map.set(r.time,d);});
-  const m = Array.from(map.values()).sort((a,b)=>a.time-b.time);
-  const lbs = m.map(r=>{const d=new Date(r.time*1000);return`${d.getMonth()+1}/${d.getDate()}`;});
-  charts[id] = new Chart(canvas.getContext('2d'),{type:'line',
-    data:{labels:lbs,datasets:[
-      {label:'옥수수',data:m.map(r=>r.zc),borderColor:'#86efac',backgroundColor:'rgba(134,239,172,.08)',
-       borderWidth:2,pointRadius:m.length>60?0:2,fill:true,tension:0.3,yAxisID:'y'},
-      {label:'대두',data:m.map(r=>r.zs),borderColor:'#d8b4fe',backgroundColor:'rgba(216,180,254,.08)',
-       borderWidth:2,pointRadius:m.length>60?0:2,fill:true,tension:0.3,yAxisID:'y2'}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10},boxWidth:12}},
-        tooltip:{backgroundColor:'#1e293b',titleColor:'#94a3b8',bodyColor:'#f1f5f9',borderColor:'#334155',borderWidth:1}},
-      scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#475569',maxTicksLimit:7,font:{size:10}}},
-              y:{grid:{color:'#1e293b'},ticks:{color:'#86efac',font:{size:10}},position:'left'},
-              y2:{grid:{drawOnChartArea:false},ticks:{color:'#d8b4fe',font:{size:10}},position:'right'}}}
-  });
-}
-
-function drawYoy(id) {
-  const canvas = document.getElementById(id);
-  if(!canvas) return;
-  if(charts[id]) charts[id].destroy();
-  const cs = IMPORT.countries.filter(c=>c.n!=='기타');
-  charts[id] = new Chart(canvas.getContext('2d'),{type:'bar',
-    data:{labels:cs.map(c=>c.n),datasets:[
-      {label:'2025년',data:cs.map(c=>c.v25),backgroundColor:'rgba(71,85,105,.8)',borderRadius:4},
-      {label:'2026년(1~4월)',data:cs.map(c=>c.v26ytd),backgroundColor:'rgba(37,99,235,.8)',borderRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10},boxWidth:12}},
-        tooltip:{backgroundColor:'#1e293b',titleColor:'#94a3b8',bodyColor:'#f1f5f9',borderColor:'#334155',borderWidth:1,
-          callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y}천톤`}}},
-      scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#475569',font:{size:10}}},
-              y:{grid:{color:'#1e293b'},ticks:{color:'#475569',font:{size:10}},
-                title:{display:true,text:'천톤',color:'#475569',font:{size:10}}}}}
-  });
-}
-
-// ── 수치 테이블 ──────────────────────────────────────
-function renderTable(id, rows, unit, max=7) {
-  const el = document.getElementById(id);
-  if(!el) return;
-  if(!rows?.length){
-    el.innerHTML='<p style="text-align:center;color:#475569;padding:16px;font-size:.78rem;">데이터 로딩 중 (시드 데이터 표시)</p>';
+// ─── Chart.js 헬퍼 ───────────────────────────────────
+function mkChart(id, rows, sym, unit) {
+  if (!rows || rows.length === 0) {
+    const el = document.getElementById(id);
+    if (el) { el.parentElement.innerHTML = '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem;">데이터 없음</p>'; }
     return;
   }
-  const shown=[...rows].reverse().slice(0,max);
-  let h=`<table class="dt"><thead><tr><th>날짜</th><th>시세</th><th>전일대비</th><th>고가</th><th>저가</th></tr></thead><tbody>`;
-  shown.forEach((r,i)=>{
-    const prev=shown[i+1];
-    const chg=prev?r.close-prev.close:null;
-    const pct=prev?(chg/prev.close*100):null;
-    const cls=chg>0?'cu':chg<0?'cd':'';
-    const chgStr=chg!==null?`<span class="${cls}">${chg>=0?'+':''}${chg.toFixed(2)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`:'—';
-    const d=new Date(r.time*1000);
-    const days=['일','월','화','수','목','금','토'];
-    h+=`<tr><td class="d">${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})</td><td style="font-weight:700">${r.close.toFixed(2)}</td><td>${chgStr}</td><td>${(r.high||r.close).toFixed(2)}</td><td>${(r.low||r.close).toFixed(2)}</td></tr>`;
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  const c = CLR[sym] || {l:'#94a3b8', f:'rgba(148,163,184,.1)'};
+  const labels = rows.map(r => {
+    const d = new Date(r.time * 1000);
+    return (d.getMonth()+1) + '/' + d.getDate();
   });
-  h+='</tbody></table>';
-  el.innerHTML=h;
+  try {
+    charts[id] = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: [{ data: rows.map(r => r.close), borderColor: c.l, backgroundColor: c.f,
+        borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8',
+          bodyColor: '#f1f5f9', borderColor: '#334155', borderWidth: 1,
+          callbacks: { label: ctx => ' ' + ctx.parsed.y.toFixed(2) + ' ' + unit } } },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', maxTicksLimit: 8, font: { size: 10 } } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } } }
+        }
+      }
+    });
+  } catch(e) { console.error('chart error', id, e); }
 }
 
-// ── KPI ──────────────────────────────────────────────
+function mkFeedChart(id, zcR, zsR) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  if (!zcR?.length && !zsR?.length) { canvas.parentElement.innerHTML = '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem;">데이터 없음</p>'; return; }
+  const map = new Map();
+  (zcR||[]).forEach(r => map.set(r.time, { time:r.time, zc:r.close }));
+  (zsR||[]).forEach(r => { const d = map.get(r.time) || {time:r.time}; d.zs = r.close; map.set(r.time, d); });
+  const m = Array.from(map.values()).sort((a,b) => a.time-b.time);
+  const labels = m.map(r => { const d = new Date(r.time*1000); return (d.getMonth()+1)+'/'+d.getDate(); });
+  try {
+    charts[id] = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label:'옥수수', data:m.map(r=>r.zc), borderColor:'#86efac', backgroundColor:'rgba(134,239,172,.08)', borderWidth:2, pointRadius:m.length>60?0:2, fill:true, tension:0.3, yAxisID:'y' },
+        { label:'대두',   data:m.map(r=>r.zs), borderColor:'#d8b4fe', backgroundColor:'rgba(216,180,254,.08)', borderWidth:2, pointRadius:m.length>60?0:2, fill:true, tension:0.3, yAxisID:'y2' }
+      ]},
+      options: { responsive:true, maintainAspectRatio:false, animation:{duration:400},
+        plugins: { legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10},boxWidth:12}},
+          tooltip:{backgroundColor:'#1e293b',titleColor:'#94a3b8',bodyColor:'#f1f5f9',borderColor:'#334155',borderWidth:1} },
+        scales: {
+          x:  { grid:{color:'#1e293b'}, ticks:{color:'#475569',maxTicksLimit:7,font:{size:10}} },
+          y:  { grid:{color:'#1e293b'}, ticks:{color:'#86efac',font:{size:10}}, position:'left' },
+          y2: { grid:{drawOnChartArea:false}, ticks:{color:'#d8b4fe',font:{size:10}}, position:'right' }
+        }
+      }
+    });
+  } catch(e) { console.error('feed chart', e); }
+}
+
+function mkYoyChart(id) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  const cs = IMP.countries.filter(c => c.n !== '기타');
+  try {
+    charts[id] = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: cs.map(c => c.n), datasets: [
+        { label:'2025년 연간', data:cs.map(c=>c.v25), backgroundColor:'rgba(71,85,105,.8)', borderRadius:4 },
+        { label:'2026년 1~4월', data:cs.map(c=>c.v26), backgroundColor:'rgba(37,99,235,.8)', borderRadius:4 }
+      ]},
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins: { legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10},boxWidth:12}},
+          tooltip:{backgroundColor:'#1e293b',titleColor:'#94a3b8',bodyColor:'#f1f5f9',borderColor:'#334155',borderWidth:1,
+            callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y}천톤`}} },
+        scales: {
+          x:{grid:{color:'#1e293b'},ticks:{color:'#475569',font:{size:10}}},
+          y:{grid:{color:'#1e293b'},ticks:{color:'#475569',font:{size:10}},title:{display:true,text:'천톤',color:'#475569',font:{size:10}}}
+        }
+      }
+    });
+  } catch(e) { console.error('yoy chart', e); }
+}
+
+// ─── KPI 렌더 ────────────────────────────────────────
 function renderKpi(id, data, keys) {
-  const el=document.getElementById(id);
-  if(!el||!data) return;
-  const items=keys||[
-    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},
-    {k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
-    {k:'ZC',i:'🌽',l:'옥수수 선물'},
-    {k:'ZS',i:'🫘',l:'대두 선물'},
+  const el = document.getElementById(id);
+  if (!el) return;
+  const items = keys || [
+    {k:'LH',i:'🐷',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
+    {k:'ZC',i:'🌽',l:'옥수수 선물'},{k:'ZS',i:'🫘',l:'대두 선물'}
   ];
-  el.innerHTML=items.map(item=>{
-    const d=data[item.k];
-    if(!d) return `<div class="kpi"><div class="kpi-l">${item.i} ${item.l}</div><div class="kpi-v" style="color:#475569">—</div></div>`;
-    const chgStr=d.change?`<div class="kpi-chg ${d.change>0?'up':'down'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)} (${d.changePct||''}%)</div>`:'';
-    return `<div class="kpi"><div class="kpi-l">${item.i} ${item.l}</div><div class="kpi-v">${Number(d.price).toLocaleString()}</div><div class="kpi-u">${d.unit}${d.date?' · '+d.date:''}</div>${chgStr}</div>`;
+  el.innerHTML = items.map(item => {
+    const d = data?.[item.k];
+    if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
+    const chgHtml = d.change != null ? `<div class="kc ${d.change>0?'up':'dn'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}${d.changePct?' ('+d.changePct+'%)':''}</div>` : '';
+    return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku">${d.unit||''}${d.date?' · '+d.date:''}</div>${chgHtml}</div>`;
   }).join('');
 }
 
-// ── 수입 타이밍 렌더 ─────────────────────────────────
-async function loadTiming() {
-  // 현재 시세
-  const cur = await ensureCurrent();
-  renderKpi('timing-kpi', cur, [
-    {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},
-    {k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
-    {k:'LH',i:'🐷',l:'CME Lean Hog'},
-    {k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
-    {k:'ZC',i:'🌽',l:'옥수수 선물'},
-  ]);
-
-  // 타이밍 분석
-  try {
-    const res  = await fetch('/api/timing');
-    const json = await res.json();
-    if(json.ok) renderTimingMain(json);
-    else throw new Error(json.error);
-  } catch(e) {
-    document.getElementById('timing-main').innerHTML=`<p style="color:#f87171;font-size:.78rem;">타이밍 분석 실패: ${e.message}</p>`;
+// ─── 수치 테이블 ─────────────────────────────────────
+function renderTable(id, rows, unit, max=8) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<p style="text-align:center;color:#475569;padding:16px;font-size:.78rem;">데이터 없음</p>';
+    return;
   }
-
-  // 차트 (30일)
-  const [usdH,eurH,lhH,kamisH] = await Promise.all([
-    getHist('USDKRW','monthly'),
-    getHist('EURKRW','monthly'),
-    getHist('LH','monthly'),
-    getHist('KAMIS','monthly'),
-  ]);
-  drawLine('tc-usd',   usdH.rows,   'USDKRW','원');
-  drawLine('tc-eur',   eurH.rows,   'EURKRW','원');
-  drawLine('tc-lh',    lhH.rows,    'LH',    'cents/lb');
-  drawLine('tc-kamis', kamisH.rows, 'KAMIS', '원/kg');
+  const shown = [...rows].reverse().slice(0, max);
+  const days = ['일','월','화','수','목','금','토'];
+  let h = `<table class="dt"><thead><tr><th>날짜</th><th>시세</th><th>전일대비</th><th>고가</th><th>저가</th></tr></thead><tbody>`;
+  shown.forEach((r, i) => {
+    const prev = shown[i+1];
+    const chg  = prev ? r.close - prev.close : null;
+    const pct  = prev ? chg / prev.close * 100 : null;
+    const cls  = chg > 0 ? 'cu' : chg < 0 ? 'cd' : '';
+    const chgStr = chg != null
+      ? `<span class="${cls}">${chg>=0?'+':''}${chg.toFixed(2)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`
+      : '—';
+    const d = new Date(r.time * 1000);
+    h += `<tr><td class="dd">${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})</td><td style="font-weight:700">${r.close.toFixed(2)}</td><td>${chgStr}</td><td>${(r.high||r.close).toFixed(2)}</td><td>${(r.low||r.close).toFixed(2)}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
 }
 
+// ─── 타이밍 메인 렌더 ────────────────────────────────
 function renderTimingMain(json) {
-  const vc = json.verdictClass==='green'?'tv-green':json.verdictClass==='red'?'tv-red':'tv-yellow';
-  const { forecasts, importCost, trends } = json;
-  let html = `<div class="timing-verdict ${vc}">${json.verdict}</div>`;
+  if (!json.ok) {
+    document.getElementById('timing-main').innerHTML = `<p style="color:#f87171;font-size:.78rem">타이밍 분석 실패: ${json.error}</p>`;
+    return;
+  }
+  const vc = json.verdictClass==='green'?'tv-g':json.verdictClass==='red'?'tv-r':'tv-y';
+  const { forecasts={}, importCost={}, trends={} } = json;
+  let h = `<div class="tv ${vc}">${json.verdict}</div>`;
 
-  // 핵심 수치 그리드
-  html += `<div class="timing-grid">`;
-  if(forecasts?.usd?.base) {
-    const diff = importCost?.diff;
-    const diffStr = diff!=null ? (diff>0?`<span style="color:#f87171">+${diff}원/kg 예상</span>`:`<span style="color:#4ade80">${diff}원/kg 절감</span>`) : '—';
-    html += `<div class="timing-item">
-      <div class="timing-item-label">📈 USD/KRW 추세</div>
-      <div class="timing-item-val">${trends?.usd?.dir||'—'} (${trends?.usd?.pct||0}%)</div>
-      <div class="timing-item-sub">30일 기준</div>
-    </div>
-    <div class="timing-item">
-      <div class="timing-item-label">🎯 2~3개월 후 USD 예측</div>
-      <div class="timing-item-val">${forecasts.usd.low}~${forecasts.usd.high}원</div>
-      <div class="timing-item-sub">기준: ${forecasts.usd.base}원</div>
-    </div>
-    <div class="timing-item">
-      <div class="timing-item-label">💰 현재 기준 수입원가</div>
-      <div class="timing-item-val">${importCost?.currentKrwPerKg?.toLocaleString()||'—'}원/kg</div>
-      <div class="timing-item-sub">CME LH + 물류비 기준</div>
-    </div>
-    <div class="timing-item">
-      <div class="timing-item-label">📅 2~3개월 후 예상 원가</div>
-      <div class="timing-item-val">${importCost?.forecastKrwPerKg?.toLocaleString()||'—'}원/kg</div>
-      <div class="timing-item-sub">${diffStr}</div>
+  // 핵심 수치 4개
+  if (forecasts.usd) {
+    const diff = importCost.diff;
+    const diffStr = diff != null
+      ? (diff > 0 ? `<span style="color:#f87171">+${diff.toLocaleString()}원/kg 증가 예상</span>`
+                  : `<span style="color:#4ade80">${diff.toLocaleString()}원/kg 절감 가능</span>`)
+      : '—';
+    h += `<div class="tgrid">
+      <div class="titem"><div class="til">📈 USD/KRW 추세 (30일)</div><div class="tiv">${trends.usd?.dir||'—'} (${trends.usd?.pct||0}%)</div><div class="tis">현재: ${json.current?.usd?.toLocaleString()||'?'}원</div></div>
+      <div class="titem"><div class="til">🎯 2~3개월 후 USD 예측</div><div class="tiv">${forecasts.usd.low||'?'}~${forecasts.usd.high||'?'}원</div><div class="tis">기준값: ${forecasts.usd.base||'?'}원</div></div>
+      <div class="titem"><div class="til">💰 현재 수입원가 (추정)</div><div class="tiv">${importCost.currentKrwPerKg?.toLocaleString()||'—'}원/kg</div><div class="tis">CME LH + 물류비 기준</div></div>
+      <div class="titem"><div class="til">📅 2~3개월 후 예상 원가</div><div class="tiv">${importCost.forecastKrwPerKg?.toLocaleString()||'—'}원/kg</div><div class="tis">${diffStr}</div></div>
     </div>`;
   }
-  html += `</div>`;
 
   // EUR 예측
-  if(forecasts?.eur?.base) {
-    html += `<div style="margin-bottom:12px">
-      <div class="sec-label">EUR/KRW 예측</div>
-      <div class="forecast-bar">
-        <span class="forecast-label">🇪🇺 EUR/KRW</span>
-        <div class="forecast-range"><div class="forecast-fill" style="width:70%"><span class="forecast-val">${forecasts.eur.low} ~ ${forecasts.eur.high}원</span></div></div>
-      </div>
+  if (forecasts.eur?.base) {
+    h += `<div style="background:#1e293b;border-radius:7px;padding:10px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:.72rem;color:#64748b;flex-shrink:0">🇪🇺 EUR/KRW 예측</span>
+      <span style="font-size:.9rem;font-weight:700;color:#fb923c">${forecasts.eur.low}~${forecasts.eur.high}원</span>
+      <span style="font-size:.72rem;color:#64748b">(현재: ${json.current?.eur?.toLocaleString()||'?'}원 · 추세: ${trends.eur?.dir||'?'} ${trends.eur?.pct||0}%)</span>
     </div>`;
   }
 
-  // 분석 항목
-  if(json.analysis?.length) {
-    html += `<div class="sec-label">세부 분석</div><ul class="analysis-list">`;
-    json.analysis.forEach(a => { html += `<li>${a.msg}</li>`; });
-    html += `</ul>`;
+  // 세부 분석
+  if (json.analysis?.length) {
+    h += `<div class="slb" style="margin-bottom:8px">세부 분석</div><ul class="alist">`;
+    json.analysis.forEach(a => { h += `<li>${a.msg}</li>`; });
+    h += '</ul>';
   }
-
-  html += `<p class="fn">※ 환율 추세·CME 선물·계절성 기반 규칙 분석 | AI 분석 버튼으로 Gemini 심층 분석 가능</p>`;
-  document.getElementById('timing-main').innerHTML = html;
+  h += `<p class="fn" style="margin-top:10px">※ 환율 추세·CME 선물·계절성 기반 분석 | AI 분석 버튼으로 Gemini 심층 분석 가능</p>`;
+  document.getElementById('timing-main').innerHTML = h;
 }
 
-// ── 수입육 시장동향 ───────────────────────────────────
+// ─── 데이터 로드 ─────────────────────────────────────
+async function ensureCurrent() {
+  if (curData) return curData;
+  const j = await fetch('/api/current').then(r => r.json()).catch(() => ({ ok: false }));
+  if (j.ok) {
+    curData = j.data;
+    document.getElementById('asof').textContent = j.fetchedAt || '';
+  }
+  return curData || {};
+}
+
+// 히스토리: /api/history 하나만 사용 (USDKRW, EURKRW 포함해서 서버에서 처리)
+async function getHist(sym, period) {
+  const key = sym + '_' + period;
+  if (hcache[key]) return hcache[key];
+  const j = await fetch(`/api/history?sym=${sym}&period=${period}`).then(r => r.json()).catch(() => ({ ok: false, rows: [] }));
+  const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '' };
+  if (result.rows.length > 0) hcache[key] = result;
+  return result;
+}
+
+// ─── 탭별 로드 함수 ──────────────────────────────────
+async function loadTiming() {
+  const cur = await ensureCurrent();
+  renderKpi('kpi-timing', cur, [
+    {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
+    {k:'LH',i:'🐷',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
+    {k:'ZC',i:'🌽',l:'옥수수 선물'}
+  ]);
+  // 타이밍 분석
+  const tj = await fetch('/api/timing').then(r => r.json()).catch(() => ({ ok: false, error: 'API 오류' }));
+  renderTimingMain(tj);
+  // 차트 (30일)
+  const [uH, eH, lH, kH] = await Promise.all([
+    getHist('USDKRW', 'monthly'), getHist('EURKRW', 'monthly'),
+    getHist('LH', 'monthly'),     getHist('KAMIS', 'monthly')
+  ]);
+  mkChart('c-usd',   uH.rows,   'USDKRW', '원');
+  mkChart('c-eur',   eH.rows,   'EURKRW', '원');
+  mkChart('c-lh',    lH.rows,   'LH',     'cents/lb');
+  mkChart('c-kamis', kH.rows,   'KAMIS',  '원/kg');
+}
+
 async function loadMarket() {
   const cur = await ensureCurrent();
-  document.getElementById('market-date').textContent = new Date().toLocaleDateString('ko-KR') + ' 기준';
-  renderKpi('market-kpi', cur, [
-    {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},
-    {k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
-    {k:'LH',i:'🐷',l:'CME Lean Hog'},
-    {k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
+  document.getElementById('mkt-date').textContent = new Date().toLocaleDateString('ko-KR') + ' 기준';
+  renderKpi('kpi-market', cur, [
+    {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
+    {k:'LH',i:'🐷',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'}
   ]);
-  const usdKrw = cur?.USDKRW?.price || 1380;
-
+  const usdKrw = cur?.USDKRW?.price || 1490;
   // 수입량 바
-  const maxS = Math.max(...IMPORT.countries.map(c=>c.s));
-  document.getElementById('import-bars').innerHTML = IMPORT.countries.map(c=>{
-    const chg = ((c.v25-(c.v25/1.08))/(c.v25/1.08)*100).toFixed(1);
-    const yoy = ((c.v25 - c.v25/1.09)/c.v25/1.09*100);
-    return `<div class="cb-row">
-      <span class="cb-name">${c.n}</span>
-      <div class="cb-bg"><div class="cb-fill" style="width:${(c.s/maxS*100).toFixed(0)}%;background:${c.c}"><span class="cb-val">${c.s}%</span></div></div>
-      <span class="cb-chg cu">+7~11%</span>
-    </div>`;
+  const maxS = Math.max(...IMP.countries.map(c => c.s));
+  document.getElementById('imp-bars').innerHTML = IMP.countries.map(c => {
+    const isPos = c.yoy.startsWith('+');
+    return `<div class="cbr"><span class="cbn">${c.n}</span><div class="cbb"><div class="cbf" style="width:${(c.s/maxS*100).toFixed(0)}%;background:${c.c}"><span class="cbv">${c.s}%</span></div></div><span class="cbc ${isPos?'cu':'cd'}">${c.yoy}</span></div>`;
   }).join('');
-
   // 단가 테이블
-  let ph = `<table class="dt"><thead><tr><th>국가</th><th>수입단가(USD/kg)</th><th>원화(원/kg)</th><th>2025수입량</th></tr></thead><tbody>`;
-  IMPORT.countries.filter(c=>c.n!=='기타').forEach(c=>{
-    const krw = Math.round(c.price * usdKrw);
-    ph += `<tr><td>${c.n}</td><td style="font-weight:700">$${c.price}</td><td style="color:#86efac;font-weight:700">${krw.toLocaleString()}원</td><td>${c.v25}천톤</td></tr>`;
+  let ph = `<table class="dt"><thead><tr><th>국가</th><th>수입단가(USD/kg)</th><th>원화(원/kg)</th><th>2025 수입량</th></tr></thead><tbody>`;
+  IMP.countries.filter(c => c.n !== '기타').forEach(c => {
+    const krw = Math.round(c.p * usdKrw);
+    ph += `<tr><td>${c.n}</td><td style="font-weight:700">$${c.p}</td><td style="color:#86efac;font-weight:700">${krw.toLocaleString()}원</td><td>${c.v25}천톤</td></tr>`;
   });
   ph += '</tbody></table>';
-  document.getElementById('import-price-tbl').innerHTML = ph;
-
+  document.getElementById('imp-price').innerHTML = ph;
   // 수급 전망
-  document.getElementById('supply-forecast').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="background:#0f172a;border-radius:7px;padding:10px"><div style="font-size:.63rem;color:#64748b;margin-bottom:4px">공급 전망</div><div style="font-size:.9rem;font-weight:700;color:#86efac">🟢 안정적</div><div style="font-size:.68rem;color:#94a3b8;margin-top:3px">EU·미국 공급 충분</div></div>
-      <div style="background:#0f172a;border-radius:7px;padding:10px"><div style="font-size:.63rem;color:#64748b;margin-bottom:4px">수요 전망</div><div style="font-size:.9rem;font-weight:700;color:#fbbf24">🟡 완만한 증가</div><div style="font-size:.68rem;color:#94a3b8;margin-top:3px">가정간편식 수요↑</div></div>
-      <div style="background:#0f172a;border-radius:7px;padding:10px"><div style="font-size:.63rem;color:#64748b;margin-bottom:4px">가격 방향성</div><div style="font-size:.9rem;font-weight:700;color:#fb923c">↗ 소폭 상승</div><div style="font-size:.68rem;color:#94a3b8;margin-top:3px">사료비 상승 반영</div></div>
-      <div style="background:#0f172a;border-radius:7px;padding:10px"><div style="font-size:.63rem;color:#64748b;margin-bottom:4px">환율 리스크</div><div style="font-size:.9rem;font-weight:700;color:#f87171">⚠️ 주의</div><div style="font-size:.68rem;color:#94a3b8;margin-top:3px">USD 고환율 지속</div></div>
-    </div>`;
-
+  document.getElementById('supply').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="background:#0f172a;border-radius:7px;padding:10px"><div class="kl">공급 전망</div><div style="font-size:.9rem;font-weight:700;color:#86efac">🟢 안정적</div><div class="ku">EU·미국 공급 충분</div></div>
+    <div style="background:#0f172a;border-radius:7px;padding:10px"><div class="kl">수요 전망</div><div style="font-size:.9rem;font-weight:700;color:#fbbf24">🟡 완만한 증가</div><div class="ku">가정간편식 수요↑</div></div>
+    <div style="background:#0f172a;border-radius:7px;padding:10px"><div class="kl">가격 방향성</div><div style="font-size:.9rem;font-weight:700;color:#fb923c">↗ 소폭 상승</div><div class="ku">사료비 상승 반영</div></div>
+    <div style="background:#0f172a;border-radius:7px;padding:10px"><div class="kl">환율 리스크</div><div style="font-size:.9rem;font-weight:700;color:#f87171">⚠️ 주의</div><div class="ku">USD 고환율 지속</div></div>
+  </div>`;
   // 이슈
-  document.getElementById('market-issues').innerHTML = IMPORT.issues.map(i=>`
-    <div class="issue"><span class="issue-badge" style="background:${i.lb};color:${i.lc}">${i.lv}</span>
-    <div class="issue-title">${i.t}</div><div class="issue-desc">${i.d}</div></div>`).join('');
-
-  drawYoy('yoy-chart');
-}
-
-// ── 히스토리 로드 ─────────────────────────────────────
-async function ensureCurrent() {
-  if(currentData) return currentData;
-  const res = await fetch('/api/current');
-  const j = await res.json();
-  if(j.ok){ currentData=j.data; document.getElementById('asof').textContent=j.fetchedAt||''; }
-  return currentData;
-}
-
-async function getHist(sym, period) {
-  const key=sym+'_'+period;
-  if(histCache[key]) return histCache[key];
-  const isFx = ['USDKRW','EURKRW'].includes(sym);
-  const url = isFx
-    ? `/api/fx-history?code=FX_${sym}&period=${period}`
-    : `/api/history?sym=${sym}&period=${period}`;
-  const res = await fetch(url);
-  const j = await res.json();
-  if(j.ok){ histCache[key]=j; return j; }
-  return {rows:[],rangeLabel:'데이터 없음'};
+  document.getElementById('issues').innerHTML = IMP.issues.map(i =>
+    `<div class="iss"><span class="isb" style="background:${i.lb};color:${i.lc}">${i.lv}</span><div class="ist">${i.t}</div><div class="isd">${i.d}</div></div>`
+  ).join('');
+  mkYoyChart('c-yoy');
 }
 
 async function loadPeriod(period) {
-  await ensureCurrent();
-  renderKpi(`${period}-kpi`, currentData);
-  const [lhH,kH,zcH,zsH] = await Promise.all([
-    getHist('LH',period), getHist('KAMIS',period),
-    getHist('ZC',period), getHist('ZS',period),
+  const cur = await ensureCurrent();
+  renderKpi(`kpi-${period}`, cur);
+  const [lhH, kH, zcH, zsH] = await Promise.all([
+    getHist('LH', period), getHist('KAMIS', period),
+    getHist('ZC', period), getHist('ZS', period)
   ]);
-  const rl = lhH.rangeLabel||'';
-  if(period==='weekly'){
-    document.getElementById('weekly-range').textContent=rl;
-    drawLine('wc-lh',lhH.rows,'LH','cents/lb');
-    drawLine('wc-kamis',kH.rows,'KAMIS','원/kg');
-    drawFeed('wc-feed',zcH.rows,zsH.rows);
-    renderTable('wt-lh',lhH.rows,'cents/lb');
-    renderTable('wt-kamis',kH.rows,'원/kg');
-    document.getElementById('wt-lh-r').textContent=rl;
-    document.getElementById('wt-k-r').textContent=rl;
-  } else if(period==='monthly'){
-    document.getElementById('monthly-range').textContent=rl;
-    drawLine('mc-lh',lhH.rows,'LH','cents/lb');
-    drawLine('mc-kamis',kH.rows,'KAMIS','원/kg');
-    drawFeed('mc-feed',zcH.rows,zsH.rows);
-    renderTable('mt-lh',lhH.rows,'cents/lb',10);
-    renderTable('mt-kamis',kH.rows,'원/kg',10);
-    document.getElementById('mt-lh-r').textContent=rl;
-    document.getElementById('mt-k-r').textContent=rl;
-  } else {
-    document.getElementById('yearly-range').textContent=rl;
-    const [uH,eH] = await Promise.all([getHist('USDKRW','yearly'),getHist('EURKRW','yearly')]);
-    drawLine('yc-lh',lhH.rows,'LH','cents/lb');
-    drawLine('yc-kamis',kH.rows,'KAMIS','원/kg');
-    drawLine('yc-usd',uH.rows,'USDKRW','원');
-    drawLine('yc-eur',eH.rows,'EURKRW','원');
-    drawLine('yc-zc',zcH.rows,'ZC','cents/bu');
-    drawLine('yc-zs',zsH.rows,'ZS','cents/bu');
+  const rl = lhH.rangeLabel || kH.rangeLabel || '';
+
+  if (period === 'weekly') {
+    const el = document.getElementById('rng-weekly'); if(el) el.textContent = rl;
+    mkChart('wc-lh',    lhH.rows, 'LH',    'cents/lb');
+    mkChart('wc-kamis', kH.rows,  'KAMIS', '원/kg');
+    mkFeedChart('wc-feed', zcH.rows, zsH.rows);
+    renderTable('tbl-wlh', lhH.rows, 'cents/lb', 7);
+    renderTable('tbl-wk',  kH.rows,  '원/kg', 7);
+    const wr = document.getElementById('rng-wlh'); if(wr) wr.textContent = rl;
+    const wk = document.getElementById('rng-wk');  if(wk) wk.textContent = rl;
+
+  } else if (period === 'monthly') {
+    const el = document.getElementById('rng-monthly'); if(el) el.textContent = rl;
+    mkChart('mc-lh',    lhH.rows, 'LH',    'cents/lb');
+    mkChart('mc-kamis', kH.rows,  'KAMIS', '원/kg');
+    mkFeedChart('mc-feed', zcH.rows, zsH.rows);
+    renderTable('tbl-mlh', lhH.rows, 'cents/lb', 10);
+    renderTable('tbl-mk',  kH.rows,  '원/kg', 10);
+    const mr = document.getElementById('rng-mlh'); if(mr) mr.textContent = rl;
+    const mk = document.getElementById('rng-mk');  if(mk) mk.textContent = rl;
+
+  } else { // yearly
+    const el = document.getElementById('rng-yearly'); if(el) el.textContent = rl;
+    const [uH, eH] = await Promise.all([getHist('USDKRW','yearly'), getHist('EURKRW','yearly')]);
+    mkChart('yc-lh',    lhH.rows, 'LH',     'cents/lb');
+    mkChart('yc-kamis', kH.rows,  'KAMIS',  '원/kg');
+    mkChart('yc-usd',   uH.rows,  'USDKRW', '원');
+    mkChart('yc-eur',   eH.rows,  'EURKRW', '원');
+    mkChart('yc-zc',    zcH.rows, 'ZC',     'cents/bu');
+    mkChart('yc-zs',    zsH.rows, 'ZS',     'cents/bu');
   }
 }
 
-// ── AI 분석 ──────────────────────────────────────────
+// ─── AI 분석 ─────────────────────────────────────────
 async function runAI(period) {
-  const btn=document.getElementById(`ai-${period}-btn`);
-  const box=document.getElementById(`ai-${period}-box`);
-  const badge=document.getElementById(`ai-${period}-model`);
-  btn.disabled=true; btn.textContent='분석 중...';
-  box.innerHTML='<p class="ai-ph">⏳ Gemini AI 분석 중...</p>';
+  const btn   = document.getElementById('b-' + period);
+  const box   = document.getElementById('ai-' + period);
+  const badge = document.getElementById('m-' + period);
+  if (!btn || !box) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ AI 분석 중...';
+  box.innerHTML = '<p class="aph">⏳ Gemini AI가 분석 중입니다. 잠시 기다려주세요...</p>';
   try {
-    const res=await fetch(`/api/analysis/${period}`);
-    const j=await res.json();
-    box.innerHTML=marked.parse(j.analysis||'분석 결과 없음');
-    badge.textContent=j.model?(j.cached?j.model+' · 캐시':j.model):(j.fallback?'fallback':'—');
-  } catch(e){
-    box.innerHTML=`<p style="color:#f87171;font-size:.78rem">AI 분석 실패: ${e.message}</p>`;
-  } finally{btn.disabled=false;btn.textContent='분석 실행';}
+    const j = await fetch('/api/analysis/' + period).then(r => r.json());
+    if (typeof marked !== 'undefined') {
+      box.innerHTML = marked.parse(j.analysis || '분석 결과 없음');
+    } else {
+      box.innerHTML = '<pre style="white-space:pre-wrap;font-size:.78rem;color:#cbd5e1;line-height:1.7">' + (j.analysis||'') + '</pre>';
+    }
+    if (badge) badge.textContent = j.model ? (j.cached ? j.model + ' · 캐시' : j.model) : (j.fallback ? 'fallback' : '—');
+  } catch(e) {
+    box.innerHTML = `<p style="color:#f87171;font-size:.78rem">AI 분석 실패: ${e.message}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '분석 실행';
+  }
 }
 
-// ── 초기화 ───────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', ()=>{
+// ─── 초기화 ──────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
   loaded.add('timing');
-  loadTiming().catch(console.error);
-  setInterval(()=>{ currentData=null; Object.keys(histCache).forEach(k=>delete histCache[k]); }, 10*60*1000);
+  loadTiming().catch(e => {
+    console.error('loadTiming failed:', e);
+    document.getElementById('timing-main').innerHTML = `<p style="color:#f87171;padding:20px;font-size:.78rem">로드 실패: ${e.message}</p>`;
+  });
+  // 10분마다 캐시 초기화
+  setInterval(() => {
+    curData = null;
+    Object.keys(hcache).forEach(k => delete hcache[k]);
+  }, 10 * 60 * 1000);
 });
 </script>
 </body>
