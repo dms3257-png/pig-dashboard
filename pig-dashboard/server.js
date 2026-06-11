@@ -282,6 +282,87 @@ async function fetchKamisHistory(startYmd) {
 // ════════════════════════════════════════════════════
 // 히스토리 캐시
 // ════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════
+// EU 공식 지육가 — agridata.ec.europa.eu REST API
+// 유럽집행위원회 농업총국 공개 데이터
+// ════════════════════════════════════════════════════
+
+const EU_COUNTRIES = [
+  { code: 'ES', name: '🇪🇸 스페인' },
+  { code: 'DE', name: '🇩🇪 독일'   },
+  { code: 'NL', name: '🇳🇱 네덜란드'},
+  { code: 'FR', name: '🇫🇷 프랑스'  },
+  { code: 'DK', name: '🇩🇰 덴마크'  },
+  { code: 'PL', name: '🇵🇱 폴란드'  },
+];
+
+async function fetchEuPigPrices() {
+  const hit = aCache.get('eu_pig');
+  if (hit && Date.now() - hit.ts < 6 * 3600000) return hit.data;
+
+  const endDate   = new Date().toISOString().slice(0,10).split('-').reverse().join('/');
+  const startDate = new Date(Date.now()-90*86400000).toISOString().slice(0,10).split('-').reverse().join('/');
+  const codes = EU_COUNTRIES.map(c => c.code).join(',');
+
+  try {
+    const url = `https://agridata.ec.europa.eu/api/pigmeat/prices?memberStateCodes=${codes}&pigClasses=S,E&beginDate=${startDate}&endDate=${endDate}`;
+    const text = await httpGet(url, { Accept: 'application/json' });
+    const items = JSON.parse(text);
+    if (!Array.isArray(items) || items.length === 0) throw new Error('EU API 빈 응답');
+
+    // 국가별 최신값
+    const byCountry = {};
+    for (const item of items) {
+      const c = item.memberStateCode;
+      const price = parseFloat(item.price);
+      if (!Number.isFinite(price) || price <= 0) continue;
+      const week = item.beginDate;
+      if (!byCountry[c] || week > byCountry[c].week) {
+        byCountry[c] = { price, week, unit: item.unit||'EUR/100kg', cls: item.pigClass };
+      }
+    }
+
+    // 국가별 히스토리 (Class S)
+    const histByCountry = {};
+    for (const item of items) {
+      const c = item.memberStateCode;
+      const price = parseFloat(item.price);
+      if (!Number.isFinite(price) || price <= 0 || item.pigClass !== 'S') continue;
+      const parts = item.beginDate.split('/');
+      const ymd = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      if (!histByCountry[c]) histByCountry[c] = [];
+      histByCountry[c].push({ time: dateToUnix(ymd), close: price, open: price, high: price, low: price });
+    }
+    for (const c of Object.keys(histByCountry)) {
+      histByCountry[c] = dedupeByTime(histByCountry[c]);
+    }
+
+    const result = { byCountry, histByCountry, fetchedAt: kstNow(), source: 'agridata.ec.europa.eu' };
+    aCache.set('eu_pig', { data: result, ts: Date.now() });
+    console.log(`EU 지육가: ${Object.keys(byCountry).length}개국`);
+    return result;
+
+  } catch (e) {
+    console.warn('EU pig API:', e.message);
+    const fallback = {
+      byCountry: {
+        ES: { price: 172.5, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
+        DE: { price: 175.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
+        NL: { price: 173.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
+        FR: { price: 176.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
+        DK: { price: 178.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
+        PL: { price: 163.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
+      },
+      histByCountry: {},
+      fetchedAt: kstNow(),
+      source: 'fallback',
+    };
+    aCache.set('eu_pig', { data: fallback, ts: Date.now() - 5*3600000 });
+    return fallback;
+  }
+}
+
 const histCache = { LH:{d:[],at:0}, ZC:{d:[],at:0}, ZS:{d:[],at:0}, KAMIS:{d:[],at:0}, USDKRW:{d:[],at:0}, EURKRW:{d:[],at:0} };
 const HIST_TTL  = 6 * 3600000;
 const START_YMD = '2024-05-01';
@@ -633,6 +714,15 @@ app.get('/api/history', async (req, res) => {
     const rows = filterByPeriod(all, period);
     res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length });
   } catch (e) { res.status(500).json({ ok:false, error:e.message }); }
+});
+
+
+// EU 공식 지육가 API
+app.get('/api/eu-pig', async (_, res) => {
+  try {
+    const data = await fetchEuPigPrices();
+    res.json({ ok: true, ...data });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ★ 수입 타이밍 핵심 분석
