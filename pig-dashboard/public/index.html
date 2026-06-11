@@ -145,6 +145,24 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
     <div class="card"><div class="ch"><span class="ct">🐷 CME Lean Hog 30일</span><span class="tag to">Yahoo Finance</span></div><div class="cw"><canvas id="c-lh"></canvas></div></div>
     <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 30일</span><span class="tag tb">KAMIS</span></div><div class="cw"><canvas id="c-kamis"></canvas></div></div>
   </div>
+
+  <!-- EU 공식 지육가 -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="ch">
+      <span class="ct">🇪🇺 EU 국가별 지육가 (공식)</span>
+      <span class="tag tg">agridata.ec.europa.eu · Class S EUR/100kg</span>
+    </div>
+    <div id="eu-pig-wrap"><div class="lding"><span class="spin">⏳</span> EU 공식 데이터 로딩 중...</div></div>
+    <div class="g2" style="margin-top:12px;margin-bottom:0">
+      <div>
+        <div class="slb" style="margin-bottom:6px">국가별 추이 (Class S, 최근 3개월)</div>
+        <div class="cw"><canvas id="c-eu"></canvas></div>
+      </div>
+      <div id="eu-table-wrap"><div class="lding"><span class="spin">⏳</span></div></div>
+    </div>
+    <p class="fn">※ EU 집행위 농업총국 공식 주간 데이터 · EUR/100kg 지육중량 기준</p>
+  </div>
+
   <div class="card">
     <div class="ch"><span class="ct" style="font-size:.9rem">🤖 AI 수입 타이밍 심층 분석</span><span class="amdl" id="m-timing">—</span></div>
     <button class="abtn" id="b-timing" onclick="runAI('timing')">환율 추세 + 지육가 + 결제 시점 종합 AI 분석 실행</button>
@@ -521,6 +539,7 @@ async function loadTiming() {
   mkChart('c-eur',   eH.rows,   'EURKRW', '원');
   mkChart('c-lh',    lH.rows,   'LH',     'cents/lb');
   mkChart('c-kamis', kH.rows,   'KAMIS',  '원/kg');
+  loadEuPig();
 }
 
 async function loadMarket() {
@@ -626,6 +645,102 @@ async function runAI(period) {
 }
 
 // ─── 초기화 ──────────────────────────────────────────
+
+// EU 지육가 렌더
+async function loadEuPig() {
+  try {
+    const j = await fetch('/api/eu-pig').then(r => r.json());
+    if (!j.ok) throw new Error(j.error);
+
+    const EUR_COUNTRIES = [
+      {code:'ES', name:'🇪🇸 스페인'},
+      {code:'DE', name:'🇩🇪 독일'},
+      {code:'NL', name:'🇳🇱 네덜란드'},
+      {code:'FR', name:'🇫🇷 프랑스'},
+      {code:'DK', name:'🇩🇰 덴마크'},
+      {code:'PL', name:'🇵🇱 폴란드'},
+    ];
+    const byC = j.byCountry || {};
+    const usdKrw = curData?.USDKRW?.price || 1490;
+    const eurKrw = curData?.EURKRW?.price || 1630;
+
+    // KPI 바 (원화 환산 포함)
+    const maxP = Math.max(...EUR_COUNTRIES.map(c => byC[c.code]?.price||0));
+    let bars = '';
+    EUR_COUNTRIES.forEach(c => {
+      const d = byC[c.code];
+      if (!d) return;
+      const krwPer100 = Math.round(d.price * eurKrw / 100); // EUR/100kg → 원/kg
+      bars += `<div class="cbr">
+        <span class="cbn">${c.name}</span>
+        <div class="cbb"><div class="cbf" style="width:${Math.round(d.price/maxP*100)}%;background:#86efac">
+          <span class="cbv">${d.price.toFixed(1)}</span></div></div>
+        <span style="font-size:.68rem;color:#86efac;font-weight:600;width:90px;text-align:right;flex-shrink:0">${krwPer100.toLocaleString()}원/kg</span>
+      </div>`;
+    });
+    document.getElementById('eu-pig-wrap').innerHTML = bars ||
+      '<p style="color:#475569;font-size:.78rem;text-align:center;padding:12px">데이터 없음</p>';
+
+    // 테이블
+    let tbl = `<table class="dt"><thead><tr><th>국가</th><th>EUR/100kg</th><th>원화(원/kg)</th><th>기준주</th></tr></thead><tbody>`;
+    EUR_COUNTRIES.forEach(c => {
+      const d = byC[c.code];
+      if (!d) return;
+      const krw = Math.round(d.price * eurKrw / 100);
+      tbl += `<tr><td>${c.name}</td><td style="font-weight:700">${d.price.toFixed(2)}</td><td style="color:#86efac;font-weight:700">${krw.toLocaleString()}</td><td class="dd">${d.week||'—'}</td></tr>`;
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('eu-table-wrap').innerHTML = tbl;
+
+    // 히스토리 차트 (스페인·독일·네덜란드)
+    const hist = j.histByCountry || {};
+    const colors = {ES:'#fb923c', DE:'#86efac', NL:'#60a5fa', FR:'#d8b4fe', DK:'#fbbf24', PL:'#f87171'};
+    const datasets = [];
+    EUR_COUNTRIES.slice(0,4).forEach(c => {
+      const rows = hist[c.code];
+      if (!rows || rows.length === 0) return;
+      datasets.push({
+        label: c.name,
+        data: rows.map(r => ({ x: new Date(r.time*1000).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}), y: r.close })),
+        borderColor: colors[c.code]||'#94a3b8',
+        backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: rows.length > 20 ? 0 : 3, tension: 0.3,
+      });
+    });
+
+    const canvas = document.getElementById('c-eu');
+    if (canvas && datasets.length > 0) {
+      if (charts['c-eu']) { charts['c-eu'].destroy(); delete charts['c-eu']; }
+      charts['c-eu'] = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+          plugins: {
+            legend: { display: true, position: 'top', labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 12 } },
+            tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9', borderColor: '#334155', borderWidth: 1,
+              callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} EUR/100kg` } }
+          },
+          scales: {
+            x: { type: 'category', grid: { color: '#1e293b' }, ticks: { color: '#475569', maxTicksLimit: 8, font: { size: 10 } } },
+            y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } },
+              title: { display: true, text: 'EUR/100kg', color: '#475569', font: { size: 10 } } }
+          }
+        }
+      });
+    } else if (canvas) {
+      canvas.parentElement.innerHTML = '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem">히스토리 데이터 없음</p>';
+    }
+
+    const src = j.source === 'fallback' ? ' (참고값)' : '';
+    console.log('EU 지육가 로드 완료' + src);
+  } catch(e) {
+    console.warn('EU pig:', e.message);
+    const el = document.getElementById('eu-pig-wrap');
+    if (el) el.innerHTML = `<p style="color:#f87171;font-size:.78rem">EU 지육가 로드 실패: ${e.message}</p>`;
+  }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   loaded.add('timing');
   loadTiming().catch(e => {
