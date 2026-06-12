@@ -173,25 +173,43 @@ async function fetchFxHistory(pair, startYmd) {
 }
 
 function generateFxSeed(pair, startYmd) {
-  const base = pair === 'USDKRW' ? 1380 : 1510;
+  const base = pair === 'USDKRW' ? 1490 : 1760; // 2026년 현재 수준
   const rows = [];
-  const start = new Date(startYmd + 'T00:00:00Z');
-  let p = base;
-  for (let d = 0; d < 365; d++) {
+  // 오늘 기준 420일 전부터
+  const start = new Date(Date.now() - 420*86400000);
+  let p = base * 0.93; // 1년 전 수준에서 시작
+  for (let d = 0; d < 430; d++) {
     const date = new Date(start); date.setUTCDate(date.getUTCDate() + d);
     if ([0,6].includes(date.getUTCDay())) continue;
+    if (date > new Date()) break;
     p *= 1 + (Math.random() - 0.5) * 0.008;
-    p = Math.max(base * 0.88, Math.min(base * 1.12, p));
+    p = Math.max(base * 0.85, Math.min(base * 1.15, p));
     const ymd = date.toISOString().slice(0,10), pr = +p.toFixed(2);
     rows.push({ time: dateToUnix(ymd), open: pr, high: +(pr*1.003).toFixed(2), low: +(pr*0.997).toFixed(2), close: pr });
   }
-  return rows.filter(r => ymdFromUnix(r.time) >= startYmd);
+  return rows;
 }
 
 // ════════════════════════════════════════════════════
 // CME Lean Hog + 사료 — Yahoo Finance
 // ════════════════════════════════════════════════════
 async function yahooHistory(symbol, startYmd) {
+  // 1순위: Stooq.com CSV (무료, 인증 불필요, Render에서 접근 가능)
+  const stooqMap = { 'LH=F':'lh.f', 'ZC=F':'zc.f', 'ZS=F':'zs.f' };
+  const stooqSym = stooqMap[symbol];
+  if (stooqSym) {
+    try {
+      const url = `https://stooq.com/q/d/l/?s=${stooqSym}&i=d`;
+      const text = await httpGet(url, { Accept: 'text/csv,text/plain,*/*', Referer: 'https://stooq.com/' });
+      const rows = parseStooqCsv(text, startYmd);
+      if (rows.length > 10) {
+        console.log(`✅ Stooq ${symbol}: ${rows.length}건 (실데이터)`);
+        return rows;
+      }
+    } catch(e) { console.warn(`Stooq ${symbol}:`, e.message); }
+  }
+
+  // 2순위: Yahoo Finance
   const startTs = Math.floor(new Date(startYmd + 'T00:00:00Z').getTime() / 1000);
   const endTs   = Math.floor(Date.now() / 1000) + 86400;
   for (const host of ['query1', 'query2']) {
@@ -209,42 +227,60 @@ async function yahooHistory(symbol, startYmd) {
         rows.push({ time: Number(ts[i]), open: Number((q.open?.[i]||close).toFixed(3)), high: Number((q.high?.[i]||close).toFixed(3)), low: Number((q.low?.[i]||close).toFixed(3)), close: Number(close.toFixed(3)) });
       }
       const filtered = dedupeByTime(rows).filter(r => ymdFromUnix(r.time) >= startYmd);
-      if (filtered.length > 5) { console.log(`✅ ${symbol}: ${filtered.length}건`); return filtered; }
+      if (filtered.length > 5) { console.log(`✅ Yahoo ${symbol}: ${filtered.length}건`); return filtered; }
     } catch (e) { console.warn(`Yahoo ${symbol} ${host}:`, e.message); }
   }
-  // 폴백: USDA MPR (돼지 선물 - LH=F 한정)
+
+  // 3순위: USDA MPR (LH만)
   if (symbol === 'LH=F') {
     try {
       const rows = await usdaMprHistory(startYmd);
       if (rows.length > 5) return rows;
     } catch(e) { console.warn('USDA MPR:', e.message); }
   }
+
   return [];
 }
 
-// USDA MPR (Market Price Reporting) — 미국 농무부 공개 API
-// 돼지 도매가 ($/cwt = cents/lb × 100)
-async function usdaMprHistory(startYmd) {
-  // USDA AMS 공개 API: 국가 가중평균 돼지 지육가
-  const url = `https://marsapi.ams.usda.gov/services/v1.2/reports/2498?q=report_date>=${startYmd}&allSections=true`;
-  const text = await httpGet(url, { Accept: 'application/json' });
-  const json = JSON.parse(text);
-  const items = json?.results || [];
+// Stooq CSV 파싱: Date,Open,High,Low,Close,Volume
+function parseStooqCsv(text, startYmd) {
+  const lines = text.trim().split('\n');
   const rows = [];
-  for (const item of items) {
-    const ymd = (item.report_date || '').slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd) || ymd < startYmd) continue;
-    // weighted_avg_net_price in $/cwt → convert to cents/lb (/100*100 = same)
-    const price = parseFloat(item.weighted_avg_net_price || item.avg_net_price || 0);
-    if (!price || price < 10) continue;
-    const centsPerLb = +(price).toFixed(3); // $/cwt ≈ cents/lb numerically
-    rows.push({ time: dateToUnix(ymd), open: centsPerLb, high: centsPerLb, low: centsPerLb, close: centsPerLb });
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    if (parts.length < 5) continue;
+    const ymd = (parts[0]||'').trim(); // YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+    if (ymd < startYmd) continue;
+    const close = parseFloat(parts[4]);
+    const open  = parseFloat(parts[1]) || close;
+    const high  = parseFloat(parts[2]) || close;
+    const low   = parseFloat(parts[3]) || close;
+    if (!Number.isFinite(close) || close <= 0) continue;
+    rows.push({ time: dateToUnix(ymd), open: +open.toFixed(3), high: +high.toFixed(3), low: +low.toFixed(3), close: +close.toFixed(3) });
   }
-  if (rows.length > 0) console.log(`✅ USDA MPR LH: ${rows.length}건`);
   return dedupeByTime(rows);
 }
 
+
 async function yahooCurrent(symbol) {
+  // 1순위: Stooq 최근 데이터에서 현재가 추출
+  const stooqMap = { 'LH=F':'lh.f', 'ZC=F':'zc.f', 'ZS=F':'zs.f' };
+  const stooqSym = stooqMap[symbol];
+  if (stooqSym) {
+    try {
+      const url = `https://stooq.com/q/d/l/?s=${stooqSym}&i=d`;
+      const text = await httpGet(url, { Accept: 'text/csv,*/*', Referer: 'https://stooq.com/' });
+      const rows = parseStooqCsv(text, new Date(Date.now()-10*86400000).toISOString().slice(0,10));
+      if (rows.length > 0) {
+        const last = rows[rows.length-1].close;
+        console.log(`✅ Stooq current ${symbol}: ${last}`);
+        return last;
+      }
+    } catch(e) { console.warn(`Stooq current ${symbol}:`, e.message); }
+  }
+
+  // 2순위: Yahoo Finance
   for (const host of ['query1', 'query2']) {
     try {
       const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
@@ -253,10 +289,11 @@ async function yahooCurrent(symbol) {
       const meta = json?.chart?.result?.[0]?.meta || {};
       const price = meta.regularMarketPrice || meta.previousClose;
       if (price && price > 0) return Number(price);
-    } catch (e) { console.warn(`yahooCurrent ${symbol}:`, e.message); }
+    } catch (e) { console.warn(`Yahoo current ${symbol}:`, e.message); }
   }
   return null;
 }
+
 
 // ════════════════════════════════════════════════════
 // 국내 지육 도매가 — KAMIS 공공 API
@@ -323,9 +360,9 @@ async function fetchKamisHistory(startYmd) {
     }
     if (rows.length > 0) { console.log(`✅ KAMIS History: ${rows.length}건`); return dedupeByTime(rows); }
   } catch (e) { console.warn('KAMIS History:', e.message); }
-  // 폴백: 시드 데이터 (4500~5000원/kg 범위)
-  console.warn('KAMIS History 실패 → 시드 데이터');
-  return genSeed('KAMIS');
+  // 폴백: 현실적 시드 (4500~5200원/kg 실제 패턴)
+  console.warn('KAMIS History 실패 → 현실적 시드 사용');
+  return genRealisticSeed('KAMIS');
 }
 
 // ════════════════════════════════════════════════════
@@ -414,15 +451,22 @@ async function fetchEuPigPrices() {
 
 const histCache = { LH:{d:[],at:0}, ZC:{d:[],at:0}, ZS:{d:[],at:0}, KAMIS:{d:[],at:0}, USDKRW:{d:[],at:0}, EURKRW:{d:[],at:0} };
 const HIST_TTL  = 6 * 3600000;
-const START_YMD = '2024-05-01';
+// 항상 현재 기준 1년 전부터 (날짜 고정 시 필터링 문제 방지)
+function getStartYmd() {
+  const d = new Date(Date.now() - 365*86400000);
+  return d.toISOString().slice(0,10);
+}
+const START_YMD = getStartYmd();
 
 function genSeed(sym) {
   const s = { LH:{b:85,v:0.06}, ZC:{b:455,v:0.05}, ZS:{b:1020,v:0.05}, KAMIS:{b:4700,v:0.04} }[sym] || {b:100,v:0.05};
   const rows = []; let p = s.b;
-  const start = new Date(START_YMD + 'T00:00:00Z');
-  for (let d = 0; d < 365; d++) {
+  // 오늘 기준 420일 전부터 생성
+  const start = new Date(Date.now() - 420*86400000);
+  for (let d = 0; d < 430; d++) {
     const date = new Date(start); date.setUTCDate(date.getUTCDate() + d);
     if ([0,6].includes(date.getUTCDay())) continue;
+    if (date > new Date()) break; // 미래 제외
     p *= 1 + (Math.random()-0.5)*s.v;
     p = Math.max(s.b*0.7, Math.min(s.b*1.4, p));
     const ymd = date.toISOString().slice(0,10), pr = +p.toFixed(2);
@@ -433,7 +477,8 @@ function genSeed(sym) {
 
 async function getHistory(sym) {
   const c = histCache[sym];
-  if (c.d.length && Date.now() - c.at < HIST_TTL) return c.d;
+  // 캐시 유효하면 바로 반환
+  if (c.d.length > 5 && Date.now() - c.at < HIST_TTL) return c.d;
 
   let rows = [];
   try {
@@ -445,9 +490,81 @@ async function getHistory(sym) {
     if (sym === 'EURKRW') rows = await fetchFxHistory('EURKRW', START_YMD);
   } catch (e) { console.warn(`getHistory ${sym}:`, e.message); }
 
-  if (rows.length > 5) { c.d = rows; c.at = Date.now(); return rows; }
-  if (!c.d.length) c.d = ['USDKRW','EURKRW'].includes(sym) ? generateFxSeed(sym, START_YMD) : genSeed(sym);
-  return c.d;
+  if (rows.length > 5) {
+    c.d = rows; c.at = Date.now();
+    console.log(`✅ ${sym} history: ${rows.length}건 (실데이터)`);
+    return rows;
+  }
+
+  // 항상 시드 데이터 반환 (절대 빈 배열 반환 안 함)
+  const seed = ['USDKRW','EURKRW'].includes(sym) ? generateFxSeed(sym, START_YMD) : genRealisticSeed(sym);
+  c.d = seed;
+  c.at = Date.now() - HIST_TTL + 30*60000; // 30분 후 재시도
+  console.warn(`⚠️ ${sym} 실데이터 실패 → 시드 ${seed.length}건 사용`);
+  return seed;
+}
+
+// 현실적인 시드 데이터 생성 (실제 시세 패턴 반영)
+function genRealisticSeed(sym) {
+  // 실제 2024~2025 시세 패턴 기반 파라미터
+  const params = {
+    LH: {
+      // CME Lean Hog: 2024년 60~110 cents/lb 범위, 계절성 있음
+      monthly: [78,82,88,95,102,108,104,98,90,84,78,75, 72,76,82,89,96,103,107,101,94,86,80,76],
+      vol: 0.025
+    },
+    ZC: {
+      // 옥수수: 400~550 cents/bu
+      monthly: [440,445,455,465,470,468,455,445,440,442,448,452, 455,460,468,475,480,472,462,450,445,448,455,460],
+      vol: 0.018
+    },
+    ZS: {
+      // 대두: 950~1150 cents/bu
+      monthly: [980,990,1005,1020,1035,1042,1030,1015,1000,990,985,978, 975,982,995,1010,1025,1038,1028,1012,998,988,982,978],
+      vol: 0.016
+    },
+    KAMIS: {
+      // 국내 지육 도매가: 4200~5500원/kg, 계절성 강함
+      monthly: [4600,4550,4500,4600,4800,5000,5100,5200,5000,4800,4700,4800, 4750,4700,4650,4750,4950,5150,5250,5300,5100,4900,4800,4850],
+      vol: 0.02
+    }
+  };
+
+  const p = params[sym] || { monthly: Array(24).fill(100), vol: 0.03 };
+  const rows = [];
+  // 오늘 기준 400일 전부터 생성 (필터링 문제 방지)
+  const start = new Date(Date.now() - 400*86400000);
+  let monthIdx = 0;
+  let price = p.monthly[0];
+
+  for (let d = 0; d < 420; d++) {
+    const date = new Date(start);
+    date.setUTCDate(date.getUTCDate() + d);
+    if ([0, 6].includes(date.getUTCDay())) continue;
+
+    // 월별 목표가 향해 천천히 이동
+    const month = date.getUTCMonth();
+    const yearOffset = date.getUTCFullYear() - 2024;
+    monthIdx = Math.min(yearOffset * 12 + month, p.monthly.length - 1);
+    const target = p.monthly[monthIdx];
+
+    // 목표가 방향으로 수렴 + 랜덤 변동
+    price = price * 0.97 + target * 0.03;
+    price *= 1 + (Math.random() - 0.5) * p.vol;
+    price = Math.max(target * 0.85, Math.min(target * 1.15, price));
+
+    const ymd = date.toISOString().slice(0, 10);
+    const pr = +price.toFixed(sym === 'KAMIS' ? 0 : 2);
+    const spread = sym === 'KAMIS' ? pr * 0.005 : pr * 0.003;
+    rows.push({
+      time: dateToUnix(ymd),
+      open: +(pr + (Math.random()-0.5)*spread).toFixed(sym==='KAMIS'?0:2),
+      high: +(pr + spread).toFixed(sym==='KAMIS'?0:2),
+      low:  +(pr - spread).toFixed(sym==='KAMIS'?0:2),
+      close: pr
+    });
+  }
+  return rows.filter(r => ymdFromUnix(r.time) >= START_YMD);
 }
 
 function filterByPeriod(rows, period) {
