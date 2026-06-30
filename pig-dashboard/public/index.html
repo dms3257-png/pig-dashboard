@@ -324,7 +324,7 @@ function switchTab(name, btn) {
 }
 
 // ─── Chart.js 헬퍼 ───────────────────────────────────
-function mkChart(id, rows, sym, unit) {
+function mkChart(id, rows, sym, unit, isReal) {
   if (!rows || rows.length === 0) {
     const el = document.getElementById(id);
     if (el) { el.parentElement.innerHTML = '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem;">데이터 없음</p>'; }
@@ -338,16 +338,32 @@ function mkChart(id, rows, sym, unit) {
     const d = new Date(r.time * 1000);
     return (d.getMonth()+1) + '/' + d.getDate();
   });
+  // 가짜(시드) 데이터일 경우 경고 배지 표시
+  const wrapEl = canvas.closest('.card');
+  if (wrapEl) {
+    let warnEl = wrapEl.querySelector('.fake-data-warn');
+    if (isReal === false) {
+      if (!warnEl) {
+        warnEl = document.createElement('div');
+        warnEl.className = 'fake-data-warn';
+        warnEl.style.cssText = 'background:#451a03;border:1px solid #ea580c;color:#fb923c;font-size:.68rem;font-weight:700;padding:5px 9px;border-radius:5px;margin-bottom:8px;text-align:center';
+        warnEl.textContent = '⚠️ 실데이터 수신 실패 — 추정 패턴 데이터 표시 중 (실제 시세 아님)';
+        canvas.closest('.cw,.cwl')?.before(warnEl);
+      }
+    } else if (warnEl) {
+      warnEl.remove();
+    }
+  }
   try {
     charts[id] = new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: { labels, datasets: [{ data: rows.map(r => r.close), borderColor: c.l, backgroundColor: c.f,
-        borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
+      data: { labels, datasets: [{ data: rows.map(r => r.close), borderColor: isReal===false?'#64748b':c.l, backgroundColor: isReal===false?'rgba(100,116,139,.1)':c.f,
+        borderWidth: 2, borderDash: isReal===false?[5,4]:[], pointRadius: rows.length > 60 ? 0 : 3, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
       options: {
         responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
         plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8',
           bodyColor: '#f1f5f9', borderColor: '#334155', borderWidth: 1,
-          callbacks: { label: ctx => ' ' + ctx.parsed.y.toFixed(2) + ' ' + unit } } },
+          callbacks: { label: ctx => (isReal===false?'[추정] ':'') + ctx.parsed.y.toFixed(2) + ' ' + unit } } },
         scales: {
           x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', maxTicksLimit: 8, font: { size: 10 } } },
           y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } } }
@@ -514,7 +530,7 @@ async function getHist(sym, period) {
   const key = sym + '_' + period;
   if (hcache[key]) return hcache[key];
   const j = await fetch(`/api/history?sym=${sym}&period=${period}`).then(r => r.json()).catch(() => ({ ok: false, rows: [] }));
-  const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '' };
+  const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '', isReal: j.isReal !== false };
   if (result.rows.length > 0) hcache[key] = result;
   return result;
 }
@@ -535,10 +551,10 @@ async function loadTiming() {
     getHist('USDKRW', 'monthly'), getHist('EURKRW', 'monthly'),
     getHist('LH', 'monthly'),     getHist('KAMIS', 'monthly')
   ]);
-  mkChart('c-usd',   uH.rows,   'USDKRW', '원');
-  mkChart('c-eur',   eH.rows,   'EURKRW', '원');
-  mkChart('c-lh',    lH.rows,   'LH',     'cents/lb');
-  mkChart('c-kamis', kH.rows,   'KAMIS',  '원/kg');
+  mkChart('c-usd', uH.rows, 'USDKRW', '원', uH.isReal);
+  mkChart('c-eur', eH.rows, 'EURKRW', '원', eH.isReal);
+  mkChart('c-lh', lH.rows, 'LH', 'cents/lb', lH.isReal);
+  mkChart('c-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
   loadEuPig();
 }
 
@@ -589,8 +605,8 @@ async function loadPeriod(period) {
 
   if (period === 'weekly') {
     const el = document.getElementById('rng-weekly'); if(el) el.textContent = rl;
-    mkChart('wc-lh',    lhH.rows, 'LH',    'cents/lb');
-    mkChart('wc-kamis', kH.rows,  'KAMIS', '원/kg');
+    mkChart('wc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
+    mkChart('wc-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
     mkFeedChart('wc-feed', zcH.rows, zsH.rows);
     renderTable('tbl-wlh', lhH.rows, 'cents/lb', 7);
     renderTable('tbl-wk',  kH.rows,  '원/kg', 7);
@@ -599,8 +615,8 @@ async function loadPeriod(period) {
 
   } else if (period === 'monthly') {
     const el = document.getElementById('rng-monthly'); if(el) el.textContent = rl;
-    mkChart('mc-lh',    lhH.rows, 'LH',    'cents/lb');
-    mkChart('mc-kamis', kH.rows,  'KAMIS', '원/kg');
+    mkChart('mc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
+    mkChart('mc-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
     mkFeedChart('mc-feed', zcH.rows, zsH.rows);
     renderTable('tbl-mlh', lhH.rows, 'cents/lb', 10);
     renderTable('tbl-mk',  kH.rows,  '원/kg', 10);
@@ -610,12 +626,12 @@ async function loadPeriod(period) {
   } else { // yearly
     const el = document.getElementById('rng-yearly'); if(el) el.textContent = rl;
     const [uH, eH] = await Promise.all([getHist('USDKRW','yearly'), getHist('EURKRW','yearly')]);
-    mkChart('yc-lh',    lhH.rows, 'LH',     'cents/lb');
-    mkChart('yc-kamis', kH.rows,  'KAMIS',  '원/kg');
-    mkChart('yc-usd',   uH.rows,  'USDKRW', '원');
-    mkChart('yc-eur',   eH.rows,  'EURKRW', '원');
-    mkChart('yc-zc',    zcH.rows, 'ZC',     'cents/bu');
-    mkChart('yc-zs',    zsH.rows, 'ZS',     'cents/bu');
+    mkChart('yc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
+    mkChart('yc-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
+    mkChart('yc-usd', uH.rows, 'USDKRW', '원', uH.isReal);
+    mkChart('yc-eur', eH.rows, 'EURKRW', '원', eH.isReal);
+    mkChart('yc-zc', zcH.rows, 'ZC', 'cents/bu', zcH.isReal);
+    mkChart('yc-zs', zsH.rows, 'ZS', 'cents/bu', zsH.isReal);
   }
 }
 
