@@ -5,6 +5,8 @@ const path    = require('path');
 const fs      = require('fs');
 const express = require('express');
 const cors    = require('cors');
+const cheerio = require('cheerio');
+const iconv   = require('iconv-lite');
 
 const app = express();
 app.use(cors());
@@ -57,6 +59,143 @@ async function httpGet(url, headers = {}) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
+
+// ── 네이버 전용 fetchText (euc-kr 지원) ──────────────
+async function fetchText(url, encoding = 'utf-8', timeout = 10000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+        'Referer': 'https://finance.naver.com/',
+      }
+    });
+    clearTimeout(t);
+    const buf = await res.arrayBuffer();
+    return encoding === 'euc-kr'
+      ? iconv.decode(Buffer.from(buf), 'euc-kr')
+      : new TextDecoder('utf-8').decode(buf);
+  } catch (e) { clearTimeout(t); throw e; }
+}
+
+// ── 네이버 증권 환율 현재가 크롤링 ───────────────────
+async function naverFxCurrentCrawl() {
+  const hit = aCache.get('naver_fx_current');
+  if (hit && Date.now() - hit.ts < 5 * 60000) return hit.data;
+
+  try {
+    const html = await fetchText('https://finance.naver.com/marketindex/', 'euc-kr', 8000);
+    const $ = cheerio.load(html);
+    const result = {};
+
+    // 메인 환율 섹션 파싱
+    // USD/KRW
+    $('h3.h_lst, .h_lst').each((_, el) => {
+      const t = $(el).text().trim();
+      const val = parseFloat($(el).closest('li').find('.value').text().replace(/,/g, ''));
+      if (t.includes('USD') && val > 800 && val < 2500) {
+        result.USDKRW = { price: val, name: 'USD/KRW', unit: '원', source: 'naver' };
+      }
+      if (t.includes('EUR') && val > 800 && val < 3000) {
+        result.EURKRW = { price: val, name: 'EUR/KRW', unit: '원', source: 'naver' };
+      }
+      if (t.includes('JPY') && val > 500 && val < 2000) {
+        result.JPYKRW = { price: val, name: 'JPY/KRW(100엔)', unit: '원', source: 'naver' };
+      }
+      if (t.includes('CNY') && val > 100 && val < 400) {
+        result.CNYKRW = { price: val, name: 'CNY/KRW', unit: '원', source: 'naver' };
+      }
+    });
+
+    // 대안: 다른 선택자 시도
+    if (!result.USDKRW) {
+      $('.exchange_area .lst_exchange li').each((_, el) => {
+        const title = $(el).find('.tit').text().trim();
+        const val = parseFloat($(el).find('.value').text().replace(/,/g, ''));
+        if (!val || isNaN(val)) return;
+        if (title.includes('USD') && val > 800) result.USDKRW = { price: val, name: 'USD/KRW', unit: '원', source: 'naver' };
+        if (title.includes('EUR') && val > 800) result.EURKRW = { price: val, name: 'EUR/KRW', unit: '원', source: 'naver' };
+        if (title.includes('JPY') && val > 500) result.JPYKRW = { price: val, name: 'JPY/KRW(100엔)', unit: '원', source: 'naver' };
+      });
+    }
+
+    // 또 다른 대안: 정규식으로 직접 추출
+    if (!result.USDKRW) {
+      const usdMatch = html.match(/USD[^0-9]*([1-9][0-9]{2,3}(?:\.[0-9]{1,2})?)/);
+      if (usdMatch) {
+        const v = parseFloat(usdMatch[1]);
+        if (v > 800 && v < 2500) result.USDKRW = { price: v, name: 'USD/KRW', unit: '원', source: 'naver-regex' };
+      }
+    }
+
+    if (Object.keys(result).length > 0) {
+      aCache.set('naver_fx_current', { data: result, ts: Date.now() });
+      console.log('✅ 네이버 FX:', Object.keys(result).map(k => k + '=' + result[k].price).join(', '));
+      return result;
+    }
+    throw new Error('파싱 결과 없음');
+  } catch (e) {
+    console.warn('네이버 FX current 실패:', e.message);
+    return null;
+  }
+}
+
+// ── 네이버 증권 환율 히스토리 크롤링 ─────────────────
+// 기존 앱과 동일한 방식
+async function naverFxHistoryCrawl(marketindexCd, startYmd, maxPages = 40) {
+  const cacheKey = 'naver_hist_' + marketindexCd;
+  const hit = aCache.get(cacheKey);
+  if (hit && Date.now() - hit.ts < 6 * 3600000) return hit.data;
+
+  const rows = [];
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const url = `https://finance.naver.com/marketindex/exchangeDailyQuote.naver?marketindexCd=${marketindexCd}&page=${page}`;
+      const html = await fetchText(url, 'euc-kr', 10000);
+      const $ = cheerio.load(html);
+      const pageRows = [];
+
+      $('table tbody tr').each((_, tr) => {
+        const cols = $(tr).find('td')
+          .map((__, td) => $(td).text().replace(/\s+/g, ' ').trim())
+          .get().filter(Boolean);
+        if (cols.length < 2) return;
+        const ymd = cols[0].replace(/\./g, '-');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
+        const price = parseFloat(cols[1].replace(/,/g, ''));
+        if (!Number.isFinite(price) || price < 100) return;
+        pageRows.push({
+          time: dateToUnix(ymd),
+          open: price, high: price, low: price, close: price,
+          source: 'naver',
+        });
+      });
+
+      if (!pageRows.length) break;
+      rows.push(...pageRows);
+
+      // startYmd보다 이전 데이터가 나오면 중단
+      const oldest = ymdFromUnix(pageRows[pageRows.length - 1].time);
+      if (oldest < startYmd) break;
+
+    } catch (e) {
+      console.warn(`naverFxHistory p${page}:`, e.message);
+      break;
+    }
+  }
+
+  const filtered = dedupeByTime(rows).filter(r => ymdFromUnix(r.time) >= startYmd);
+  if (filtered.length > 5) {
+    aCache.set(cacheKey, { data: filtered, ts: Date.now() });
+    console.log(`✅ 네이버 ${marketindexCd}: ${filtered.length}건`);
+  }
+  return filtered;
+}
+
 
 // ── Gemini AI ─────────────────────────────────────────
 async function callGemini(prompt) {
@@ -141,7 +280,17 @@ async function fetchFxRates() {
 // 환율 히스토리 — Naver (서버에서 가능) or Yahoo
 // ════════════════════════════════════════════════════
 async function fetchFxHistory(pair, startYmd) {
-  // Yahoo Finance로 환율 히스토리 (USD/KRW, EUR/KRW)
+  // 1순위: 네이버 증권 (기존 앱과 동일 방식)
+  const naverCode = pair === 'USDKRW' ? 'FX_USDKRW' : 'FX_EURKRW';
+  try {
+    const rows = await naverFxHistoryCrawl(naverCode, startYmd);
+    if (rows.length > 10) {
+      console.log(`✅ 네이버 FX History ${pair}: ${rows.length}건`);
+      return rows;
+    }
+  } catch(e) { console.warn(`네이버 FX History ${pair}:`, e.message); }
+
+  // 2순위: Yahoo Finance
   const yahooSymbol = pair === 'USDKRW' ? 'USDKRW=X' : 'EURKRW=X';
   const startTs = Math.floor(new Date(startYmd + 'T00:00:00Z').getTime() / 1000);
   const endTs   = Math.floor(Date.now() / 1000) + 86400;
@@ -299,69 +448,119 @@ async function yahooCurrent(symbol) {
 // 국내 지육 도매가 — KAMIS 공공 API
 // ════════════════════════════════════════════════════
 async function fetchKamisCurrent() {
-  // 1) KAMIS 공공 API
-  const keys = [
-    process.env.KAMIS_API_KEY,
-    'f3ec27ac-b85a-4fd8-8beb-49ac17e56e0c',
-  ].filter(Boolean);
+  const certKey = process.env.KAMIS_API_KEY;
+  const certId  = process.env.KAMIS_API_ID;
 
-  for (const key of keys) {
+  if (!certKey || !certId) {
+    console.warn('KAMIS_API_KEY 또는 KAMIS_API_ID 환경변수 없음');
+    return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가', note: '키 미설정' };
+  }
+
+  // KAMIS 부류코드: 500=축산물, 품목코드: 돼지=505 (kg단위 지육)
+  // 시도1: 최근일자 도매가격(품목별)
+  const attempts = [
+    { name: '최근일자 부류별(축산물)', url: `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${new Date().toISOString().slice(0,10)}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json` },
+  ];
+
+  for (const a of attempts) {
     try {
-      const url = `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_cert_key=${key}&p_cert_id=dev&p_returntype=json&p_itemcategorycode=500&p_itemcode=502&p_kindcode=00&p_graderank=1&p_countycode=1101&p_convert_kg_yn=N`;
-      const text = await httpGet(url);
+      const text = await httpGet(a.url);
       const json = JSON.parse(text);
-      const item = json?.data?.item?.[0];
-      if (item && item.dpr1) {
-        const price = parseFloat((item.dpr1||'0').replace(/,/g,''));
+      let items = json?.data?.item || json?.data || [];
+      if (!Array.isArray(items)) items = [items];
+
+      // 돼지 관련 품목 찾기 (이름에 '돼지' 포함된 것)
+      const pigItem = items.find(it =>
+        (it.item_name||'').includes('돼지') ||
+        (it.itemname||'').includes('돼지')
+      );
+
+      if (pigItem) {
+        const priceRaw = pigItem.dpr1 || pigItem.price;
+        const price = parseFloat(String(priceRaw||'0').replace(/,/g,''));
         if (price > 1000) {
-          console.log(`✅ KAMIS: ${price}원/kg`);
-          return { price, unit: '원/kg', date: item.regday, source: 'kamis', name: '국내 지육 도매가' };
+          console.log(`✅ KAMIS [${a.name}]: ${pigItem.item_name||pigItem.itemname} = ${price}원/kg`);
+          return { price, unit: '원/kg', date: pigItem.regday, source: 'kamis', name: '국내 지육 도매가' };
         }
       }
-    } catch (e) { console.warn(`KAMIS:`, e.message); }
+      console.warn(`KAMIS [${a.name}] 응답 (돼지 미발견):`, JSON.stringify(items).slice(0,500));
+    } catch (e) {
+      console.warn(`KAMIS [${a.name}] 실패:`, e.message);
+    }
   }
 
-  // 2) 공공데이터포털 KAMIS API (환경변수 키 있을 때)
-  if (process.env.DATA_GO_KEY) {
-    try {
-      const url = `https://apis.data.go.kr/1360000/AviationWeather/getWthrDataList?serviceKey=${process.env.DATA_GO_KEY}&pageNo=1&numOfRows=10&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt=${new Date().toISOString().slice(0,10).replace(/-/g,'')}&endDt=${new Date().toISOString().slice(0,10).replace(/-/g,'')}`;
-      // 실제 KAMIS 공공 API 호출
-      const kamisUrl = `https://apis.data.go.kr/B552895/KamisPriceService/getKamisPriceList?serviceKey=${process.env.DATA_GO_KEY}&apiType=json&regId=1101&itemCategoryCode=500&itemCode=502&kindCode=00&gradeRank=1&convertKgYn=N&startDay=${new Date().toISOString().slice(0,10)}&endDay=${new Date().toISOString().slice(0,10)}&countryCode=1101`;
-      const text2 = await httpGet(kamisUrl);
-      const j2 = JSON.parse(text2);
-      const item2 = j2?.data?.item?.[0];
-      if (item2 && item2.price) {
-        const price = parseFloat((item2.price||'0').replace(/,/g,''));
-        if (price > 1000) return { price, unit: '원/kg', source: 'data.go.kr', name: '국내 지육 도매가' };
-      }
-    } catch(e) { console.warn('data.go.kr KAMIS:', e.message); }
-  }
+  return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가', note: 'API 실패' };
+}
 
-  // 3) 최종 폴백: 참고값 (실제 최근 시세 기반)
-  console.warn('KAMIS 모든 API 실패 → 참고값 사용');
-  return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가', note: '참고값' };
+// KAMIS 품목코드 탐색용 캐시 (최초 1회 찾으면 재사용)
+let kamisPigItemCode = null;
+
+async function findKamisPigItemCode() {
+  if (kamisPigItemCode) return kamisPigItemCode;
+  const certKey = process.env.KAMIS_API_KEY;
+  const certId  = process.env.KAMIS_API_ID;
+  try {
+    const url = `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${new Date().toISOString().slice(0,10)}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`;
+    const text = await httpGet(url);
+    const json = JSON.parse(text);
+    let items = json?.data?.item || json?.data || [];
+    if (!Array.isArray(items)) items = [items];
+    const pigItem = items.find(it => (it.item_name||'').includes('돼지'));
+    if (pigItem) {
+      kamisPigItemCode = { itemcode: pigItem.item_code, kindcode: pigItem.kind_code || '00' };
+      console.log('✅ KAMIS 돼지 품목코드 발견:', JSON.stringify(kamisPigItemCode), '/', pigItem.item_name);
+      return kamisPigItemCode;
+    }
+  } catch(e) { console.warn('findKamisPigItemCode:', e.message); }
+  return null;
 }
 
 async function fetchKamisHistory(startYmd) {
+  const certKey = process.env.KAMIS_API_KEY;
+  const certId  = process.env.KAMIS_API_ID;
   const endDate = new Date().toISOString().slice(0,10);
-  const key = process.env.KAMIS_API_KEY || 'f3ec27ac-b85a-4fd8-8beb-49ac17e56e0c';
+
+  if (!certKey || !certId) {
+    console.warn('KAMIS_API_KEY/ID 없음 → 시드 데이터 (실데이터 아님)');
+    return genRealisticSeed('KAMIS');
+  }
+
   try {
-    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_cert_key=${key}&p_cert_id=dev&p_returntype=json&p_itemcategorycode=500&p_itemcode=502&p_kindcode=00&p_graderank=1&p_countycode=1101&p_convert_kg_yn=N&p_startday=${startYmd}&p_endday=${endDate}`;
+    const codeInfo = await findKamisPigItemCode();
+    const itemcode = codeInfo?.itemcode || '505';
+    const kindcode = codeInfo?.kindcode || '00';
+
+    // periodProductList: 기간별 가격 조회 (정확한 파라미터명 사용)
+    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endDate}&p_itemcategorycode=500&p_itemcode=${itemcode}&p_kindcode=${kindcode}&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`;
     const text = await httpGet(url);
     const json = JSON.parse(text);
-    const items = json?.data?.item || [];
+
+    let items = json?.data?.item || json?.data || [];
+    if (!Array.isArray(items)) items = [items];
+
     const rows = [];
     for (const item of items) {
-      const ymd = (item.regday||'').replace(/\./g,'-');
+      const ymdRaw = item.regday || item.yyyymmdd;
+      if (!ymdRaw) continue;
+      const ymd = String(ymdRaw).replace(/\./g,'-').replace(/\//g,'-');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
-      const price = parseFloat((item.dpr1||'0').replace(/,/g,''));
+      const priceRaw = item.price || item.dpr1;
+      const price = parseFloat(String(priceRaw||'0').replace(/,/g,''));
       if (!price || price < 1000) continue;
       rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
     }
-    if (rows.length > 0) { console.log(`✅ KAMIS History: ${rows.length}건`); return dedupeByTime(rows); }
-  } catch (e) { console.warn('KAMIS History:', e.message); }
-  // 폴백: 현실적 시드 (4500~5200원/kg 실제 패턴)
-  console.warn('KAMIS History 실패 → 현실적 시드 사용');
+
+    const deduped = dedupeByTime(rows);
+    if (deduped.length > 5) {
+      console.log(`✅ KAMIS History: ${deduped.length}건 (실데이터, itemcode=${itemcode})`);
+      return deduped;
+    }
+    console.warn(`KAMIS History 응답 부족 (${deduped.length}건). 응답:`, JSON.stringify(json).slice(0,500));
+  } catch (e) {
+    console.warn('KAMIS History 실패:', e.message);
+  }
+
+  console.warn('⚠️ KAMIS History 최종 실패 → 시드 데이터 사용 (실데이터 아님, 화면에 표시 필요)');
   return genRealisticSeed('KAMIS');
 }
 
@@ -491,16 +690,17 @@ async function getHistory(sym) {
   } catch (e) { console.warn(`getHistory ${sym}:`, e.message); }
 
   if (rows.length > 5) {
-    c.d = rows; c.at = Date.now();
+    c.d = rows; c.at = Date.now(); c.isReal = true;
     console.log(`✅ ${sym} history: ${rows.length}건 (실데이터)`);
     return rows;
   }
 
-  // 항상 시드 데이터 반환 (절대 빈 배열 반환 안 함)
+  // 항상 시드 데이터 반환 (절대 빈 배열 반환 안 함) — 단, isReal=false로 명시
   const seed = ['USDKRW','EURKRW'].includes(sym) ? generateFxSeed(sym, START_YMD) : genRealisticSeed(sym);
   c.d = seed;
   c.at = Date.now() - HIST_TTL + 30*60000; // 30분 후 재시도
-  console.warn(`⚠️ ${sym} 실데이터 실패 → 시드 ${seed.length}건 사용`);
+  c.isReal = false;
+  console.warn(`⚠️ ${sym} 실데이터 실패 → 시드(가짜) ${seed.length}건 사용`);
   return seed;
 }
 
@@ -586,8 +786,9 @@ async function getCurrentPrices() {
   if (hit && Date.now()-hit.ts < 8*60000) return hit.data;
 
   // 병렬로 모두 요청, 각각 독립 실패 허용
-  const [fxRes, lhRes, zcRes, zsRes, kamisRes] = await Promise.allSettled([
-    fetchFxRates(),
+  const [naverFxRes, fxRes, lhRes, zcRes, zsRes, kamisRes] = await Promise.allSettled([
+    naverFxCurrentCrawl(),   // 1순위: 네이버 실시간 크롤링
+    fetchFxRates(),           // 2순위: open.er-api.com
     yahooCurrent('LH=F'),
     yahooCurrent('ZC=F'),
     yahooCurrent('ZS=F'),
@@ -596,12 +797,20 @@ async function getCurrentPrices() {
 
   const results = {};
 
-  // 환율
-  if (fxRes.status === 'fulfilled' && fxRes.value) {
-    Object.assign(results, fxRes.value);
+  // 환율 — 네이버 우선, 실패 시 er-api
+  const naverFx = naverFxRes.status === 'fulfilled' ? naverFxRes.value : null;
+  const erApiFx = fxRes.status === 'fulfilled' ? fxRes.value : null;
+
+  if (naverFx?.USDKRW) {
+    Object.assign(results, naverFx);
+    console.log('✅ 환율 소스: 네이버 증권');
+  } else if (erApiFx) {
+    Object.assign(results, erApiFx);
+    console.log('✅ 환율 소스: open.er-api.com');
   } else {
-    results.USDKRW = { price: 1380, name: 'USD/KRW', unit: '원', source: 'fallback' };
-    results.EURKRW = { price: 1510, name: 'EUR/KRW', unit: '원', source: 'fallback' };
+    results.USDKRW = { price: 1490, name: 'USD/KRW', unit: '원', source: 'fallback' };
+    results.EURKRW = { price: 1760, name: 'EUR/KRW', unit: '원', source: 'fallback' };
+    console.warn('⚠️ 환율 모든 소스 실패 → 참고값');
   }
 
   // CME Lean Hog
@@ -878,7 +1087,9 @@ app.get('/api/history', async (req, res) => {
   try {
     const all  = await getHistory(sym);
     const rows = filterByPeriod(all, period);
-    res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length });
+    // 캐시에 기록된 실데이터 여부 확인
+    const isReal = histCache[sym]?.isReal !== false;
+    res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length, isReal });
   } catch (e) { res.status(500).json({ ok:false, error:e.message }); }
 });
 
