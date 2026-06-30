@@ -344,7 +344,7 @@ function generateFxSeed(pair, startYmd) {
 // ════════════════════════════════════════════════════
 async function yahooHistory(symbol, startYmd) {
   // 1순위: Stooq.com CSV (무료, 인증 불필요, Render에서 접근 가능)
-  const stooqMap = { 'LH=F':'lh.f', 'ZC=F':'zc.f', 'ZS=F':'zs.f' };
+  const stooqMap = { 'HE=F':'he.f', 'ZC=F':'zc.f', 'ZS=F':'zs.f' };
   const stooqSym = stooqMap[symbol];
   if (stooqSym) {
     try {
@@ -381,7 +381,7 @@ async function yahooHistory(symbol, startYmd) {
   }
 
   // 3순위: USDA MPR (LH만)
-  if (symbol === 'LH=F') {
+  if (symbol === 'HE=F') {
     try {
       const rows = await usdaMprHistory(startYmd);
       if (rows.length > 5) return rows;
@@ -414,7 +414,7 @@ function parseStooqCsv(text, startYmd) {
 
 async function yahooCurrent(symbol) {
   // 1순위: Stooq 최근 데이터에서 현재가 추출
-  const stooqMap = { 'LH=F':'lh.f', 'ZC=F':'zc.f', 'ZS=F':'zs.f' };
+  const stooqMap = { 'HE=F':'he.f', 'ZC=F':'zc.f', 'ZS=F':'zs.f' };
   const stooqSym = stooqMap[symbol];
   if (stooqSym) {
     try {
@@ -681,7 +681,7 @@ async function getHistory(sym) {
 
   let rows = [];
   try {
-    if (sym === 'LH')     rows = await yahooHistory('LH=F', START_YMD);
+    if (sym === 'LH')     rows = await yahooHistory('HE=F', START_YMD);
     if (sym === 'ZC')     rows = await yahooHistory('ZC=F', START_YMD);
     if (sym === 'ZS')     rows = await yahooHistory('ZS=F', START_YMD);
     if (sym === 'KAMIS')  rows = await fetchKamisHistory(START_YMD);
@@ -789,7 +789,7 @@ async function getCurrentPrices() {
   const [naverFxRes, fxRes, lhRes, zcRes, zsRes, kamisRes] = await Promise.allSettled([
     naverFxCurrentCrawl(),   // 1순위: 네이버 실시간 크롤링
     fetchFxRates(),           // 2순위: open.er-api.com
-    yahooCurrent('LH=F'),
+    yahooCurrent('HE=F'),
     yahooCurrent('ZC=F'),
     yahooCurrent('ZS=F'),
     fetchKamisCurrent(),
