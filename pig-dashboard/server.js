@@ -452,41 +452,43 @@ async function fetchKamisCurrent() {
   const certId  = process.env.KAMIS_API_ID;
 
   if (!certKey || !certId) {
-    console.warn('KAMIS_API_KEY 또는 KAMIS_API_ID 환경변수 없음');
-    return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가', note: '키 미설정' };
+    console.warn('KAMIS 키 미설정');
+    return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가' };
   }
 
-  // KAMIS 부류코드: 500=축산물, 품목코드: 돼지=505 (kg단위 지육)
-  // 시도1: 최근일자 도매가격(품목별)
-  const attempts = [
-    { name: '최근일자 부류별(축산물)', url: `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${new Date().toISOString().slice(0,10)}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json` },
+  // 정확한 파라미터: 도매(02), 축산(500), 돼지삼겹(515) 또는 돼지(505)
+  // Accept 헤더 제거 - 406 에러 방지
+  const today = new Date().toISOString().slice(0,10);
+  const urls = [
+    // 방법1: 기간별 품목별 조회 (periodProductList) - 돼지삼겹살 515
+    `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${today}&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`,
+    // 방법2: 일별 부류별 조회
+    `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${today}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`,
+    // 방법3: 최근일자 도소매 (dailySalesList)
+    `https://www.kamis.or.kr/service/price/xml.do?action=dailySalesList&p_productclscode=02&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_graderank=1&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`,
   ];
 
-  for (const a of attempts) {
+  for (let i = 0; i < urls.length; i++) {
     try {
-      const text = await httpGet(a.url);
+      // Accept 헤더 없이 요청 (406 방지)
+      const res = await fetch(urls[i], {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) { console.warn(`KAMIS URL${i+1}: HTTP ${res.status}`); continue; }
+      const text = await res.text();
       const json = JSON.parse(text);
-      let items = json?.data?.item || json?.data || [];
-      if (!Array.isArray(items)) items = [items];
-
-      // 돼지 관련 품목 찾기 (이름에 '돼지' 포함된 것)
-      const pigItem = items.find(it =>
-        (it.item_name||'').includes('돼지') ||
-        (it.itemname||'').includes('돼지')
-      );
-
-      if (pigItem) {
-        const priceRaw = pigItem.dpr1 || pigItem.price;
+      const items = [].concat(json?.data?.item || json?.data || []);
+      for (const item of items) {
+        const priceRaw = item.dpr1 || item.price || item.value;
         const price = parseFloat(String(priceRaw||'0').replace(/,/g,''));
         if (price > 1000) {
-          console.log(`✅ KAMIS [${a.name}]: ${pigItem.item_name||pigItem.itemname} = ${price}원/kg`);
-          return { price, unit: '원/kg', date: pigItem.regday, source: 'kamis', name: '국내 지육 도매가' };
+          console.log(`✅ KAMIS URL${i+1}: ${item.itemname||item.item_name||''} = ${price}원/kg`);
+          return { price, unit: '원/kg', date: item.regday||today, source: 'kamis', name: '국내 지육 도매가' };
         }
       }
-      console.warn(`KAMIS [${a.name}] 응답 (돼지 미발견):`, JSON.stringify(items).slice(0,500));
-    } catch (e) {
-      console.warn(`KAMIS [${a.name}] 실패:`, e.message);
-    }
+      console.warn(`KAMIS URL${i+1} 응답 (가격 없음):`, JSON.stringify(json).slice(0,300));
+    } catch (e) { console.warn(`KAMIS URL${i+1} 예외:`, e.message); }
   }
 
   return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가', note: 'API 실패' };
@@ -501,7 +503,9 @@ async function findKamisPigItemCode() {
   const certId  = process.env.KAMIS_API_ID;
   try {
     const url = `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${new Date().toISOString().slice(0,10)}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`;
-    const text = await httpGet(url);
+    const res0 = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+    if (!res0.ok) throw new Error(`HTTP ${res0.status}`);
+    const text = await res0.text();
     const json = JSON.parse(text);
     let items = json?.data?.item || json?.data || [];
     if (!Array.isArray(items)) items = [items];
@@ -531,8 +535,12 @@ async function fetchKamisHistory(startYmd) {
     const kindcode = codeInfo?.kindcode || '00';
 
     // periodProductList: 기간별 가격 조회 (정확한 파라미터명 사용)
-    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endDate}&p_itemcategorycode=500&p_itemcode=${itemcode}&p_kindcode=${kindcode}&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`;
-    const text = await httpGet(url);
+    // itemcode 515(돼지삼겹), 404(돼지고기), 직접 고정
+    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endDate}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`;
+    // Accept 헤더 제거 (406 방지)
+    const res2 = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) });
+    if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+    const text = await res2.text();
     const json = JSON.parse(text);
 
     let items = json?.data?.item || json?.data || [];
