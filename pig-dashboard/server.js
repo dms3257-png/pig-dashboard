@@ -447,47 +447,63 @@ async function yahooCurrent(symbol) {
 // ════════════════════════════════════════════════════
 // 국내 지육 도매가 — KAMIS 공공 API
 // ════════════════════════════════════════════════════
+// KAMIS XML 파싱 헬퍼
+function parseKamisXml(xml) {
+  const rows = [];
+  // <item> 태그들 추출
+  const itemReg = /<item>([\s\S]*?)<\/item>/g;
+  let m;
+  while ((m = itemReg.exec(xml)) !== null) {
+    const block = m[1];
+    const get = (tag) => {
+      const r = new RegExp(`<${tag}>([^<]*)<\/${tag}>`);
+      const match = r.exec(block);
+      return match ? match[1].trim() : '';
+    };
+    const price = parseFloat((get('dpr1')||get('price')||'0').replace(/,/g,''));
+    const date  = get('regday') || get('yyyy') || '';
+    const name  = get('itemname') || get('item_name') || '';
+    if (price > 100) rows.push({ price, date, name });
+  }
+  return rows;
+}
+
 async function fetchKamisCurrent() {
   const certKey = process.env.KAMIS_API_KEY;
   const certId  = process.env.KAMIS_API_ID;
-
   if (!certKey || !certId) {
     console.warn('KAMIS 키 미설정');
     return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가' };
   }
 
-  // 정확한 파라미터: 도매(02), 축산(500), 돼지삼겹(515) 또는 돼지(505)
-  // Accept 헤더 제거 - 406 에러 방지
   const today = new Date().toISOString().slice(0,10);
+  // XML 형식으로 요청 (406 완전 회피)
   const urls = [
-    // 방법1: 기간별 품목별 조회 (periodProductList) - 돼지삼겹살 515
-    `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${today}&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`,
-    // 방법2: 일별 부류별 조회
-    `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${today}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`,
-    // 방법3: 최근일자 도소매 (dailySalesList)
-    `https://www.kamis.or.kr/service/price/xml.do?action=dailySalesList&p_productclscode=02&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_graderank=1&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`,
+    `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${today}&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml`,
+    `https://www.kamis.or.kr/service/price/xml.do?action=dailySalesList&p_productclscode=02&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_graderank=1&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml`,
+    `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${today}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml`,
   ];
 
   for (let i = 0; i < urls.length; i++) {
     try {
-      // Accept 헤더 없이 요청 (406 방지)
       const res = await fetch(urls[i], {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(8000),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Accept': 'text/xml, application/xml, */*',
+        },
+        signal: AbortSignal.timeout(10000),
       });
       if (!res.ok) { console.warn(`KAMIS URL${i+1}: HTTP ${res.status}`); continue; }
-      const text = await res.text();
-      const json = JSON.parse(text);
-      const items = [].concat(json?.data?.item || json?.data || []);
-      for (const item of items) {
-        const priceRaw = item.dpr1 || item.price || item.value;
-        const price = parseFloat(String(priceRaw||'0').replace(/,/g,''));
-        if (price > 1000) {
-          console.log(`✅ KAMIS URL${i+1}: ${item.itemname||item.item_name||''} = ${price}원/kg`);
-          return { price, unit: '원/kg', date: item.regday||today, source: 'kamis', name: '국내 지육 도매가' };
-        }
+      const xml = await res.text();
+      if (xml.includes('406') || !xml.includes('<')) { console.warn(`KAMIS URL${i+1}: 비정상 응답`); continue; }
+      const rows = parseKamisXml(xml);
+      // 돼지 관련 항목 또는 첫 번째 유효 항목
+      const pig = rows.find(r => r.name.includes('돼지') || r.name.includes('삼겹')) || rows[0];
+      if (pig && pig.price > 1000) {
+        console.log(`✅ KAMIS XML URL${i+1}: ${pig.name} = ${pig.price}원/kg`);
+        return { price: pig.price, unit: '원/kg', date: pig.date || today, source: 'kamis', name: '국내 지육 도매가' };
       }
-      console.warn(`KAMIS URL${i+1} 응답 (가격 없음):`, JSON.stringify(json).slice(0,300));
+      console.warn(`KAMIS URL${i+1} XML 파싱 결과:`, rows.length, '건, 응답일부:', xml.slice(0,200));
     } catch (e) { console.warn(`KAMIS URL${i+1} 예외:`, e.message); }
   }
 
@@ -503,13 +519,12 @@ async function findKamisPigItemCode() {
   const certId  = process.env.KAMIS_API_ID;
   try {
     const url = `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${new Date().toISOString().slice(0,10)}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`;
-    const res0 = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+    const urlXml = url.replace('p_returntype=json','p_returntype=xml');
+    const res0 = await fetch(urlXml, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/xml, */*' }, signal: AbortSignal.timeout(8000) });
     if (!res0.ok) throw new Error(`HTTP ${res0.status}`);
-    const text = await res0.text();
-    const json = JSON.parse(text);
-    let items = json?.data?.item || json?.data || [];
-    if (!Array.isArray(items)) items = [items];
-    const pigItem = items.find(it => (it.item_name||'').includes('돼지'));
+    const xmlText = await res0.text();
+    const xmlRows = parseKamisXml(xmlText);
+    const pigItem = xmlRows.find(r => r.name.includes('돼지'));
     if (pigItem) {
       kamisPigItemCode = { itemcode: pigItem.item_code, kindcode: pigItem.kind_code || '00' };
       console.log('✅ KAMIS 돼지 품목코드 발견:', JSON.stringify(kamisPigItemCode), '/', pigItem.item_name);
@@ -535,25 +550,26 @@ async function fetchKamisHistory(startYmd) {
     const kindcode = codeInfo?.kindcode || '00';
 
     // periodProductList: 기간별 가격 조회 (정확한 파라미터명 사용)
-    // itemcode 515(돼지삼겹), 404(돼지고기), 직접 고정
-    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endDate}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json`;
-    // Accept 헤더 제거 (406 방지)
-    const res2 = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) });
+    // XML 형식으로 요청 (406 완전 회피)
+    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endDate}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml`;
+    const res2 = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'text/xml, application/xml, */*' },
+      signal: AbortSignal.timeout(15000),
+    });
     if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
-    const text = await res2.text();
-    const json = JSON.parse(text);
+    const xml = await res2.text();
 
-    let items = json?.data?.item || json?.data || [];
-    if (!Array.isArray(items)) items = [items];
-
+    // XML에서 날짜+가격 추출
     const rows = [];
-    for (const item of items) {
-      const ymdRaw = item.regday || item.yyyymmdd;
-      if (!ymdRaw) continue;
-      const ymd = String(ymdRaw).replace(/\./g,'-').replace(/\//g,'-');
+    const regReg = /<item>([\s\S]*?)<\/item>/g;
+    let mx;
+    while ((mx = regReg.exec(xml)) !== null) {
+      const block = mx[1];
+      const getTag = (tag) => { const r = new RegExp(`<${tag}>([^<]*)<\/${tag}>`); const match = r.exec(block); return match ? match[1].trim() : ''; };
+      const ymdRaw = getTag('regday') || getTag('yyyy');
+      const ymd = ymdRaw.replace(/\./g,'-').replace(/\//g,'-');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
-      const priceRaw = item.price || item.dpr1;
-      const price = parseFloat(String(priceRaw||'0').replace(/,/g,''));
+      const price = parseFloat((getTag('dpr1')||getTag('price')||'0').replace(/,/g,''));
       if (!price || price < 1000) continue;
       rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
     }
