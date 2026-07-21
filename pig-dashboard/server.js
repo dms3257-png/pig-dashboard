@@ -1220,10 +1220,16 @@ app.get('/api/kamis-test', async (_, res) => {
   const results = [];
 
   const urls = [
-    { name: 'periodProductList-XML', url: `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=2026-01-01&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml` },
-    { name: 'periodProductList-JSON', url: `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=2026-01-01&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json` },
-    { name: 'dailySalesList-XML', url: `https://www.kamis.or.kr/service/price/xml.do?action=dailySalesList&p_productclscode=02&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_graderank=1&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml` },
-    { name: 'yearlySalesList-XML', url: `https://www.kamis.or.kr/service/price/xml.do?action=yearlySalesList&p_yyyy=2026&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_graderank=1&p_countycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml` },
+    // KAMIS (WAF 차단 확인용)
+    { name: 'kamis-periodProductList', url: `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=2026-01-01&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json` },
+    // ekapepia (여기고기) - 돼지 지육 경락가격
+    { name: 'ekapepia-pigNew', url: `https://www.ekapepia.com/supPrice/auction/price/pigNew.do?searchStartDate=2026-07-01&searchEndDate=${today}&searchCondition=1&menuSn=65` },
+    { name: 'ekapepia-carcass', url: `https://www.ekapepia.com/v3/price/livestock/pig/wholesale/carcassPrice.do` },
+    // ekapepia API (내부 JSON)
+    { name: 'ekapepia-api-list', url: `https://www.ekapepia.com/supPrice/auction/price/getPigPriceList.do?searchStartDate=2026-07-01&searchEndDate=${today}&searchCondition=1` },
+    { name: 'ekapepia-api-daily', url: `https://www.ekapepia.com/v3/price/livestock/pig/auction/getPigAuctionDailyList.json?startDate=2026-07-01&endDate=${today}` },
+    // 공공데이터포털 축산 경락 API
+    { name: 'data.go.kr-livestock', url: `https://apis.data.go.kr/B552895/축산물경락가격정보서비스/getPigAuctionPriceList?serviceKey=${certKey}&pageNo=1&numOfRows=10&startDate=20260701&endDate=${today.replace(/-/g,'')}` },
   ];
 
   for (const u of urls) {
