@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0">
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="수안푸드">
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png">
 <title>수안푸드 지육가 대시보드</title>
 <script>
   const _B='REPLACE_BUILD_ID';
@@ -119,7 +128,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
     <span class="logo">🐷 수안푸드 지육가 대시보드</span>
     <span class="live">LIVE</span>
   </div>
-  <span class="asof" id="asof">—</span>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button id="pwa-install-btn" onclick="installPWA()" style="display:none;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 12px;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">
+      📲 앱 설치
+    </button>
+    <span class="asof" id="asof">—</span>
+  </div>
 </header>
 <div class="tab-nav">
   <button class="tab-btn hl active" onclick="switchTab('timing',this)">🎯 수입 타이밍</button>
@@ -769,6 +783,39 @@ window.addEventListener('DOMContentLoaded', () => {
     Object.keys(hcache).forEach(k => delete hcache[k]);
   }, 10 * 60 * 1000);
 });
+</script>
+<script>
+// PWA 서비스워커 등록
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('[PWA] SW 등록 성공:', reg.scope))
+      .catch(err => console.warn('[PWA] SW 등록 실패:', err));
+  });
+}
+
+// PWA 설치 배너 처리
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // 설치 버튼 표시
+  const installBtn = document.getElementById('pwa-install-btn');
+  if (installBtn) installBtn.style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  console.log('[PWA] 앱 설치 완료');
+  const installBtn = document.getElementById('pwa-install-btn');
+  if (installBtn) installBtn.style.display = 'none';
+});
+function installPWA() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(choice => {
+      deferredPrompt = null;
+    });
+  }
+}
 </script>
 </body>
 </html>
