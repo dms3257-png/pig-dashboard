@@ -584,8 +584,8 @@ async function fetchKamisHistory(startYmd) {
     console.warn('KAMIS History 실패:', e.message);
   }
 
-  console.warn('⚠️ KAMIS History 최종 실패 → 시드 데이터 사용 (실데이터 아님, 화면에 표시 필요)');
-  return genRealisticSeed('KAMIS');
+  console.warn('⚠️ KAMIS History 최종 실패 (해외 IP 차단) → 빈 배열 반환');
+  return []; // 빈 배열 반환 → getHistory에서 시드 처리 (isReal=false 보장)
 }
 
 // ════════════════════════════════════════════════════
@@ -724,7 +724,7 @@ async function getHistory(sym) {
   c.d = seed;
   c.at = Date.now() - HIST_TTL + 30*60000; // 30분 후 재시도
   c.isReal = false;
-  console.warn(`⚠️ ${sym} 실데이터 실패 → 시드(가짜) ${seed.length}건 사용`);
+  console.warn(`⚠️ ${sym} 실데이터 실패 → 시드(가짜, 실제 시세 아님) ${seed.length}건 사용`);
   return seed;
 }
 
@@ -1211,6 +1211,42 @@ app.get('/pig', (req, res) => {
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
 app.get('/health', (_, res) => res.json({ ok:true, version:'3.1.0', buildId:BUILD_ID, time:kstNow() }));
+
+// KAMIS 진단 엔드포인트 (브라우저에서 직접 확인용)
+app.get('/api/kamis-test', async (_, res) => {
+  const certKey = process.env.KAMIS_API_KEY;
+  const certId  = process.env.KAMIS_API_ID;
+  const today   = new Date().toISOString().slice(0,10);
+  const results = [];
+
+  const urls = [
+    { name: 'periodProductList-XML', url: `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=2026-01-01&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml` },
+    { name: 'periodProductList-JSON', url: `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=2026-01-01&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json` },
+    { name: 'dailySalesList-XML', url: `https://www.kamis.or.kr/service/price/xml.do?action=dailySalesList&p_productclscode=02&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_graderank=1&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml` },
+    { name: 'yearlySalesList-XML', url: `https://www.kamis.or.kr/service/price/xml.do?action=yearlySalesList&p_yyyy=2026&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_graderank=1&p_countycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=xml` },
+  ];
+
+  for (const u of urls) {
+    try {
+      const r = await fetch(u.url, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/xml, application/xml, */*' },
+        signal: AbortSignal.timeout(10000),
+      });
+      const text = await r.text();
+      results.push({
+        name: u.name,
+        status: r.status,
+        ok: r.ok,
+        preview: text.slice(0, 300),
+        length: text.length,
+      });
+    } catch(e) {
+      results.push({ name: u.name, error: e.message });
+    }
+  }
+
+  res.json({ certKey: certKey ? certKey.slice(0,8)+'...' : '없음', certId, results });
+});
 
 app.listen(PORT, () => {
   console.log(`🐷 수안푸드 v3.1 실행: http://localhost:${PORT}/pig`);
