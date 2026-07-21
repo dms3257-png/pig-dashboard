@@ -1161,6 +1161,22 @@ app.get('/api/analysis/market', async (_, res) => {
 
 // ── 정적 파일 ─────────────────────────────────────────
 app.get('/', (_, res) => res.redirect(302, '/pig'));
+
+// PWA 파일 서빙
+app.get('/sw.js', (_, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+app.get('/manifest.webmanifest', (_, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.sendFile(path.join(__dirname, 'public', 'manifest.webmanifest'));
+});
+app.get('/icons/:file', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'icons', req.params.file), (err) => {
+    if (err) res.status(404).send('icon not found');
+  });
+});
 app.get('/pig', (req, res) => {
   try {
     let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
