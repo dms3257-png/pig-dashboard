@@ -136,15 +136,12 @@ async function fetchEkapepiaCurrent() {
 async function fetchEkapepiaHistory(startYmd) {
   const endYmd = new Date().toISOString().slice(0,10);
 
-  // ekapepia auctionPrice 페이지 - 테이블에 129개 td 확인됨
-  // 날짜와 가격이 분리된 열에 있으므로 전체 td 배열로 파싱
   async function fetchAndParse(url) {
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://www.ekapepia.com/',
-        'Accept': 'text/html,application/xhtml+xml,*/*',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
+        'Accept': 'text/html,*/*',
       },
       signal: AbortSignal.timeout(20000),
     });
@@ -153,53 +150,63 @@ async function fetchEkapepiaHistory(startYmd) {
     const $ = cheerio.load(html);
     const rows = [];
 
-    // 방법1: 각 tr에서 날짜+가격 추출 (컬럼 위치 무관)
-    $('table tr').each((_, tr) => {
-      const tds = $(tr).find('td').map((__, td) => $(td).text().replace(/\s+/g,' ').trim()).get();
-      let ymd = null, price = null;
-      for (const td of tds) {
-        // 날짜: YYYY-MM-DD 또는 YYYY.MM.DD
-        const dm = td.match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
-        if (dm && dm[1] >= '2020') ymd = `${dm[1]}-${dm[2]}-${dm[3]}`;
-        // 가격: 4000~8500 (콤마 포함 가능)
-        const clean = td.replace(/,/g,'');
-        const n = parseFloat(clean);
-        if (n >= 4000 && n <= 8500 && /^[4-8]\d{3}$/.test(clean.trim())) price = n;
-      }
-      if (ymd && price && ymd >= startYmd) {
-        rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
-      }
-    });
-
-    // 방법2: 전체 HTML에서 날짜-가격 패턴 추출 (근접 패턴)
-    if (rows.length === 0) {
-      const allTds = [];
-      $('table td').each((_, td) => {
-        allTds.push($(td).text().replace(/\s+/g,' ').trim());
-      });
-      // td 배열을 순서대로 보면서 날짜 다음에 오는 가격 찾기
-      for (let i = 0; i < allTds.length; i++) {
-        const dm = allTds[i].match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
-        if (dm && dm[1] >= '2020') {
-          const ymd = `${dm[1]}-${dm[2]}-${dm[3]}`;
-          // 같은 행 또는 인접 td에서 가격 찾기 (최대 10칸 이내)
-          for (let j = i+1; j < Math.min(i+10, allTds.length); j++) {
-            const clean = allTds[j].replace(/,/g,'');
-            const n = parseFloat(clean);
-            if (n >= 4000 && n <= 8500) {
-              if (ymd >= startYmd) {
-                rows.push({ time: dateToUnix(ymd), open: n, high: n, low: n, close: n });
-              }
-              break;
-            }
+    // 테이블 구조: <th>에 날짜, <td>에 "가격(두수)" 형식
+    // 각 테이블별로 처리
+    $('table').each((_, table) => {
+      // th에서 날짜 추출
+      const dates = [];
+      $(table).find('th').each((__, th) => {
+        const txt = $(th).text().replace(/\s+/g,' ').trim();
+        const dm = txt.match(/(\d{4})[.\-\/](\d{2})[.\-\/](\d{2})/);
+        if (dm) dates.push(`${dm[1]}-${dm[2]}-${dm[3]}`);
+        else {
+          // MM/DD 형식 (올해 연도)
+          const dm2 = txt.match(/(\d{1,2})[.\/](\d{1,2})$/);
+          if (dm2) {
+            const year = new Date().getFullYear();
+            const mm = dm2[1].padStart(2,'0');
+            const dd = dm2[2].padStart(2,'0');
+            dates.push(`${year}-${mm}-${dd}`);
           }
         }
-      }
-    }
+      });
+
+      if (dates.length === 0) return;
+
+      // 각 행의 td에서 가격 추출 — 첫 번째 행이 전체 평균
+      $(table).find('tr').first().find('td').each((colIdx, td) => {
+        const txt = $(td).text().replace(/\s+/g,' ').trim();
+        // "6,483(2,315)" 패턴에서 가격 추출
+        const priceMatch = txt.match(/^([0-9,]+)(?:\([0-9,]+\))?$/);
+        if (!priceMatch) return;
+        const price = parseFloat(priceMatch[1].replace(/,/g,''));
+        if (price < 3000 || price > 9000) return;
+        const ymd = dates[colIdx];
+        if (!ymd || ymd < startYmd) return;
+        rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
+      });
+
+      // tr이 여러 개면 각 행도 처리
+      $(table).find('tr').each((rowIdx, tr) => {
+        if (rowIdx === 0) return; // 첫 행은 위에서 처리
+        $(tr).find('td').each((colIdx, td) => {
+          const txt = $(td).text().replace(/\s+/g,' ').trim();
+          const priceMatch = txt.match(/^([0-9,]+)(?:\([0-9,]+\))?$/);
+          if (!priceMatch) return;
+          const price = parseFloat(priceMatch[1].replace(/,/g,''));
+          if (price < 3000 || price > 9000) return;
+          const ymd = dates[colIdx];
+          if (!ymd || ymd < startYmd) return;
+          // 중복 제거를 위해 dedupeByTime에서 처리
+          rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
+        });
+      });
+    });
+
     return rows;
   }
 
-  // 시도1: 전체 기간 한번에
+  // 시도1: 전체 기간
   try {
     const url = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${startYmd}&searchEndDate=${endYmd}`;
     const rows = await fetchAndParse(url);
@@ -208,10 +215,10 @@ async function fetchEkapepiaHistory(startYmd) {
       console.log(`✅ ekapepia History: ${deduped.length}건 (실데이터)`);
       return deduped;
     }
-    console.warn(`ekapepia 전체기간 파싱 결과 없음`);
+    console.warn('ekapepia 전체기간 파싱 결과 없음');
   } catch(e) { console.warn('ekapepia 전체기간:', e.message); }
 
-  // 시도2: 최근 3개월 월별
+  // 시도2: 월별 (최근 13개월)
   const allRows = [];
   try {
     for (let m = 0; m < 13; m++) {
@@ -225,8 +232,10 @@ async function fetchEkapepiaHistory(startYmd) {
       try {
         const url2 = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${mStart}&searchEndDate=${mEnd}`;
         const monthRows = await fetchAndParse(url2);
-        allRows.push(...monthRows);
-        if (monthRows.length > 0) console.log(`ekapepia ${ym}: ${monthRows.length}건`);
+        if (monthRows.length > 0) {
+          allRows.push(...monthRows);
+          console.log(`ekapepia ${ym}: ${monthRows.length}건`);
+        }
       } catch(e2) {}
     }
     if (allRows.length > 0) {
@@ -236,9 +245,11 @@ async function fetchEkapepiaHistory(startYmd) {
     }
   } catch(e) { console.warn('ekapepia 월별:', e.message); }
 
-  console.warn('⚠️ ekapepia History 실패 → 빈 배열');
+  console.warn('⚠️ ekapepia History 최종 실패 → 빈 배열');
   return [];
 }
+
+
 
 
 
