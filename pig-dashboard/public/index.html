@@ -468,8 +468,8 @@ function renderKpi(id, data, keys) {
     if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
     const chgHtml = d.change != null ? `<div class="kc ${d.change>0?'up':'dn'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}${d.changePct?' ('+d.changePct+'%)':''}</div>` : '';
     // KAMIS는 해외IP 차단 - fallback이면 수집불가 표시
-    if (item.k === 'KAMIS' && d.source === 'fallback') {
-      return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.8rem;color:#f87171">수집 불가</div><div class="ku">KAMIS 해외IP 차단</div></div>`;
+    if (item.k === 'KAMIS' && (d.source === 'fallback' || !d.price)) {
+      return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.8rem;color:#f87171">수집 중...</div><div class="ku">KAMIS 직접 연결 시도</div></div>`;
     }
     return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku">${d.unit||''}${d.date?' · '+d.date:''}</div>${chgHtml}</div>`;
   }).join('');
@@ -560,6 +560,26 @@ async function ensureCurrent() {
 async function getHist(sym, period) {
   const key = sym + '_' + period;
   if (hcache[key]) return hcache[key];
+
+  // KAMIS는 브라우저에서 직접 호출 (한국 IP → 서버 IP 차단 우회)
+  if (sym === 'KAMIS') {
+    const days = period === 'weekly' ? 7 : period === 'monthly' ? 30 : 365;
+    const startYmd = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
+    const direct = await fetchKamisDirect(startYmd);
+    if (direct && direct.rows.length > 0) {
+      // 날짜 라벨 생성
+      const rows = direct.rows.sort((a,b)=>a.time-b.time);
+      const first = new Date(rows[0].time*1000).toLocaleDateString('ko-KR');
+      const last  = new Date(rows[rows.length-1].time*1000).toLocaleDateString('ko-KR');
+      const labels = {weekly:'주간',monthly:'월간',yearly:'연간'};
+      const result = { rows, rangeLabel: `${first} ~ ${last} · ${labels[period]||''}`, isReal: true };
+      hcache[key] = result;
+      console.log(`✅ KAMIS ${period} 직접 호출: ${rows.length}건`);
+      return result;
+    }
+    console.warn(`KAMIS ${period} 직접 호출 실패 → 서버 API 시도`);
+  }
+
   const j = await fetch(`/api/history?sym=${sym}&period=${period}`).then(r => r.json()).catch(() => ({ ok: false, rows: [] }));
   const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '', isReal: j.isReal !== false };
   if (result.rows.length > 0) hcache[key] = result;
@@ -568,7 +588,19 @@ async function getHist(sym, period) {
 
 // ─── 탭별 로드 함수 ──────────────────────────────────
 async function loadTiming() {
+  // KAMIS 브라우저 직접 호출 시도 (한국 IP → 차단 없음)
+  const kamisDirect = await fetchKamisCurrentDirect();
+  if (kamisDirect) {
+    // 서버 current 데이터에 KAMIS 직접 데이터 덮어쓰기
+    if (!curData) curData = {};
+    curData.KAMIS = { ...kamisDirect, name: '국내 지육 도매가' };
+    console.log('✅ KAMIS 직접 호출로 현재가 업데이트');
+  }
+
   const cur = await ensureCurrent();
+  // KAMIS 직접 데이터가 있으면 반영
+  if (kamisDirect && cur) cur.KAMIS = { ...kamisDirect, name: '국내 지육 도매가' };
+
   renderKpi('kpi-timing', cur, [
     {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
     {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
@@ -786,6 +818,71 @@ async function loadEuPig() {
     const el = document.getElementById('eu-pig-wrap');
     if (el) el.innerHTML = `<p style="color:#f87171;font-size:.78rem">EU 지육가 로드 실패: ${e.message}</p>`;
   }
+}
+
+
+// ── KAMIS 브라우저 직접 호출 (한국 IP → 차단 없음) ──
+// KAMIS 키는 서버에서 안전하게 받아옴
+let KAMIS_KEY = null;
+let KAMIS_ID  = null;
+async function loadKamisConfig() {
+  if (KAMIS_KEY) return true;
+  try {
+    const j = await fetch('/api/kamis-config').then(r=>r.json());
+    if (j.key) { KAMIS_KEY = j.key; KAMIS_ID = j.id; return true; }
+  } catch(e) {}
+  return false;
+}
+
+async function fetchKamisDirect(startYmd) {
+  if (!await loadKamisConfig()) return null;
+  const endYmd = new Date().toISOString().slice(0,10);
+  const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endYmd}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    let items = json?.data?.item || [];
+    if (!Array.isArray(items)) items = [items];
+    const rows = [];
+    for (const item of items) {
+      const ymd = (item.regday||'').replace(/\./g,'-');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+      const price = parseFloat((item.dpr1||item.price||'0').replace(/,/g,''));
+      if (price < 1000) continue;
+      rows.push({ time: Math.floor(new Date(ymd+'T00:00:00Z').getTime()/1000), open: price, high: price, low: price, close: price });
+    }
+    if (rows.length > 0) {
+      console.log(`✅ KAMIS 직접 호출 성공: ${rows.length}건`);
+      return { rows, isReal: true };
+    }
+    throw new Error('데이터 없음');
+  } catch(e) {
+    console.warn('KAMIS 직접 호출 실패:', e.message);
+    return null;
+  }
+}
+
+async function fetchKamisCurrentDirect() {
+  if (!await loadKamisConfig()) return null;
+  const today = new Date().toISOString().slice(0,10);
+  const url = `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${today}&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    let items = json?.data?.item || [];
+    if (!Array.isArray(items)) items = [items];
+    const pig = items.find(it => (it.item_name||it.itemname||'').includes('돼지'));
+    if (pig) {
+      const price = parseFloat((pig.dpr1||'0').replace(/,/g,''));
+      if (price > 1000) {
+        console.log(`✅ KAMIS 현재가 직접: ${price}원/kg`);
+        return { price, unit: '원/kg', date: pig.regday, source: 'kamis-direct' };
+      }
+    }
+  } catch(e) { console.warn('KAMIS 현재가 직접 실패:', e.message); }
+  return null;
 }
 
 window.addEventListener('DOMContentLoaded', () => {
