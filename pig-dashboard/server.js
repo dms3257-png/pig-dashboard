@@ -1447,6 +1447,67 @@ app.get('/api/kamis-test', async (_, res) => {
     }
   }
 
+  // ekapepia auctionPrice 상세 분석
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const monthAgo = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+    const url = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${monthAgo}&searchEndDate=${today}&searchCondition=&searchCondition1=&searchCondition2=&livestockType=&spec=`;
+    const res2 = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://www.ekapepia.com/', 'Accept': 'text/html,*/*' },
+      signal: AbortSignal.timeout(20000),
+    });
+    const html = await res2.text();
+    const $ = cheerio.load(html);
+    
+    // 테이블 구조 분석
+    const tables = $('table').length;
+    const tableRows = $('table tr').length;
+    const tableTds = $('table td').length;
+    
+    // 숫자 패턴 (4000~8000 = 지육가)
+    const nums = (html.match(/[4-8]\d{3}/g) || []).slice(0,20);
+    
+    // 날짜 패턴
+    const dates = (html.match(/\d{4}[.\-]\d{2}[.\-]\d{2}/g) || []).slice(0,10);
+    
+    // script 태그에서 데이터 찾기
+    const scripts = [];
+    $('script').each((_, el) => {
+      const txt = $(el).html() || '';
+      if (txt.includes('4') && txt.length > 100 && txt.length < 5000) {
+        scripts.push(txt.slice(0,300));
+      }
+    });
+    
+    // JSON 형태 데이터 찾기
+    const jsonData = html.match(/\[\s*\{[^[\]]{20,500}\}\s*\]/g) || [];
+    
+    // 특정 클래스/ID 찾기
+    const priceEls = [];
+    $('[class*="price"],[class*="Price"],[id*="price"],[class*="data"],[class*="list"]').each((i, el) => {
+      if (i < 5) priceEls.push({ tag: el.name, cls: $(el).attr('class'), text: $(el).text().slice(0,100) });
+    });
+
+    results.push({
+      name: 'ekapepia-auction-detail',
+      status: res2.status,
+      htmlLength: html.length,
+      tables, tableRows, tableTds,
+      nums,
+      dates,
+      jsonData: jsonData.slice(0,3),
+      scriptSamples: scripts.slice(0,3),
+      priceEls,
+      // HTML 구조 샘플 - 가격이 있는 부분 전후
+      priceSection: (() => {
+        const idx = html.search(/[4-8]\d{3}/);
+        return idx > 0 ? html.slice(Math.max(0,idx-200), idx+200) : 'not found';
+      })(),
+    });
+  } catch(e) {
+    results.push({ name: 'ekapepia-auction-detail', error: e.message });
+  }
+
   res.json({ certKey: certKey ? certKey.slice(0,8)+'...' : '없음', certId, results });
 });
 
