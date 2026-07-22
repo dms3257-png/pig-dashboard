@@ -1406,6 +1406,16 @@ app.get('/pig', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
 app.get('/health', (_, res) => res.json({ ok:true, version:'3.1.0', buildId:BUILD_ID, time:kstNow() }));
 
+// KAMIS 설정값 브라우저에 안전하게 전달 (키만 노출, WAF 우회용)
+app.get('/api/kamis-config', (_, res) => {
+  const key = process.env.KAMIS_API_KEY;
+  const id  = process.env.KAMIS_API_ID;
+  if (!key || !id) return res.json({ ok: false });
+  // CORS 허용 (같은 도메인에서만)
+  res.setHeader('Access-Control-Allow-Origin', 'https://pig-dashboard.onrender.com');
+  res.json({ ok: true, key, id });
+});
+
 // KAMIS 진단 엔드포인트 (브라우저에서 직접 확인용)
 app.get('/api/kamis-test', async (_, res) => {
   const certKey = process.env.KAMIS_API_KEY;
