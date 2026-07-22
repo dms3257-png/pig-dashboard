@@ -134,57 +134,72 @@ async function fetchEkapepiaCurrent() {
 }
 
 async function fetchEkapepiaHistory(startYmd) {
-  try {
-    // 기간 파라미터로 요청
-    const endYmd = new Date().toISOString().slice(0,10);
-    const url = `https://www.ekapepia.com/v3/price/livestock/pig/wholesale/carcassPrice.do`;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://www.ekapepia.com/',
-        'Accept': 'text/html,*/*',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const html = await res.text();
-    const $ = cheerio.load(html);
+  const endYmd = new Date().toISOString().slice(0,10);
+  const allRows = [];
 
+  function parseEkaTable(html) {
+    const $ = cheerio.load(html);
     const rows = [];
-    // 날짜+가격 쌍을 테이블에서 추출
     $('table tr').each((_, tr) => {
       const tds = $(tr).find('td').map((__, td) => $(td).text().replace(/\s+/g,' ').trim()).get();
       if (tds.length < 2) return;
-
       let ymd = null, price = null;
-
       for (const td of tds) {
-        // 날짜 형식 찾기
-        const dateMatch = td.match(/(\d{4})[.-](\d{2})[.-](\d{2})/);
-        if (dateMatch) ymd = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
-        // 가격 찾기
+        const dm = td.match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
+        if (dm) ymd = `${dm[1]}-${dm[2]}-${dm[3]}`;
         const n = parseFloat(td.replace(/,/g,''));
-        if (n >= 4000 && n <= 8000) price = n;
+        if (n >= 4000 && n <= 8500) price = n;
       }
-
-      if (ymd && price && ymd >= startYmd) {
-        rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
-      }
+      if (ymd && price) rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
     });
+    return rows;
+  }
 
-    const deduped = dedupeByTime(rows);
-    if (deduped.length > 0) {
-      console.log(`✅ ekapepia History: ${deduped.length}건 (실데이터)`);
+  // 방법1: 경락가격 기간조회 URL
+  try {
+    const url = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${startYmd}&searchEndDate=${endYmd}&searchCondition=&searchCondition1=&searchCondition2=&livestockType=&spec=`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://www.ekapepia.com/', 'Accept': 'text/html,*/*' },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const rows = parseEkaTable(html);
+      if (rows.length > 0) {
+        console.log(`ekapepia History (auctionPrice): ${rows.length}건`);
+        return dedupeByTime(rows);
+      }
+      console.warn(`ekapepia auctionPrice 파싱 실패, HTML:${html.length}bytes`);
+    }
+  } catch(e) { console.warn('ekapepia auctionPrice:', e.message); }
+
+  // 방법2: 월별 요청
+  try {
+    const start = new Date(Date.now() - 365*86400000);
+    for (let d = new Date(start); d <= new Date(); d.setMonth(d.getMonth()+1)) {
+      const ym = d.toISOString().slice(0,7);
+      const mStart = ym + '-01';
+      const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0);
+      const mEnd = lastDay > new Date() ? endYmd : lastDay.toISOString().slice(0,10);
+      try {
+        const r2 = await fetch(`https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${mStart}&searchEndDate=${mEnd}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.ekapepia.com/' },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (r2.ok) allRows.push(...parseEkaTable(await r2.text()));
+      } catch(e2) {}
+    }
+    if (allRows.length > 0) {
+      const deduped = dedupeByTime(allRows).filter(r => ymdFromUnix(r.time) >= startYmd);
+      console.log(`ekapepia History (월별): ${deduped.length}건`);
       return deduped;
     }
-    throw new Error(`파싱 결과 없음 (테이블 행: ${$('table tr').length}개)`);
-  } catch(e) {
-    console.warn('ekapepia History 실패:', e.message);
-    return [];
-  }
+  } catch(e) { console.warn('ekapepia 월별:', e.message); }
+
+  console.warn('ekapepia History 실패 -> 빈 배열');
+  return [];
 }
+
 
 // ── 네이버 전용 fetchText (euc-kr 지원) ──────────────
 async function fetchText(url, encoding = 'utf-8', timeout = 10000) {
