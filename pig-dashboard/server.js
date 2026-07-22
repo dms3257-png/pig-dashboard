@@ -60,6 +60,132 @@ async function httpGet(url, headers = {}) {
   return res.text();
 }
 
+
+// ════════════════════════════════════════════════════
+// ekapepia.com (여기고기) 돼지 지육 경락가격 크롤링
+// cheerio로 HTML 테이블 파싱
+// ════════════════════════════════════════════════════
+async function fetchEkapepiaCurrent() {
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const url = `https://www.ekapepia.com/v3/price/livestock/pig/wholesale/carcassPrice.do`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.ekapepia.com/',
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    // 테이블에서 날짜+가격 파싱
+    // 가격 범위: 돼지 지육 4000~8000원/kg
+    let latestPrice = null;
+    let latestDate  = null;
+
+    $('table tr').each((_, tr) => {
+      const tds = $(tr).find('td').map((__, td) => $(td).text().replace(/\s+/g,' ').trim()).get();
+      if (tds.length < 2) return;
+      // 날짜 패턴 찾기
+      const dateCell = tds.find(t => /\d{4}[.-]\d{2}[.-]\d{2}/.test(t) || /\d{2}[/.]\d{2}/.test(t));
+      // 가격 패턴 찾기 (4000~8000)
+      const priceCell = tds.find(t => {
+        const n = parseFloat(t.replace(/,/g,''));
+        return n >= 4000 && n <= 8000;
+      });
+      if (priceCell) {
+        const price = parseFloat(priceCell.replace(/,/g,''));
+        if (!latestPrice || price > 0) {
+          latestPrice = price;
+          latestDate  = dateCell || today;
+        }
+      }
+    });
+
+    if (latestPrice) {
+      console.log(`✅ ekapepia 현재가: ${latestPrice}원/kg`);
+      return { price: latestPrice, unit: '원/kg', date: latestDate, source: 'ekapepia', name: '국내 지육 경락가격' };
+    }
+
+    // 테이블 파싱 실패 시 숫자 패턴으로 직접 추출
+    const prices = [];
+    const numReg = /([4-7]\d{3})(?:[,.]\d+)?/g;
+    let m;
+    while ((m = numReg.exec(html)) !== null) {
+      const n = parseInt(m[1]);
+      if (n >= 4000 && n <= 8000) prices.push(n);
+    }
+    if (prices.length > 0) {
+      // 최빈값 또는 중간값 사용
+      prices.sort((a,b) => a-b);
+      const median = prices[Math.floor(prices.length/2)];
+      console.log(`✅ ekapepia 패턴추출: ${median}원/kg (${prices.length}개 발견)`);
+      return { price: median, unit: '원/kg', date: today, source: 'ekapepia-pattern', name: '국내 지육 경락가격' };
+    }
+    throw new Error('가격 데이터 없음');
+  } catch(e) {
+    console.warn('ekapepia current 실패:', e.message);
+    return null;
+  }
+}
+
+async function fetchEkapepiaHistory(startYmd) {
+  try {
+    // 기간 파라미터로 요청
+    const endYmd = new Date().toISOString().slice(0,10);
+    const url = `https://www.ekapepia.com/v3/price/livestock/pig/wholesale/carcassPrice.do`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.ekapepia.com/',
+        'Accept': 'text/html,*/*',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    const rows = [];
+    // 날짜+가격 쌍을 테이블에서 추출
+    $('table tr').each((_, tr) => {
+      const tds = $(tr).find('td').map((__, td) => $(td).text().replace(/\s+/g,' ').trim()).get();
+      if (tds.length < 2) return;
+
+      let ymd = null, price = null;
+
+      for (const td of tds) {
+        // 날짜 형식 찾기
+        const dateMatch = td.match(/(\d{4})[.-](\d{2})[.-](\d{2})/);
+        if (dateMatch) ymd = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+        // 가격 찾기
+        const n = parseFloat(td.replace(/,/g,''));
+        if (n >= 4000 && n <= 8000) price = n;
+      }
+
+      if (ymd && price && ymd >= startYmd) {
+        rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
+      }
+    });
+
+    const deduped = dedupeByTime(rows);
+    if (deduped.length > 0) {
+      console.log(`✅ ekapepia History: ${deduped.length}건 (실데이터)`);
+      return deduped;
+    }
+    throw new Error(`파싱 결과 없음 (테이블 행: ${$('table tr').length}개)`);
+  } catch(e) {
+    console.warn('ekapepia History 실패:', e.message);
+    return [];
+  }
+}
+
 // ── 네이버 전용 fetchText (euc-kr 지원) ──────────────
 async function fetchText(url, encoding = 'utf-8', timeout = 10000) {
   const ctrl = new AbortController();
@@ -708,7 +834,7 @@ async function getHistory(sym) {
     if (sym === 'LH')     rows = await yahooHistory('HE=F', START_YMD);
     if (sym === 'ZC')     rows = await yahooHistory('ZC=F', START_YMD);
     if (sym === 'ZS')     rows = await yahooHistory('ZS=F', START_YMD);
-    if (sym === 'KAMIS')  rows = await fetchKamisHistory(START_YMD);
+    if (sym === 'KAMIS')  rows = await fetchEkapepiaHistory(START_YMD); // ekapepia로 교체
     if (sym === 'USDKRW') rows = await fetchFxHistory('USDKRW', START_YMD);
     if (sym === 'EURKRW') rows = await fetchFxHistory('EURKRW', START_YMD);
   } catch (e) { console.warn(`getHistory ${sym}:`, e.message); }
@@ -816,7 +942,7 @@ async function getCurrentPrices() {
     yahooCurrent('HE=F'),
     yahooCurrent('ZC=F'),
     yahooCurrent('ZS=F'),
-    fetchKamisCurrent(),
+    fetchEkapepiaCurrent(),  // ekapepia 우선 (KAMIS 해외IP 차단)
   ]);
 
   const results = {};
