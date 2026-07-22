@@ -1550,6 +1550,43 @@ app.get('/api/kamis-test', async (_, res) => {
     results.push({ name: 'ekapepia-auction-detail', error: e.message });
   }
 
+  // ekapepia 테이블 원본 HTML 덤프
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const weekAgo = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+    const url = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${weekAgo}&searchEndDate=${today}`;
+    const res3 = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://www.ekapepia.com/' },
+      signal: AbortSignal.timeout(20000),
+    });
+    const html = await res3.text();
+    const $ = cheerio.load(html);
+    
+    // 테이블 전체 td 텍스트 추출
+    const allTds = [];
+    $('table td').each((_, td) => {
+      const txt = $(td).text().replace(/\s+/g,' ').trim();
+      if (txt) allTds.push(txt);
+    });
+
+    // 테이블 행별 구조
+    const tableStructure = [];
+    $('table tr').each((_, tr) => {
+      const row = $(tr).find('td').map((__, td) => $(td).text().replace(/\s+/g,' ').trim()).get().filter(Boolean);
+      if (row.length > 0) tableStructure.push(row);
+    });
+
+    results.push({
+      name: 'ekapepia-table-dump',
+      status: res3.status,
+      totalTds: allTds.length,
+      allTds: allTds.slice(0, 50),  // 처음 50개
+      tableStructure: tableStructure.slice(0, 10),  // 처음 10행
+    });
+  } catch(e) {
+    results.push({ name: 'ekapepia-table-dump', error: e.message });
+  }
+
   res.json({ certKey: certKey ? certKey.slice(0,8)+'...' : '없음', certId, results });
 });
 
