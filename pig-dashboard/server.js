@@ -1251,6 +1251,61 @@ app.get('/api/kamis-test', async (_, res) => {
     }
   }
 
+  // ekapepia-carcass 상세 분석
+  try {
+    const r = await fetch('https://www.ekapepia.com/v3/price/livestock/pig/wholesale/carcassPrice.do', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(15000),
+    });
+    const html = await r.text();
+    // 숫자 패턴 찾기 (4000~7000 범위 = 돼지 지육가)
+    const numMatches = html.match(/[4-7][0-9]{3}(?:\.[0-9]+)?/g) || [];
+    const prices = [...new Set(numMatches)].slice(0, 20);
+    // JSON 데이터 패턴 찾기
+    const jsonMatches = html.match(/\{[^{}]{20,200}\}/g) || [];
+    // script 태그 안 데이터 찾기
+    const scriptData = html.match(/var\s+\w+\s*=\s*\[.*?\]/gs) || [];
+    // table 태그 찾기
+    const hasTable = html.includes('<table');
+    // API URL 패턴 찾기
+    const apiUrls = html.match(/['"](\/[^'"]*\.(do|json|api|list)[^'"]*)['"]/g) || [];
+    
+    results.push({
+      name: 'ekapepia-carcass-detail',
+      status: r.status,
+      prices,
+      hasTable,
+      jsonSamples: jsonMatches.slice(0,3),
+      scriptDataCount: scriptData.length,
+      apiUrls: [...new Set(apiUrls)].slice(0, 15),
+      htmlSample: html.slice(50000, 51000), // 중간 부분 샘플
+    });
+  } catch(e) {
+    results.push({ name: 'ekapepia-carcass-detail', error: e.message });
+  }
+
+  // ekapepia 내부 Ajax API 직접 시도
+  const ekaApiUrls = [
+    'https://www.ekapepia.com/supPrice/auction/price/getPigAuctionList.do',
+    'https://www.ekapepia.com/supPrice/auction/price/getPigPriceList.do',
+    'https://www.ekapepia.com/v3/price/livestock/pig/wholesale/getCarcassPriceList.do',
+    'https://www.ekapepia.com/v3/price/livestock/pig/wholesale/getCarcassPriceList.json',
+    'https://www.ekapepia.com/api/price/pig/carcass/list',
+    'https://www.ekapepia.com/supPrice/auction/price/getAuctionPriceList.do?speciesGubun=2',
+  ];
+  for (const url of ekaApiUrls) {
+    try {
+      const r = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json, */*', 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://www.ekapepia.com/' },
+        signal: AbortSignal.timeout(8000),
+      });
+      const text = await r.text();
+      results.push({ name: 'ekapepia-ajax:'+url.split('/').pop(), status: r.status, preview: text.slice(0,200), length: text.length });
+    } catch(e) {
+      results.push({ name: 'ekapepia-ajax:'+url.split('/').pop(), error: e.message });
+    }
+  }
+
   res.json({ certKey: certKey ? certKey.slice(0,8)+'...' : '없음', certId, results });
 });
 
