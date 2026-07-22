@@ -135,70 +135,112 @@ async function fetchEkapepiaCurrent() {
 
 async function fetchEkapepiaHistory(startYmd) {
   const endYmd = new Date().toISOString().slice(0,10);
-  const allRows = [];
 
-  function parseEkaTable(html) {
+  // ekapepia auctionPrice 페이지 - 테이블에 129개 td 확인됨
+  // 날짜와 가격이 분리된 열에 있으므로 전체 td 배열로 파싱
+  async function fetchAndParse(url) {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.ekapepia.com/',
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
     const $ = cheerio.load(html);
     const rows = [];
+
+    // 방법1: 각 tr에서 날짜+가격 추출 (컬럼 위치 무관)
     $('table tr').each((_, tr) => {
       const tds = $(tr).find('td').map((__, td) => $(td).text().replace(/\s+/g,' ').trim()).get();
-      if (tds.length < 2) return;
       let ymd = null, price = null;
       for (const td of tds) {
+        // 날짜: YYYY-MM-DD 또는 YYYY.MM.DD
         const dm = td.match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
-        if (dm) ymd = `${dm[1]}-${dm[2]}-${dm[3]}`;
-        const n = parseFloat(td.replace(/,/g,''));
-        if (n >= 4000 && n <= 8500) price = n;
+        if (dm && dm[1] >= '2020') ymd = `${dm[1]}-${dm[2]}-${dm[3]}`;
+        // 가격: 4000~8500 (콤마 포함 가능)
+        const clean = td.replace(/,/g,'');
+        const n = parseFloat(clean);
+        if (n >= 4000 && n <= 8500 && /^[4-8]\d{3}$/.test(clean.trim())) price = n;
       }
-      if (ymd && price) rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
+      if (ymd && price && ymd >= startYmd) {
+        rows.push({ time: dateToUnix(ymd), open: price, high: price, low: price, close: price });
+      }
     });
+
+    // 방법2: 전체 HTML에서 날짜-가격 패턴 추출 (근접 패턴)
+    if (rows.length === 0) {
+      const allTds = [];
+      $('table td').each((_, td) => {
+        allTds.push($(td).text().replace(/\s+/g,' ').trim());
+      });
+      // td 배열을 순서대로 보면서 날짜 다음에 오는 가격 찾기
+      for (let i = 0; i < allTds.length; i++) {
+        const dm = allTds[i].match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
+        if (dm && dm[1] >= '2020') {
+          const ymd = `${dm[1]}-${dm[2]}-${dm[3]}`;
+          // 같은 행 또는 인접 td에서 가격 찾기 (최대 10칸 이내)
+          for (let j = i+1; j < Math.min(i+10, allTds.length); j++) {
+            const clean = allTds[j].replace(/,/g,'');
+            const n = parseFloat(clean);
+            if (n >= 4000 && n <= 8500) {
+              if (ymd >= startYmd) {
+                rows.push({ time: dateToUnix(ymd), open: n, high: n, low: n, close: n });
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
     return rows;
   }
 
-  // 방법1: 경락가격 기간조회 URL
+  // 시도1: 전체 기간 한번에
   try {
-    const url = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${startYmd}&searchEndDate=${endYmd}&searchCondition=&searchCondition1=&searchCondition2=&livestockType=&spec=`;
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://www.ekapepia.com/', 'Accept': 'text/html,*/*' },
-      signal: AbortSignal.timeout(20000),
-    });
-    if (res.ok) {
-      const html = await res.text();
-      const rows = parseEkaTable(html);
-      if (rows.length > 0) {
-        console.log(`ekapepia History (auctionPrice): ${rows.length}건`);
-        return dedupeByTime(rows);
-      }
-      console.warn(`ekapepia auctionPrice 파싱 실패, HTML:${html.length}bytes`);
+    const url = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${startYmd}&searchEndDate=${endYmd}`;
+    const rows = await fetchAndParse(url);
+    if (rows.length > 0) {
+      const deduped = dedupeByTime(rows);
+      console.log(`✅ ekapepia History: ${deduped.length}건 (실데이터)`);
+      return deduped;
     }
-  } catch(e) { console.warn('ekapepia auctionPrice:', e.message); }
+    console.warn(`ekapepia 전체기간 파싱 결과 없음`);
+  } catch(e) { console.warn('ekapepia 전체기간:', e.message); }
 
-  // 방법2: 월별 요청
+  // 시도2: 최근 3개월 월별
+  const allRows = [];
   try {
-    const start = new Date(Date.now() - 365*86400000);
-    for (let d = new Date(start); d <= new Date(); d.setMonth(d.getMonth()+1)) {
+    for (let m = 0; m < 13; m++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - m);
       const ym = d.toISOString().slice(0,7);
       const mStart = ym + '-01';
       const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0);
       const mEnd = lastDay > new Date() ? endYmd : lastDay.toISOString().slice(0,10);
+      if (mEnd < startYmd) break;
       try {
-        const r2 = await fetch(`https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${mStart}&searchEndDate=${mEnd}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.ekapepia.com/' },
-          signal: AbortSignal.timeout(10000),
-        });
-        if (r2.ok) allRows.push(...parseEkaTable(await r2.text()));
+        const url2 = `https://www.ekapepia.com/v3/price/auction/period/pig/auctionPrice.do?searchStartDate=${mStart}&searchEndDate=${mEnd}`;
+        const monthRows = await fetchAndParse(url2);
+        allRows.push(...monthRows);
+        if (monthRows.length > 0) console.log(`ekapepia ${ym}: ${monthRows.length}건`);
       } catch(e2) {}
     }
     if (allRows.length > 0) {
       const deduped = dedupeByTime(allRows).filter(r => ymdFromUnix(r.time) >= startYmd);
-      console.log(`ekapepia History (월별): ${deduped.length}건`);
+      console.log(`✅ ekapepia History (월별): ${deduped.length}건 (실데이터)`);
       return deduped;
     }
   } catch(e) { console.warn('ekapepia 월별:', e.message); }
 
-  console.warn('ekapepia History 실패 -> 빈 배열');
+  console.warn('⚠️ ekapepia History 실패 → 빈 배열');
   return [];
 }
+
+
 
 
 // ── 네이버 전용 fetchText (euc-kr 지원) ──────────────
