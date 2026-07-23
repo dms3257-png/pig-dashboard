@@ -836,32 +836,72 @@ async function loadKamisConfig() {
 
 async function fetchKamisDirect(startYmd) {
   if (!await loadKamisConfig()) return null;
-  const endYmd = new Date().toISOString().slice(0,10);
-  const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endYmd}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`;
+  const rows = [];
+
+  // 방법1: periodProductList 기간 조회
   try {
+    const endYmd = new Date().toISOString().slice(0,10);
+    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endYmd}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`;
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    let items = json?.data?.item || [];
-    if (!Array.isArray(items)) items = [items];
-    const rows = [];
-    for (const item of items) {
-      const ymd = (item.regday||'').replace(/\./g,'-');
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
-      const price = parseFloat((item.dpr1||item.price||'0').replace(/,/g,''));
-      if (price < 1000) continue;
-      rows.push({ time: Math.floor(new Date(ymd+'T00:00:00Z').getTime()/1000), open: price, high: price, low: price, close: price });
+    if (res.ok) {
+      const json = await res.json();
+      let items = json?.data?.item || [];
+      if (!Array.isArray(items)) items = [items];
+      for (const item of items) {
+        const ymd = (item.regday||'').replace(/\./g,'-');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+        const price = parseFloat((item.dpr1||item.price||'0').replace(/,/g,''));
+        if (price < 1000) continue;
+        rows.push({ time: Math.floor(new Date(ymd+'T00:00:00Z').getTime()/1000), open:price, high:price, low:price, close:price });
+      }
+      if (rows.length > 0) {
+        console.log(`✅ KAMIS 직접 periodProductList: ${rows.length}건`);
+        return { rows, isReal: true };
+      }
     }
+  } catch(e) {}
+
+  // 방법2: dailyPriceByCategoryList 날짜 루프 (현재가와 동일 API, 성공 확인됨)
+  try {
+    const today = new Date();
+    const start = new Date(startYmd);
+    const daysDiff = Math.min(365, Math.ceil((today - start) / 86400000));
+    const step = daysDiff <= 30 ? 1 : daysDiff <= 90 ? 3 : 7;
+    const promises = [];
+    for (let d = 0; d < daysDiff; d += step) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - d);
+      if ([0,6].includes(date.getDay())) continue;
+      const ymd = date.toISOString().slice(0,10);
+      if (ymd < startYmd) break;
+      promises.push(
+        fetch(`https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${ymd}&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`)
+          .then(r => r.ok ? r.json() : null)
+          .then(json => {
+            if (!json) return;
+            let items = json?.data?.item || [];
+            if (!Array.isArray(items)) items = [items];
+            const pig = items.find(it => (it.item_name||it.itemname||'').includes('돼지'));
+            if (pig) {
+              const price = parseFloat((pig.dpr1||'0').replace(/,/g,''));
+              if (price > 1000) rows.push({ time: Math.floor(new Date(ymd+'T00:00:00Z').getTime()/1000), open:price, high:price, low:price, close:price });
+            }
+          }).catch(()=>{})
+      );
+    }
+    for (let i = 0; i < promises.length; i += 20) await Promise.allSettled(promises.slice(i,i+20));
     if (rows.length > 0) {
-      console.log(`✅ KAMIS 직접 호출 성공: ${rows.length}건`);
-      return { rows, isReal: true };
+      const map = new Map(); rows.forEach(r=>map.set(r.time,r));
+      const deduped = Array.from(map.values()).sort((a,b)=>a.time-b.time);
+      console.log(`✅ KAMIS 직접 날짜루프: ${deduped.length}건`);
+      return { rows: deduped, isReal: true };
     }
-    throw new Error('데이터 없음');
-  } catch(e) {
-    console.warn('KAMIS 직접 호출 실패:', e.message);
-    return null;
-  }
+  } catch(e) { console.warn('KAMIS 날짜루프:', e.message); }
+
+  console.warn('KAMIS 직접 호출 실패: 데이터 없음');
+  return null;
 }
+
 
 async function fetchKamisCurrentDirect() {
   if (!await loadKamisConfig()) return null;
