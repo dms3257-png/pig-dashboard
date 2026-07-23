@@ -1128,7 +1128,7 @@ async function analyzeImportTiming() {
       analysis.push({ msg: `✅ USD/KRW ${usd.toLocaleString()}원 — 기준(${base}원) 대비 저환율, 수입 비용 유리` });
     } else if (usd > base + 60) {
       signals.wait += 3;
-      analysis.push({ msg: `🔴 USD/KRW ${usd.toLocaleString()}원 — 고환율 ${usd-base}원 초과. 수입원가 부담` });
+      analysis.push({ msg: `🔴 USD/KRW ${usd.toLocaleString()}원 — 고환율 ${Math.round(usd-base)}원 초과. 수입원가 부담` });
     } else if (usdTrend.dir === '하락') {
       signals.buy += 1;
       analysis.push({ msg: `🟡 USD/KRW ${usd.toLocaleString()}원 — 하락 추세(${usdTrend.pct}%). 추가 하락 후 매입도 고려` });
@@ -1198,8 +1198,9 @@ async function analyzeImportTiming() {
   // 수입 원가 계산
   const importCost = {};
   if (usd && lh) {
-    const lhUsdPerKg = (lh * 0.022046) / 100;
-    const totalUsdPerKg = lhUsdPerKg + 0.35; // 물류/관세 포함
+    // cents/lb → USD/kg: lh(cents/lb) * 0.01($/cent) / 0.453592(lb/kg) = lh * 0.022046
+    const lhUsdPerKg = lh * 0.022046; // 올바른 환산 (예: 88¢/lb = 1.94 USD/kg)
+    const totalUsdPerKg = lhUsdPerKg + 0.5; // 물류·관세·기타 비용
     importCost.usdPerKg  = +totalUsdPerKg.toFixed(3);
     importCost.currentKrwPerKg  = Math.round(totalUsdPerKg * usd);
     importCost.forecastKrwPerKg = usdForecast.base ? Math.round(totalUsdPerKg * usdForecast.base) : null;
