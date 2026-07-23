@@ -1122,7 +1122,7 @@ async function analyzeImportTiming() {
   const analysis = [];
 
   if (usd) {
-    const base = 1370;
+    const base = 1400; // 현재 환율 수준 반영
     if (usd < base - 30 && usdTrend.dir !== '상승') {
       signals.buy += 3;
       analysis.push({ msg: `✅ USD/KRW ${usd.toLocaleString()}원 — 기준(${base}원) 대비 저환율, 수입 비용 유리` });
