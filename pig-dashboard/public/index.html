@@ -905,7 +905,12 @@ async function fetchKamisDirect(startYmd) {
           if (!json) return;
           let items = json?.data?.item || [];
           if (!Array.isArray(items)) items = [items];
-          const pig = items.find(it => (it.item_name||it.itemname||'').includes('돼지'));
+          // 돼지 지육 도매가: 3000~8000원/kg 범위 필터
+          if (items.length > 0) console.log(`KAMIS ${ymd}:`, items.map(it=>`${it.item_name||it.itemname}=${it.dpr1}`).slice(0,3).join(', '));
+          const pig = items.find(it => {
+            const p = parseFloat((it.dpr1||'0').replace(/,/g,''));
+            return p >= 3000 && p <= 8000;
+          }) || items.find(it => (it.item_name||it.itemname||'').includes('돼지') && parseFloat((it.dpr1||'0').replace(/,/g,'')) > 1000);
           if (pig) {
             const price = parseFloat((pig.dpr1||'0').replace(/,/g,''));
             if (price > 1000) rows.push({ time: Math.floor(new Date(ymd+'T00:00:00Z').getTime()/1000), open:price, high:price, low:price, close:price });
