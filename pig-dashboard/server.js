@@ -567,7 +567,9 @@ async function yahooHistory(symbol, startYmd) {
       for (let i = 0; i < ts.length; i++) {
         const close = Number(q.close?.[i]);
         if (!Number.isFinite(close) || close <= 0) continue;
-        rows.push({ time: Number(ts[i]), open: Number((q.open?.[i]||close).toFixed(3)), high: Number((q.high?.[i]||close).toFixed(3)), low: Number((q.low?.[i]||close).toFixed(3)), close: Number(close.toFixed(3)) });
+        const rowTs = Number(ts[i]);
+        if (rowTs > Date.now()/1000) continue; // 미래 날짜 제외
+        rows.push({ time: rowTs, open: Number((q.open?.[i]||close).toFixed(3)), high: Number((q.high?.[i]||close).toFixed(3)), low: Number((q.low?.[i]||close).toFixed(3)), close: Number(close.toFixed(3)) });
       }
       const filtered = dedupeByTime(rows).filter(r => ymdFromUnix(r.time) >= startYmd);
       if (filtered.length > 5) { console.log(`✅ Yahoo ${symbol}: ${filtered.length}건`); return filtered; }
