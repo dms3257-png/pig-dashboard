@@ -547,14 +547,24 @@ function renderTimingMain(json) {
 
 // ─── 데이터 로드 ─────────────────────────────────────
 async function ensureCurrent() {
-  if (curData) return curData;
-  const j = await fetch('/api/current').then(r => r.json()).catch(() => ({ ok: false }));
-  if (j.ok) {
-    curData = j.data;
-    document.getElementById('asof').textContent = j.fetchedAt || '';
+  if (curData && curData.USDKRW?.price) return curData;
+  // 최대 3번 재시도 (서버 프리로드 완료 대기)
+  for (let i = 0; i < 3; i++) {
+    try {
+      const j = await fetch('/api/current').then(r => r.json());
+      if (j.ok && j.data) {
+        curData = j.data;
+        const asof = document.getElementById('asof');
+        if (asof) asof.textContent = j.fetchedAt || '';
+        // 핵심 데이터가 있으면 바로 반환
+        if (curData.USDKRW?.price || curData.LH?.price) return curData;
+      }
+    } catch(e) {}
+    if (i < 2) await new Promise(r => setTimeout(r, 1500));
   }
   return curData || {};
 }
+
 
 // 히스토리: /api/history 하나만 사용 (USDKRW, EURKRW 포함해서 서버에서 처리)
 async function getHist(sym, period) {
