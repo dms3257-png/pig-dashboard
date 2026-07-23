@@ -928,13 +928,23 @@ async function fetchKamisCurrentDirect() {
     const json = await res.json();
     let items = json?.data?.item || [];
     if (!Array.isArray(items)) items = [items];
-    const pig = items.find(it => (it.item_name||it.itemname||'').includes('돼지'));
+    // 전체 항목 로그로 어떤 데이터가 오는지 확인
+    console.log('KAMIS items:', items.map(it => `${it.item_name||it.itemname}=${it.dpr1}`).join(', '));
+    // 지육 도매가 범위: 3000~8000원/kg
+    const pig = items.find(it => {
+      const p = parseFloat((it.dpr1||'0').replace(/,/g,''));
+      return p >= 3000 && p <= 8000;
+    });
     if (pig) {
       const price = parseFloat((pig.dpr1||'0').replace(/,/g,''));
-      if (price > 1000) {
-        console.log(`✅ KAMIS 현재가 직접: ${price}원/kg`);
-        return { price, unit: '원/kg', date: pig.regday, source: 'kamis-direct' };
-      }
+      console.log(`✅ KAMIS 현재가 직접: ${pig.item_name||pig.itemname} = ${price}원/kg`);
+      return { price, unit: '원/kg', date: pig.regday, source: 'kamis-direct' };
+    }
+    // 3000~8000 범위 없으면 돼지 포함 첫 항목
+    const anyPig = items.find(it => (it.item_name||it.itemname||'').includes('돼지'));
+    if (anyPig) {
+      const price = parseFloat((anyPig.dpr1||'0').replace(/,/g,''));
+      console.log(`KAMIS 돼지 항목(범위외): ${anyPig.item_name||anyPig.itemname} = ${price}`);
     }
   } catch(e) { console.warn('KAMIS 현재가 직접 실패:', e.message); }
   return null;
