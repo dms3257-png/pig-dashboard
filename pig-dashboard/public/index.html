@@ -339,18 +339,26 @@ function switchTab(name, btn) {
 
 // ─── Chart.js 헬퍼 ───────────────────────────────────
 function mkChart(id, rows, sym, unit, isReal) {
-  // KAMIS는 해외 IP 차단 → 국내 도매가는 수집 불가 안내
+  // KAMIS isReal=false여도 브라우저 직접 호출 캐시가 있으면 그걸 사용
   if (sym === 'KAMIS' && isReal === false) {
-    const canvas = document.getElementById(id);
-    if (canvas) {
-      canvas.parentElement.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center">
-        <div style="font-size:1.5rem;margin-bottom:8px">🚫</div>
-        <div style="font-size:.8rem;font-weight:700;color:#f87171;margin-bottom:6px">국내 도매가 수집 불가</div>
-        <div style="font-size:.72rem;color:#64748b;line-height:1.6">KAMIS 서버가 해외 IP를 차단하여<br>Render 서버에서 접근이 불가합니다</div>
-        <a href="https://www.kamis.or.kr" target="_blank" style="font-size:.7rem;color:#60a5fa;margin-top:8px">KAMIS 직접 확인 →</a>
-      </div>`;
+    // hcache에 직접 호출 결과가 있는지 확인
+    const cached = hcache['KAMIS_monthly'] || hcache['KAMIS_weekly'] || hcache['KAMIS_yearly'];
+    if (cached && cached.isReal === true && cached.rows.length > 0) {
+      // 직접 호출 성공 데이터로 재시도
+      rows = cached.rows;
+      isReal = true;
+    } else {
+      // 진짜 수집 불가
+      const canvas = document.getElementById(id);
+      if (canvas) {
+        canvas.parentElement.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:8px">⏳</div>
+          <div style="font-size:.8rem;font-weight:700;color:#fbbf24;margin-bottom:6px">국내 도매가 로딩 중</div>
+          <div style="font-size:.72rem;color:#64748b;line-height:1.6">브라우저에서 KAMIS 직접 연결 시도 중입니다</div>
+        </div>`;
+      }
+      return;
     }
-    return;
   }
   if (!rows || rows.length === 0) {
     const el = document.getElementById(id);
@@ -619,14 +627,17 @@ async function loadTiming() {
   // 타이밍 분석
   const tj = await fetch('/api/timing').then(r => r.json()).catch(() => ({ ok: false, error: 'API 오류' }));
   renderTimingMain(tj);
-  // 차트 (30일)
-  const [uH, eH, lH, kH] = await Promise.all([
+  // 차트 (30일) — KAMIS는 브라우저 직접 호출 결과 사용
+  const [uH, eH, lH] = await Promise.all([
     getHist('USDKRW', 'monthly'), getHist('EURKRW', 'monthly'),
-    getHist('LH', 'monthly'),     getHist('KAMIS', 'monthly')
+    getHist('LH', 'monthly')
   ]);
   mkChart('c-usd', uH.rows, 'USDKRW', '원', uH.isReal);
   mkChart('c-eur', eH.rows, 'EURKRW', '원', eH.isReal);
   mkChart('c-lh', lH.rows, 'LH', 'cents/lb', lH.isReal);
+
+  // KAMIS: 브라우저 직접 호출 (이미 위에서 완료됨)
+  const kH = await getHist('KAMIS', 'monthly');
   mkChart('c-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
   loadEuPig();
 }
