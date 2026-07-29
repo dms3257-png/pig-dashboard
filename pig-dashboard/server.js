@@ -1616,6 +1616,7 @@ app.get('/api/kamis-test', async (_, res) => {
 
 app.listen(PORT, () => {
   console.log(`🐷 수안푸드 v3.1 실행: http://localhost:${PORT}/pig`);
+  console.log(`⚡ 서버 워밍업 시작...`);
   // 백그라운드 프리로드 (실패해도 무시)
   setTimeout(() => {
     Promise.allSettled([
