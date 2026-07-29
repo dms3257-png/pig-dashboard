@@ -295,6 +295,22 @@ let curData = null;
 const hcache = {};
 const loaded = new Set();
 
+// ── localStorage 캐시 (KAMIS 히스토리 24시간 유지) ──
+const LS_TTL = 24 * 60 * 60 * 1000;
+function lsGet(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > LS_TTL) { localStorage.removeItem(key); return null; }
+    return data;
+  } catch(e) { return null; }
+}
+function lsSet(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch(e) {}
+}
+
+
 const CLR = {
   LH:     {l:'#fb923c', f:'rgba(251,146,60,.15)'},
   KAMIS:  {l:'#60a5fa', f:'rgba(96,165,250,.15)'},
@@ -556,7 +572,7 @@ function renderTimingMain(json) {
 // ─── 데이터 로드 ─────────────────────────────────────
 async function ensureCurrent() {
   if (curData && curData.USDKRW?.price) return curData;
-  // 최대 3번 재시도 (서버 프리로드 완료 대기)
+  // 최대 3번 재시도
   for (let i = 0; i < 3; i++) {
     try {
       const j = await fetch('/api/current').then(r => r.json());
@@ -564,11 +580,10 @@ async function ensureCurrent() {
         curData = j.data;
         const asof = document.getElementById('asof');
         if (asof) asof.textContent = j.fetchedAt || '';
-        // 핵심 데이터가 있으면 바로 반환
         if (curData.USDKRW?.price || curData.LH?.price) return curData;
       }
     } catch(e) {}
-    if (i < 2) await new Promise(r => setTimeout(r, 1500));
+    if (i < 2) await new Promise(r => setTimeout(r, 1000));
   }
   return curData || {};
 }
@@ -581,18 +596,27 @@ async function getHist(sym, period) {
 
   // KAMIS는 브라우저에서 직접 호출 (한국 IP → 서버 IP 차단 우회)
   if (sym === 'KAMIS') {
+    // 1) localStorage 캐시 확인 (24시간 유효)
+    const lsKey = `kamis_${period}`;
+    const cached = lsGet(lsKey);
+    if (cached && cached.rows.length > 0) {
+      console.log(`✅ KAMIS ${period} localStorage 캐시: ${cached.rows.length}건`);
+      hcache[key] = cached;
+      return cached;
+    }
+    // 2) 직접 호출
     const days = period === 'weekly' ? 7 : period === 'monthly' ? 30 : 365;
     const startYmd = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
     const direct = await fetchKamisDirect(startYmd);
     if (direct && direct.rows.length > 0) {
-      // 날짜 라벨 생성
       const rows = direct.rows.sort((a,b)=>a.time-b.time);
       const first = new Date(rows[0].time*1000).toLocaleDateString('ko-KR');
       const last  = new Date(rows[rows.length-1].time*1000).toLocaleDateString('ko-KR');
       const labels = {weekly:'주간',monthly:'월간',yearly:'연간'};
       const result = { rows, rangeLabel: `${first} ~ ${last} · ${labels[period]||''}`, isReal: true };
       hcache[key] = result;
-      console.log(`✅ KAMIS ${period} 직접 호출: ${rows.length}건`);
+      lsSet(lsKey, result); // localStorage에 저장
+      console.log(`✅ KAMIS ${period} 직접 호출: ${rows.length}건 → 캐시 저장`);
       return result;
     }
     console.warn(`KAMIS ${period} 직접 호출 실패 → 서버 API 시도`);
@@ -606,40 +630,50 @@ async function getHist(sym, period) {
 
 // ─── 탭별 로드 함수 ──────────────────────────────────
 async function loadTiming() {
-  // KAMIS 브라우저 직접 호출 시도 (한국 IP → 차단 없음)
-  const kamisDirect = await fetchKamisCurrentDirect();
-  if (kamisDirect) {
-    // 서버 current 데이터에 KAMIS 직접 데이터 덮어쓰기
-    if (!curData) curData = {};
-    curData.KAMIS = { ...kamisDirect, name: '국내 지육 도매가' };
-    console.log('✅ KAMIS 직접 호출로 현재가 업데이트');
-  }
+  // ── 1단계: 즉시 표시 가능한 것들 병렬로 동시 시작 ──
+  const [curResult, tjResult, uH, eH, lH, kH] = await Promise.all([
+    ensureCurrent(),
+    fetch('/api/timing').then(r=>r.json()).catch(()=>({ok:false,error:'API 오류'})),
+    getHist('USDKRW','monthly'),
+    getHist('EURKRW','monthly'),
+    getHist('LH','monthly'),
+    getHist('KAMIS','monthly'), // localStorage 캐시 있으면 즉시
+  ]);
 
-  const cur = await ensureCurrent();
-  // KAMIS 직접 데이터가 있으면 반영
-  if (kamisDirect && cur) cur.KAMIS = { ...kamisDirect, name: '국내 지육 도매가' };
+  // ── 2단계: 서버 데이터 + KAMIS 현재가 병렬 처리 ──
+  const kamisCurrentPromise = fetchKamisCurrentDirect();
 
+  const cur = curResult || {};
+
+  // 서버 타이밍 결과 먼저 표시
+  renderTimingMain(tjResult);
+
+  // KPI 먼저 표시 (KAMIS 현재가는 나중에 업데이트)
   renderKpi('kpi-timing', cur, [
     {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
     {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
     {k:'ZC',i:'🌽',l:'옥수수 선물'}
   ]);
-  // 타이밍 분석
-  const tj = await fetch('/api/timing').then(r => r.json()).catch(() => ({ ok: false, error: 'API 오류' }));
-  renderTimingMain(tj);
-  // 차트 (30일) — KAMIS는 브라우저 직접 호출 결과 사용
-  const [uH, eH, lH] = await Promise.all([
-    getHist('USDKRW', 'monthly'), getHist('EURKRW', 'monthly'),
-    getHist('LH', 'monthly')
-  ]);
-  mkChart('c-usd', uH.rows, 'USDKRW', '원', uH.isReal);
-  mkChart('c-eur', eH.rows, 'EURKRW', '원', eH.isReal);
-  mkChart('c-lh', lH.rows, 'LH', 'cents/lb', lH.isReal);
 
-  // KAMIS: 브라우저 직접 호출 (이미 위에서 완료됨)
-  const kH = await getHist('KAMIS', 'monthly');
-  mkChart('c-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
+  // 차트 즉시 표시
+  mkChart('c-usd',   uH.rows, 'USDKRW', '원',       uH.isReal);
+  mkChart('c-eur',   eH.rows, 'EURKRW', '원',       eH.isReal);
+  mkChart('c-lh',    lH.rows, 'LH',     'cents/lb', lH.isReal);
+  mkChart('c-kamis', kH.rows, 'KAMIS',  '원/kg',    kH.isReal);
+
+  // EU 지육가 백그라운드 로드
   loadEuPig();
+
+  // ── 3단계: KAMIS 현재가 완료되면 KPI 업데이트 ──
+  const kamisDirect = await kamisCurrentPromise;
+  if (kamisDirect) {
+    cur.KAMIS = { ...kamisDirect, name: '국내 지육 도매가' };
+    renderKpi('kpi-timing', cur, [
+      {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
+      {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
+      {k:'ZC',i:'🌽',l:'옥수수 선물'}
+    ]);
+  }
 }
 
 async function loadMarket() {
@@ -970,13 +1004,21 @@ window.addEventListener('DOMContentLoaded', () => {
   loaded.add('timing');
   loadTiming().catch(e => {
     console.error('loadTiming failed:', e);
-    document.getElementById('timing-main').innerHTML = `<p style="color:#f87171;padding:20px;font-size:.78rem">로드 실패: ${e.message}</p>`;
+    const el = document.getElementById('timing-main');
+    if(el) el.innerHTML = `<p style="color:#f87171;padding:20px;font-size:.78rem">로드 실패: ${e.message}</p>`;
   });
-  // 10분마다 캐시 초기화
+  // 10분마다 서버 캐시 초기화 (localStorage는 유지)
   setInterval(() => {
     curData = null;
-    Object.keys(hcache).forEach(k => delete hcache[k]);
+    // hcache에서 KAMIS만 제외하고 초기화 (localStorage 있으면 빠름)
+    Object.keys(hcache).filter(k => !k.startsWith('KAMIS')).forEach(k => delete hcache[k]);
   }, 10 * 60 * 1000);
+  // 자정에 localStorage KAMIS 캐시 갱신
+  const msToMidnight = new Date().setHours(24,0,0,0) - Date.now();
+  setTimeout(() => {
+    ['kamis_weekly','kamis_monthly','kamis_yearly'].forEach(k => localStorage.removeItem(k));
+    console.log('KAMIS 캐시 자정 갱신');
+  }, msToMidnight);
 });
 </script>
 <script>
