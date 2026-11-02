@@ -120,6 +120,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 @keyframes spin{to{transform:rotate(360deg)}}
 .mbtn{background:transparent;border:1px solid #334155;color:#64748b;padding:5px 14px;border-radius:5px;font-size:.73rem;cursor:pointer;margin-top:8px}
 .mbtn:hover{background:#334155;color:#e2e8f0}
+/* 환율 출처·기준·수집 실패 표시 */
+.fxnote{font-size:.7rem;color:#94a3b8;line-height:1.7;margin:0 0 14px;padding:8px 12px;background:#0f172a;border:1px solid #1e293b;border-radius:7px}
+.fxnote b{color:#86efac}
+.fxnote.warn{border-color:#ea580c;color:#fb923c;background:#1c0f05}
+.fxnote.warn b{color:#fdba74}
+.fxnote.bad{border-color:#dc2626;color:#fca5a5;background:#1f0808}
+.fxnote.bad b{color:#fecaca}
+.fxfail{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:16px;text-align:center}
 /* ── 품목 전략 ── */
 #page-items .card{margin-bottom:14px}
 #page-items .g2 .card{margin-bottom:0}
@@ -200,11 +208,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
     <div><div class="pt">수입 타이밍 분석</div><div class="ps">계약 후 2~3개월 결제 기준 · 환율 추세 반영</div></div>
     <span class="bdg bdg-g">핵심 지표</span>
   </div>
+  <div id="fx-note" class="fxnote">💱 환율 기준 확인 중…</div>
   <div class="g5" id="kpi-timing"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span> 시세 로딩 중...</div></div>
   <div id="timing-main" class="tbox"><div class="lding"><span class="spin">⏳</span> 분석 중...</div></div>
   <div class="g2">
-    <div class="card"><div class="ch"><span class="ct">📈 USD/KRW 30일 추이</span><span class="tag tb">ExchangeRate-API</span></div><div class="cw"><canvas id="c-usd"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">📈 EUR/KRW 30일 추이</span><span class="tag to">ExchangeRate-API</span></div><div class="cw"><canvas id="c-eur"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">📈 USD/KRW 30일 추이</span><span class="tag tz" id="tag-c-usd">환율 이력 확인 중</span></div><div class="cw"><canvas id="c-usd"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">📈 EUR/KRW 30일 추이</span><span class="tag tz" id="tag-c-eur">환율 이력 확인 중</span></div><div class="cw"><canvas id="c-eur"></canvas></div></div>
   </div>
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 30일</span><span class="tag to">Yahoo Finance</span></div><div class="cw"><canvas id="c-lh"></canvas></div></div>
@@ -225,7 +234,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
       </div>
       <div id="eu-table-wrap"><div class="lding"><span class="spin">⏳</span></div></div>
     </div>
-    <p class="fn">※ EU 집행위 농업총국 공식 주간 데이터 · EUR/100kg 지육중량 기준</p>
+    <p class="fn">※ EU 집행위 농업총국 공식 주간 데이터 · EUR/100kg 지육중량 기준<span id="eu-fx-note"></span></p>
   </div>
 
   <div class="card">
@@ -325,8 +334,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
     <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 1년</span><span class="tag tb">365일</span></div><div class="cwl"><canvas id="yc-kamis"></canvas></div></div>
   </div>
   <div class="g2">
-    <div class="card"><div class="ch"><span class="ct">💱 USD/KRW 1년 추이</span><span class="tag tb">환율</span></div><div class="cw"><canvas id="yc-usd"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">💱 EUR/KRW 1년 추이</span><span class="tag to">환율</span></div><div class="cw"><canvas id="yc-eur"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">💱 USD/KRW 1년 추이</span><span class="tag tz" id="tag-yc-usd">환율 이력 확인 중</span></div><div class="cw"><canvas id="yc-usd"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">💱 EUR/KRW 1년 추이</span><span class="tag tz" id="tag-yc-eur">환율 이력 확인 중</span></div><div class="cw"><canvas id="yc-eur"></canvas></div></div>
   </div>
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">🌽 옥수수 선물 1년</span><span class="tag tg">ZC=F</span></div><div class="cw"><canvas id="yc-zc"></canvas></div></div>
@@ -416,6 +425,49 @@ function lsSet(key, data) {
 }
 
 
+// ─── 환율 표시 도우미 (출처·기준·기준일, 수집 실패) ───────────
+function fxEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// 차트 카드 머리의 출처 배지: "네이버 증권 · 현찰 사실 때" / 수집 실패
+function fxTag(id, h) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (h && h.rows && h.rows.length) {
+    el.textContent = (h.source === 'yahoo' ? 'Yahoo Finance' : '네이버 증권') + ' · ' + (h.basisLabel || '기준 미상');
+    el.className = 'tag ' + (h.basis === 'buy' ? 'tg' : 'to');
+  } else {
+    el.textContent = '수집 실패';
+    el.className = 'tag tr';
+  }
+}
+// 타이밍 페이지 상단 안내 — 어느 환율을 쓰는지, 문제가 있으면 그대로 알린다
+function renderFxNote(cur, uH, eH) {
+  const el = document.getElementById('fx-note');
+  if (!el) return;
+  const lines = [], okParts = [];
+  let level = '';
+  const bump = l => { if (l === 'bad' || level === '') level = l; };
+  [['USDKRW', 'USD', uH], ['EURKRW', 'EUR', eH]].forEach(([k, nm, h]) => {
+    const c = cur && cur[k];
+    if (c && c.price) {
+      if (c.basis === 'buy') okParts.push((nm + ' ' + (c.date || '')).trim());
+      else { lines.push('⚠️ ' + nm + ': 네이버 표에서 \'사실 때\' 칸을 읽지 못해 <b>' + fxEsc(c.basisLabel || '매매기준율') + '</b>을 표시 중입니다 (사실 때 아님).'); bump('warn'); }
+    } else {
+      const why = cur && cur.fxErrors && cur.fxErrors[k];
+      lines.push('❌ ' + nm + '/KRW 현재 환율 수집 실패' + (why ? ' (' + fxEsc(why) + ')' : '') + ' — 고정값으로 대신하지 않았습니다.'); bump('bad');
+    }
+    if (h && h.rows && h.rows.length) {
+      if (h.basis !== 'buy') { lines.push('⚠️ ' + nm + '/KRW 추이 그래프는 ' + fxEsc(h.source === 'yahoo' ? 'Yahoo 국제 종가' : (h.basisLabel || '매매기준율')) + ' 기준입니다 (사실 때 아님).'); bump('warn'); }
+    } else {
+      lines.push('❌ ' + nm + '/KRW 이력 수집 실패 — 추세·예측을 계산하지 않았고 가짜 값으로 채우지 않았습니다.'); bump('bad');
+    }
+  });
+  const head = okParts.length ? '💱 환율 기준: <b>네이버 증권 · 현찰 사실 때</b> (' + okParts.map(fxEsc).join(' · ') + ' 기준)' : '💱 환율 기준: 네이버 증권';
+  el.className = 'fxnote' + (level ? ' ' + level : '');
+  el.innerHTML = [head].concat(lines).join('<br>');
+}
+
 const CLR = {
   LH:     {l:'#fb923c', f:'rgba(251,146,60,.15)'},
   KAMIS:  {l:'#60a5fa', f:'rgba(96,165,250,.15)'},
@@ -484,7 +536,11 @@ function mkChart(id, rows, sym, unit, isReal) {
   }
   if (!rows || rows.length === 0) {
     const el = document.getElementById(id);
-    if (el) { el.parentElement.innerHTML = '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem;">데이터 없음</p>'; }
+    if (el) {
+      el.parentElement.innerHTML = (sym === 'USDKRW' || sym === 'EURKRW')
+        ? '<div class="fxfail"><div style="font-size:.8rem;font-weight:700;color:#f87171;margin-bottom:6px">환율 이력 수집 실패</div><div style="font-size:.7rem;color:#64748b;line-height:1.6">네이버 증권에서 값을 받지 못했습니다.<br>추정값·고정값으로 채우지 않았습니다. 잠시 후 새로고침해 주세요.</div></div>'
+        : '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem;">데이터 없음</p>';
+    }
     return;
   }
   const canvas = document.getElementById(id);
@@ -595,11 +651,21 @@ function renderKpi(id, data, keys) {
   ];
   el.innerHTML = items.map(item => {
     const d = data?.[item.k];
+    const isFx = item.k === 'USDKRW' || item.k === 'EURKRW';
+    if (isFx && (!d || !d.price)) {
+      // 환율은 못 받았으면 못 받았다고 표시한다 (고정값·추정값으로 채우지 않음)
+      const why = data?.fxErrors?.[item.k];
+      return `<div class="kpi" style="border:1px solid #7f1d1d"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5">${why ? fxEsc(why) + ' · ' : ''}고정값으로 대신하지 않음</div></div>`;
+    }
     if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
     const chgHtml = d.change != null ? `<div class="kc ${d.change>0?'up':'dn'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}${d.changePct?' ('+d.changePct+'%)':''}</div>` : '';
     // KAMIS는 해외IP 차단 - fallback이면 수집불가 표시
     if (item.k === 'KAMIS' && (d.source === 'fallback' || !d.price)) {
       return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.8rem;color:#f87171">수집 중...</div><div class="ku">KAMIS 직접 연결 시도</div></div>`;
+    }
+    if (isFx) {
+      const buy = d.basis === 'buy';
+      return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku" style="color:${buy?'#86efac':'#fb923c'};font-weight:700">원 · ${fxEsc(d.basisLabel||'기준 미상')}${buy?'':' (사실 때 아님)'}</div><div class="ku">${d.source==='naver'?'네이버 증권':fxEsc(d.source||'')}${d.date?' · '+fxEsc(d.date)+' 기준':''}</div></div>`;
     }
     return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku">${d.unit||''}${d.date?' · '+d.date:''}</div>${chgHtml}</div>`;
   }).join('');
@@ -639,29 +705,35 @@ function renderTimingMain(json) {
   }
   const vc = json.verdictClass==='green'?'tv-g':json.verdictClass==='red'?'tv-r':'tv-y';
   const { forecasts={}, importCost={}, trends={} } = json;
+  const fxU = json.fx?.usd, fxE = json.fx?.eur;
+  // 값이 없으면 물음표·0 으로 채우지 않고 '자료 없음'/'수집 실패'로 표시
+  const trTxt = t => t ? `${t.dir} (${t.pct}%)` : '자료 없음';
+  const curTxt = (v, info) => v != null ? `현재: ${Number(v).toLocaleString()}원${info?.basisLabel ? ' · ' + fxEsc(info.basisLabel) : ''}` : '현재: 수집 실패';
   let h = `<div class="tv ${vc}">${json.verdict}</div>`;
 
   // 핵심 수치 4개
-  if (forecasts.usd) {
+  {
+    const fu = forecasts.usd, hasFu = !!(fu && fu.base != null);
     const diff = importCost.diff;
     const diffStr = diff != null
       ? (diff > 0 ? `<span style="color:#f87171">+${diff.toLocaleString()}원/kg 증가 예상</span>`
                   : `<span style="color:#4ade80">${diff.toLocaleString()}원/kg 절감 가능</span>`)
       : '—';
     h += `<div class="tgrid">
-      <div class="titem"><div class="til">📈 USD/KRW 추세 (30일)</div><div class="tiv">${trends.usd?.dir||'—'} (${trends.usd?.pct||0}%)</div><div class="tis">현재: ${json.current?.usd?.toLocaleString()||'?'}원</div></div>
-      <div class="titem"><div class="til">🎯 2~3개월 후 USD 예측</div><div class="tiv">${forecasts.usd.low||'?'}~${forecasts.usd.high||'?'}원</div><div class="tis">기준값: ${forecasts.usd.base||'?'}원</div></div>
-      <div class="titem"><div class="til">💰 현재 수입원가 (추정)</div><div class="tiv">${importCost.currentKrwPerKg?.toLocaleString()||'—'}원/kg</div><div class="tis">CME LH + 물류비 기준</div></div>
-      <div class="titem"><div class="til">📅 2~3개월 후 예상 원가</div><div class="tiv">${importCost.forecastKrwPerKg?.toLocaleString()||'—'}원/kg</div><div class="tis">${diffStr}</div></div>
+      <div class="titem"><div class="til">📈 USD/KRW 추세 (30일)</div><div class="tiv">${trTxt(trends.usd)}</div><div class="tis">${curTxt(json.current?.usd, fxU)}</div></div>
+      <div class="titem"><div class="til">🎯 2~3개월 후 USD 예측</div><div class="tiv">${hasFu ? fu.low + '~' + fu.high + '원' : '자료 없음'}</div><div class="tis">${hasFu ? '기준값: ' + fu.base + '원' : '환율 이력이 없어 계산하지 않음'}</div></div>
+      <div class="titem"><div class="til">💰 현재 수입원가 (추정)</div><div class="tiv">${importCost.currentKrwPerKg != null ? importCost.currentKrwPerKg.toLocaleString() + '원/kg' : '—'}</div><div class="tis">CME LH + 물류비 기준</div></div>
+      <div class="titem"><div class="til">📅 2~3개월 후 예상 원가</div><div class="tiv">${importCost.forecastKrwPerKg != null ? importCost.forecastKrwPerKg.toLocaleString() + '원/kg' : '—'}</div><div class="tis">${diffStr}</div></div>
     </div>`;
   }
 
   // EUR 예측
-  if (forecasts.eur?.base) {
-    h += `<div style="background:#1e293b;border-radius:7px;padding:10px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+  {
+    const fe = forecasts.eur, hasFe = !!(fe && fe.base != null);
+    h += `<div style="background:#1e293b;border-radius:7px;padding:10px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="font-size:.72rem;color:#64748b;flex-shrink:0">🇪🇺 EUR/KRW 예측</span>
-      <span style="font-size:.9rem;font-weight:700;color:#fb923c">${forecasts.eur.low}~${forecasts.eur.high}원</span>
-      <span style="font-size:.72rem;color:#64748b">(현재: ${json.current?.eur?.toLocaleString()||'?'}원 · 추세: ${trends.eur?.dir||'?'} ${trends.eur?.pct||0}%)</span>
+      <span style="font-size:.9rem;font-weight:700;color:${hasFe ? '#fb923c' : '#64748b'}">${hasFe ? fe.low + '~' + fe.high + '원' : '자료 없음'}</span>
+      <span style="font-size:.72rem;color:#64748b">(${curTxt(json.current?.eur, fxE)} · 추세: ${trTxt(trends.eur)})</span>
     </div>`;
   }
 
@@ -671,7 +743,12 @@ function renderTimingMain(json) {
     json.analysis.forEach(a => { h += `<li>${a.msg}</li>`; });
     h += '</ul>';
   }
-  h += `<p class="fn" style="margin-top:10px">※ 환율 추세·CME 선물·계절성 기반 분석 | AI 분석 버튼으로 Gemini 심층 분석 가능</p>`;
+  const fxLbl = (nm, c) => c ? nm + ' ' + fxEsc(c.basisLabel || '기준 미상') + '(' + fxEsc(c.date || '?') + ')' : null;
+  const fxFoot = json.fx
+    ? '<br>※ 환율: 네이버 증권 ' + ([fxLbl('USD', fxU), fxLbl('EUR', fxE)].filter(Boolean).join(' · ') || '수집 실패')
+      + ((fxU?.basis === 'buy' || fxE?.basis === 'buy') ? ' · 판정 기준값(달러 1,400원 등)은 매매기준율 수준으로 정한 값이라 사실 때 환율과는 같은 비율로 환산해 비교합니다' : '')
+    : '';
+  h += `<p class="fn" style="margin-top:10px">※ 환율 추세·CME 선물·계절성 기반 분석 | AI 분석 버튼으로 Gemini 심층 분석 가능${fxFoot}</p>`;
   document.getElementById('timing-main').innerHTML = h;
 }
 
@@ -729,7 +806,7 @@ async function getHist(sym, period) {
   }
 
   const j = await fetch(`/api/history?sym=${sym}&period=${period}`).then(r => r.json()).catch(() => ({ ok: false, rows: [] }));
-  const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '', isReal: j.isReal !== false };
+  const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '', isReal: j.isReal !== false, source: j.source || null, basis: j.basis || null, basisLabel: j.basisLabel || null };
   if (result.rows.length > 0) hcache[key] = result;
   return result;
 }
@@ -753,6 +830,7 @@ async function loadTiming() {
 
   // 서버 타이밍 결과 먼저 표시
   renderTimingMain(tjResult);
+  renderFxNote(cur, uH, eH);
 
   // KPI 먼저 표시 (KAMIS 현재가는 나중에 업데이트)
   renderKpi('kpi-timing', cur, [
@@ -764,6 +842,7 @@ async function loadTiming() {
   // 차트 즉시 표시
   mkChart('c-usd',   uH.rows, 'USDKRW', '원',       uH.isReal);
   mkChart('c-eur',   eH.rows, 'EURKRW', '원',       eH.isReal);
+  fxTag('tag-c-usd', uH); fxTag('tag-c-eur', eH);
   mkChart('c-lh',    lH.rows, 'LH',     'cents/lb', lH.isReal);
   mkChart('c-kamis', kH.rows, 'KAMIS',  '원/kg',    kH.isReal);
 
@@ -789,7 +868,7 @@ async function loadMarket() {
     {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
     {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'}
   ]);
-  const usdKrw = cur?.USDKRW?.price || 1490;
+  const usdKrw = cur?.USDKRW?.price || null;   // 환율을 못 받았으면 원화 환산을 하지 않는다 (고정값 사용 금지)
   // 수입량 바
   const maxS = Math.max(...IMP.countries.map(c => c.s));
   document.getElementById('imp-bars').innerHTML = IMP.countries.map(c => {
@@ -799,10 +878,12 @@ async function loadMarket() {
   // 단가 테이블
   let ph = `<table class="dt"><thead><tr><th>국가</th><th>수입단가(USD/kg)</th><th>원화(원/kg)</th><th>2025 수입량</th></tr></thead><tbody>`;
   IMP.countries.filter(c => c.n !== '기타').forEach(c => {
-    const krw = Math.round(c.p * usdKrw);
-    ph += `<tr><td>${c.n}</td><td style="font-weight:700">$${c.p}</td><td style="color:#86efac;font-weight:700">${krw.toLocaleString()}원</td><td>${c.v25}천톤</td></tr>`;
+    const krw = usdKrw ? Math.round(c.p * usdKrw) : null;
+    ph += `<tr><td>${c.n}</td><td style="font-weight:700">$${c.p}</td><td style="color:${krw != null ? '#86efac' : '#f87171'};font-weight:700">${krw != null ? krw.toLocaleString() + '원' : '환율 수집 실패'}</td><td>${c.v25}천톤</td></tr>`;
   });
   ph += '</tbody></table>';
+  const fxM = cur?.USDKRW;
+  ph += `<p class="fn">※ 원화 환산: ${fxM && fxM.price ? 'USD/KRW ' + Number(fxM.price).toLocaleString('ko-KR') + '원 (' + (fxM.source === 'naver' ? '네이버 증권 ' : '') + fxEsc(fxM.basisLabel || '') + (fxM.date ? ', ' + fxEsc(fxM.date) + ' 기준' : '') + ')' : '환율을 가져오지 못해 원화 환산을 하지 않았습니다'}</p>`;
   document.getElementById('imp-price').innerHTML = ph;
   // 수급 전망
   document.getElementById('supply').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -854,6 +935,7 @@ async function loadPeriod(period) {
     mkChart('yc-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
     mkChart('yc-usd', uH.rows, 'USDKRW', '원', uH.isReal);
     mkChart('yc-eur', eH.rows, 'EURKRW', '원', eH.isReal);
+    fxTag('tag-yc-usd', uH); fxTag('tag-yc-eur', eH);
     mkChart('yc-zc', zcH.rows, 'ZC', 'cents/bu', zcH.isReal);
     mkChart('yc-zs', zsH.rows, 'ZS', 'cents/bu', zsH.isReal);
   }
@@ -901,8 +983,7 @@ async function loadEuPig() {
       {code:'PL', name:'🇵🇱 폴란드'},
     ];
     const byC = j.byCountry || {};
-    const usdKrw = curData?.USDKRW?.price || 1490;
-    const eurKrw = curData?.EURKRW?.price || 1630;
+    const eurKrw = curData?.EURKRW?.price || null;   // 환율을 못 받았으면 원화 환산을 생략한다 (고정값 사용 금지)
 
     // KPI 바 (원화 환산 포함)
     const maxP = Math.max(...EUR_COUNTRIES.map(c => byC[c.code]?.price||0));
@@ -910,12 +991,12 @@ async function loadEuPig() {
     EUR_COUNTRIES.forEach(c => {
       const d = byC[c.code];
       if (!d) return;
-      const krwPer100 = Math.round(d.price * eurKrw / 100); // EUR/100kg → 원/kg
+      const krwPer100 = eurKrw ? Math.round(d.price * eurKrw / 100) : null; // EUR/100kg → 원/kg
       bars += `<div class="cbr">
         <span class="cbn">${c.name}</span>
         <div class="cbb"><div class="cbf" style="width:${Math.min(100,Math.round(d.price/220*100))}%;background:#86efac">
           <span class="cbv">${d.price.toFixed(1)}</span></div></div>
-        <span style="font-size:.68rem;color:#86efac;font-weight:600;width:90px;text-align:right;flex-shrink:0">${krwPer100.toLocaleString()}원/kg</span>
+        <span style="font-size:.68rem;color:#86efac;font-weight:600;width:90px;text-align:right;flex-shrink:0">${krwPer100 != null ? krwPer100.toLocaleString() + '원/kg' : '환율 없음'}</span>
       </div>`;
     });
     document.getElementById('eu-pig-wrap').innerHTML = bars ||
@@ -926,11 +1007,18 @@ async function loadEuPig() {
     EUR_COUNTRIES.forEach(c => {
       const d = byC[c.code];
       if (!d) return;
-      const krw = Math.round(d.price * eurKrw / 100);
-      tbl += `<tr><td>${c.name}</td><td style="font-weight:700">${d.price.toFixed(2)}</td><td style="color:#86efac;font-weight:700">${krw.toLocaleString()}</td><td class="dd">${d.week||'—'}</td></tr>`;
+      const krw = eurKrw ? Math.round(d.price * eurKrw / 100) : null;
+      tbl += `<tr><td>${c.name}</td><td style="font-weight:700">${d.price.toFixed(2)}</td><td style="color:#86efac;font-weight:700">${krw != null ? krw.toLocaleString() : '—'}</td><td class="dd">${d.week||'—'}</td></tr>`;
     });
     tbl += '</tbody></table>';
     document.getElementById('eu-table-wrap').innerHTML = tbl;
+    const euFx = document.getElementById('eu-fx-note');
+    if (euFx) {
+      const ce = curData?.EURKRW;
+      euFx.textContent = eurKrw
+        ? ' · 원화 환산: EUR/KRW ' + Number(eurKrw).toLocaleString('ko-KR') + '원 (' + (ce.basisLabel || '기준 미상') + (ce.date ? ', ' + ce.date + ' 기준' : '') + ')'
+        : ' · EUR/KRW 환율을 가져오지 못해 원화 환산은 하지 않았습니다';
+    }
 
     // 히스토리 차트 (스페인·독일·네덜란드)
     const hist = j.histByCountry || {};
@@ -1722,7 +1810,7 @@ function itPrepFx(j) {
     if (!p) return null;
     const map = {};
     (p.months || []).forEach(m => { map[m.ym] = m.avg; });
-    return { source: p.source, lastDate: p.lastDate, days: p.days, months: p.months || [], map: map };
+    return { source: p.source, basis: p.basis || null, basisLabel: p.basisLabel || null, lastDate: p.lastDate, days: p.days, months: p.months || [], map: map };
   };
   return { from: j.from, asOf: j.asOf, usd: mk(j.usd), eur: mk(j.eur), errors: j.errors || {} };
 }
@@ -1734,9 +1822,10 @@ function itEnsureFx(fromYm) {
     if (IT.fxState === 'err') return Promise.resolve(null);                          // 실패 후 자동 재시도 금지(무한 반복 방지) — '다시 시도' 버튼이나 새 파일 업로드로만
   }
   IT.fxFrom = fromYm; IT.fxState = 'loading'; IT.fxErr = '';
-  const ck = 'suan_it_fx_' + fromYm;
+  const ck = 'suan_it_fx2_' + fromYm;   // 예전 키(suan_it_fx_)는 '기준'이 적혀 있지 않은 매매기준율 값이라 쓰지 않는다
   const cached = itLsGet(ck, 6 * 3600 * 1000);
-  if (cached && cached.ok) { IT.fx = itPrepFx(cached); IT.fxState = 'ok'; return Promise.resolve(IT.fx); }
+  const cachedOk = !!(cached && cached.ok && [cached.usd, cached.eur].every(p => !p || p.basis));
+  if (cachedOk) { IT.fx = itPrepFx(cached); IT.fxState = 'ok'; return Promise.resolve(IT.fx); }
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 100000);
   IT.fxP = fetch('/api/fx-monthly?from=' + fromYm, { signal: ctrl.signal })
@@ -2001,12 +2090,14 @@ function itRenderFx() {
   if (u) u.months.forEach(m => { um[m.ym] = m; });
   if (e) e.months.forEach(m => { em[m.ym] = m; });
   const cell = m => m ? m.avg.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (m.partial ? ' *' : '') + ' <span class="fn">(' + m.n + '일)</span>' : '-';
-  const src = [u ? 'USD ' + (u.source === 'naver' ? '네이버 증권' : 'Yahoo') + ' ~' + u.lastDate : 'USD 없음', e ? 'EUR ' + (e.source === 'naver' ? '네이버 증권' : 'Yahoo') + ' ~' + e.lastDate : 'EUR 없음'].join(' · ');
+  const bl = p => (p.source === 'naver' ? '네이버 증권' : 'Yahoo') + ' ' + (p.basisLabel || '기준 미상');
+  const src = [u ? 'USD ' + bl(u) + ' ~' + u.lastDate : 'USD 없음', e ? 'EUR ' + bl(e) + ' ~' + e.lastDate : 'EUR 없음'].join(' · ');
+  const notBuy = (u && u.basis !== 'buy') || (e && e.basis !== 'buy');
   const errs = Object.keys(IT.fx.errors || {});
   box.innerHTML = '<details class="itfx card"><summary>💱 환율 월평균 사용 중 — ' + itEsc(src) + (errs.length ? ' · ⚠️ ' + itEsc(errs.join(',')) + ' 수집 실패' : '') + '</summary>' +
     '<div class="tscroll"><table class="dt"><thead><tr><th>월</th><th>USD/KRW</th><th>EUR/KRW</th></tr></thead><tbody>' +
     yms.map(ym => '<tr><td>' + ym + '</td><td>' + cell(um[ym]) + '</td><td>' + cell(em[ym]) + '</td></tr>').join('') +
-    '</tbody></table></div><p class="fn">네이버 증권 매매기준율의 일별 값을 월별로 평균한 값입니다. * 표시는 진행 중인 달(오늘까지의 평균)입니다.</p></details>';
+    '</tbody></table></div><p class="fn">' + itEsc([u && ('USD: ' + bl(u)), e && ('EUR: ' + bl(e))].filter(Boolean).join(' / ')) + '의 일별 값을 월별로 평균한 값입니다. * 표시는 진행 중인 달(오늘까지의 평균)입니다.' + (notBuy ? ' ⚠️ \'현찰 사실 때\' 값이 아닌 항목이 있습니다 (위 기준 참고).' : '') + '</p></details>';
 }
 
 // ── 열 인식 결과 / 수동 지정 ──
@@ -2268,7 +2359,7 @@ function itRenderCharts() {
       type: 'line',
       data: { labels: m.series.map(x => x.ym.slice(2)), datasets: [
         { label: 'USD 수입단가 (USD/kg, 수량가중)', data: m.series.map(x => x.price == null ? null : +x.price.toFixed(3)), borderColor: '#fb923c', backgroundColor: 'rgba(251,146,60,.15)', yAxisID: 'y', tension: .25, spanGaps: true, pointRadius: 3 },
-        { label: 'USD/KRW 월평균 (원)', data: m.series.map(x => x.fx), borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.12)', yAxisID: 'y1', tension: .25, spanGaps: true, pointRadius: 3 },
+        { label: 'USD/KRW 월평균 (원' + (IT.fx && IT.fx.usd && IT.fx.usd.basisLabel ? ', ' + IT.fx.usd.basisLabel : '') + ')', data: m.series.map(x => x.fx), borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.12)', yAxisID: 'y1', tension: .25, spanGaps: true, pointRadius: 3 },
       ] },
       options: Object.assign({}, base, { scales: {
         x: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, maxTicksLimit: 12 } },
