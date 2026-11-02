@@ -1,6 +1,7 @@
-// server.js - 수안푸드 지육가 대시보드 v3.2
+// server.js - 수안푸드 지육가 대시보드 v3.3
 // 안정화: 빠른 무료 API + 5초 타임아웃 + 즉시 폴백
 // v3.2: 품목 전략 탭 (환율 월평균 /api/fx-monthly + AI 품목 판단 POST /api/analysis/items)
+// v3.3: 환율을 네이버 증권 '현찰 사실 때'(살 때) 기준으로 통일 · 출처/기준일 표시 · 고정값과 가짜 시드 제거 (진단: /api/fx-debug)
 
 const path    = require('path');
 const fs      = require('fs');
@@ -278,118 +279,154 @@ async function fetchText(url, encoding = 'utf-8', timeout = 10000) {
   } catch (e) { clearTimeout(t); throw e; }
 }
 
-// ── 네이버 증권 환율 현재가 크롤링 ───────────────────
-async function naverFxCurrentCrawl() {
-  const hit = aCache.get('naver_fx_current');
-  if (hit && Date.now() - hit.ts < 5 * 60000) return hit.data;
+// ════════════════════════════════════════════════════
+// 네이버 증권 환율 — '현찰 사실 때'(= 살 때) 기준
+//  · 일별 시세 표(exchangeDailyQuote)의 머리글 이름으로 '매매기준율'·'사실 때' 칸을 찾습니다 (칸 번호를 외워 두지 않음)
+//  · '사실 때' 칸을 못 찾거나 값이 이상하면(매매기준율보다 낮거나 6% 넘게 높음) 사실 때인 척하지 않고
+//    매매기준율을 쓰되 basis 를 'std' 로 표시합니다 → 화면에는 "매매기준율"이라고 나옵니다
+//  · 수집에 실패해도 고정값·가짜(시드) 값으로 채우지 않습니다
+// ════════════════════════════════════════════════════
+const FX_CODES = { USDKRW: 'FX_USDKRW', EURKRW: 'FX_EURKRW' };
+const FX_NAMES = { USDKRW: 'USD/KRW', EURKRW: 'EUR/KRW' };
+const FX_BASIS_LABEL = { buy: '현찰 사실 때', std: '매매기준율', yahoo: '국제 종가(Yahoo·사실 때 아님)' };
+const fxPageUrl = (pair, page) =>
+  `https://finance.naver.com/marketindex/exchangeDailyQuote.naver?marketindexCd=${FX_CODES[pair]}&page=${page}`;
 
-  try {
-    const html = await fetchText('https://finance.naver.com/marketindex/', 'euc-kr', 8000);
-    const $ = cheerio.load(html);
-    const result = {};
-
-    // 메인 환율 섹션 파싱
-    // USD/KRW
-    $('h3.h_lst, .h_lst').each((_, el) => {
-      const t = $(el).text().trim();
-      const val = parseFloat($(el).closest('li').find('.value').text().replace(/,/g, ''));
-      if (t.includes('USD') && val > 800 && val < 2500) {
-        result.USDKRW = { price: val, name: 'USD/KRW', unit: '원', source: 'naver' };
-      }
-      if (t.includes('EUR') && val > 800 && val < 3000) {
-        result.EURKRW = { price: val, name: 'EUR/KRW', unit: '원', source: 'naver' };
-      }
-      if (t.includes('JPY') && val > 500 && val < 2000) {
-        result.JPYKRW = { price: val, name: 'JPY/KRW(100엔)', unit: '원', source: 'naver' };
-      }
-      if (t.includes('CNY') && val > 100 && val < 400) {
-        result.CNYKRW = { price: val, name: 'CNY/KRW', unit: '원', source: 'naver' };
-      }
-    });
-
-    // 대안: 다른 선택자 시도
-    if (!result.USDKRW) {
-      $('.exchange_area .lst_exchange li').each((_, el) => {
-        const title = $(el).find('.tit').text().trim();
-        const val = parseFloat($(el).find('.value').text().replace(/,/g, ''));
-        if (!val || isNaN(val)) return;
-        if (title.includes('USD') && val > 800) result.USDKRW = { price: val, name: 'USD/KRW', unit: '원', source: 'naver' };
-        if (title.includes('EUR') && val > 800) result.EURKRW = { price: val, name: 'EUR/KRW', unit: '원', source: 'naver' };
-        if (title.includes('JPY') && val > 500) result.JPYKRW = { price: val, name: 'JPY/KRW(100엔)', unit: '원', source: 'naver' };
-      });
-    }
-
-    // 또 다른 대안: 정규식으로 직접 추출
-    if (!result.USDKRW) {
-      const usdMatch = html.match(/USD[^0-9]*([1-9][0-9]{2,3}(?:\.[0-9]{1,2})?)/);
-      if (usdMatch) {
-        const v = parseFloat(usdMatch[1]);
-        if (v > 800 && v < 2500) result.USDKRW = { price: v, name: 'USD/KRW', unit: '원', source: 'naver-regex' };
-      }
-    }
-
-    if (Object.keys(result).length > 0) {
-      aCache.set('naver_fx_current', { data: result, ts: Date.now() });
-      console.log('✅ 네이버 FX:', Object.keys(result).map(k => k + '=' + result[k].price).join(', '));
-      return result;
-    }
-    throw new Error('파싱 결과 없음');
-  } catch (e) {
-    console.warn('네이버 FX current 실패:', e.message);
-    return null;
-  }
+function fxNum(s) {
+  const n = parseFloat(String(s ?? '').replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
 }
 
-// ── 네이버 증권 환율 히스토리 크롤링 ─────────────────
-// 기존 앱과 동일한 방식
-async function naverFxHistoryCrawl(marketindexCd, startYmd, maxPages = 40) {
-  const cacheKey = 'naver_hist_' + marketindexCd;
+// 표의 머리글(th)을 열 단위로 펼친다. rowspan/colspan 이 섞여 있어도 열마다 '현찰/사실때' 같은 이름이 나온다
+function fxHeaderLeaves($, table) {
+  const grid = [];
+  let hr = 0;
+  $(table).find('tr').each((_, tr) => {
+    const $tr = $(tr);
+    if ($tr.children('td').length || !$tr.children('th').length) return;     // th 로만 된 줄이 머리글
+    grid[hr] = grid[hr] || [];
+    let c = 0;
+    $tr.children('th').each((__, th) => {
+      while (grid[hr][c] !== undefined) c++;
+      const text = $(th).text().replace(/\s+/g, '');
+      const cs = Math.max(1, parseInt($(th).attr('colspan') || '1', 10) || 1);
+      const rs = Math.max(1, parseInt($(th).attr('rowspan') || '1', 10) || 1);
+      for (let dr = 0; dr < rs; dr++) {
+        grid[hr + dr] = grid[hr + dr] || [];
+        for (let dc = 0; dc < cs; dc++) grid[hr + dr][c + dc] = text;
+      }
+      c += cs;
+    });
+    hr++;
+  });
+  const n = grid.reduce((m, r) => Math.max(m, r.length), 0);
+  const names = [];
+  for (let c = 0; c < n; c++) {
+    const parts = [];
+    grid.forEach(r => { const t = r[c]; if (t && parts[parts.length - 1] !== t) parts.push(t); });
+    names.push(parts.join('/'));
+  }
+  return names;
+}
+
+// 일별 시세 표 1페이지 → { rows:[{ymd, std(매매기준율), buy(현찰 사실 때 또는 null)}], leaves, stdCol, buyCol, sample }
+function parseNaverFxTable(html) {
+  const $ = cheerio.load(html);
+  const out = { rows: [], leaves: [], stdCol: -1, buyCol: -1, sample: [] };
+  $('table').each((_, table) => {
+    if (out.rows.length) return;                                   // 날짜 줄이 있는 첫 번째 표만 사용
+    const dated = [];
+    $(table).find('tr').each((__, tr) => {
+      const tds = $(tr).children('td').map((___, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
+      if (tds.length < 2) return;
+      const ymd = tds[0].replace(/\./g, '-');
+      if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) dated.push({ ymd, tds });
+    });
+    if (!dated.length) return;
+    const leaves = fxHeaderLeaves($, table);
+    const stdIdx = leaves.findIndex(n => /매매기준/.test(n));
+    const buyIdx = leaves.findIndex(n => /사실/.test(n));
+    const stdCol = stdIdx >= 0 ? stdIdx : 1;                       // 머리글을 못 읽으면 예전 방식(날짜 바로 다음 칸 = 매매기준율)
+    out.leaves = leaves; out.stdCol = stdCol; out.buyCol = buyIdx;
+    out.sample = dated.slice(0, 2).map(d => d.tds);
+    for (const d of dated) {
+      const std = fxNum(d.tds[stdCol]);
+      if (std == null || std < 100) continue;
+      let buy = null;
+      if (buyIdx >= 0 && d.tds.length === leaves.length) {          // 머리글과 칸 수가 같을 때만 믿는다
+        const b = fxNum(d.tds[buyIdx]);
+        if (b != null && b >= std - 0.005 && b <= std * 1.06) buy = b;   // 사실 때는 매매기준율 이상 — 크게 벗어나면 엉뚱한 칸을 읽은 것
+      }
+      out.rows.push({ ymd: d.ymd, std, buy });
+    }
+  });
+  return out;
+}
+
+// 한 번에 수집한 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준으로 쓴다 (섞이면 전부 매매기준율 — 기준이 섞인 평균을 만들지 않는다)
+function fxPickBasis(rows) {
+  const useBuy = rows.length > 0 && rows.every(r => r.buy != null);
+  return {
+    basis: useBuy ? 'buy' : 'std',
+    rows: rows.map(r => ({ ymd: r.ymd, price: useBuy ? r.buy : r.std, std: r.std })),
+  };
+}
+
+// 현재 환율 = 일별 시세 표의 가장 최근 줄 (값과 함께 기준일·기준을 돌려준다)
+async function naverFxLatest(pair, fetcher = fetchText) {
+  const key = 'naver_fx_latest_' + pair;
+  const hit = aCache.get(key);
+  if (hit && Date.now() - hit.ts < 5 * 60000) return hit.data;
+
+  let html, lastErr;
+  for (let attempt = 0; attempt < 2 && html === undefined; attempt++) {
+    try { html = await fetcher(fxPageUrl(pair, 1), 'euc-kr', 8000); } catch (e) { lastErr = e; }
+  }
+  if (html === undefined) throw new Error('네이버 증권 응답 없음 (' + (lastErr?.message || '연결 실패') + ')');
+  const parsed = parseNaverFxTable(html);
+  if (!parsed.rows.length) throw new Error('네이버 환율 표를 읽지 못했습니다');
+  const last = parsed.rows.reduce((a, b) => (b.ymd > a.ymd ? b : a));
+  const basis = last.buy != null ? 'buy' : 'std';
+  const data = {
+    price: basis === 'buy' ? last.buy : last.std, std: last.std, date: last.ymd,
+    basis, basisLabel: FX_BASIS_LABEL[basis], source: 'naver', name: FX_NAMES[pair], unit: '원',
+  };
+  aCache.set(key, { data, ts: Date.now() });
+  console.log(`✅ 네이버 ${pair} ${data.price} (${data.basisLabel}, ${data.date})`);
+  return data;
+}
+
+// 일별 환율 이력 (startYmd 이후) → { rows:[{time, open, high, low, close}], basis }
+async function naverFxHistoryCrawl(pair, startYmd, maxPages = 40, fetcher = fetchText) {
+  const cacheKey = 'naver_hist_' + pair;
   const hit = aCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < 6 * 3600000) return hit.data;
 
-  const rows = [];
+  const raw = [];
   for (let page = 1; page <= maxPages; page++) {
     try {
-      const url = `https://finance.naver.com/marketindex/exchangeDailyQuote.naver?marketindexCd=${marketindexCd}&page=${page}`;
-      const html = await fetchText(url, 'euc-kr', 10000);
-      const $ = cheerio.load(html);
-      const pageRows = [];
-
-      $('table tbody tr').each((_, tr) => {
-        const cols = $(tr).find('td')
-          .map((__, td) => $(td).text().replace(/\s+/g, ' ').trim())
-          .get().filter(Boolean);
-        if (cols.length < 2) return;
-        const ymd = cols[0].replace(/\./g, '-');
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
-        const price = parseFloat(cols[1].replace(/,/g, ''));
-        if (!Number.isFinite(price) || price < 100) return;
-        pageRows.push({
-          time: dateToUnix(ymd),
-          open: price, high: price, low: price, close: price,
-          source: 'naver',
-        });
-      });
-
-      if (!pageRows.length) break;
-      rows.push(...pageRows);
-
-      // startYmd보다 이전 데이터가 나오면 중단
-      const oldest = ymdFromUnix(pageRows[pageRows.length - 1].time);
-      if (oldest < startYmd) break;
-
+      const parsed = parseNaverFxTable(await fetcher(fxPageUrl(pair, page), 'euc-kr', 10000));
+      if (!parsed.rows.length) break;
+      raw.push(...parsed.rows);
+      // startYmd보다 이전 데이터가 나오면 중단 (표는 최신 → 과거 순)
+      if (parsed.rows[parsed.rows.length - 1].ymd < startYmd) break;
     } catch (e) {
-      console.warn(`naverFxHistory p${page}:`, e.message);
+      console.warn(`naverFxHistory ${pair} p${page}:`, e.message);
       break;
     }
   }
 
-  const filtered = dedupeByTime(rows).filter(r => ymdFromUnix(r.time) >= startYmd);
-  if (filtered.length > 5) {
-    aCache.set(cacheKey, { data: filtered, ts: Date.now() });
-    console.log(`✅ 네이버 ${marketindexCd}: ${filtered.length}건`);
+  const { basis, rows: picked } = fxPickBasis(raw);
+  const rows = dedupeByTime(picked.map(r => {
+    const t = dateToUnix(r.ymd);
+    return { time: t, open: r.price, high: r.price, low: r.price, close: r.price, source: 'naver' };
+  })).filter(r => ymdFromUnix(r.time) >= startYmd);
+  const data = { rows, basis };
+  if (rows.length > 5) {
+    aCache.set(cacheKey, { data, ts: Date.now() });
+    console.log(`✅ 네이버 ${pair}: ${rows.length}건 (${FX_BASIS_LABEL[basis]})`);
   }
-  return filtered;
+  return data;
 }
 
 
@@ -447,108 +484,28 @@ async function callGemini(prompt, opts = {}) {
 }
 
 // ════════════════════════════════════════════════════
-// 환율 — ExchangeRate-API (무료, 안정적)
-// ════════════════════════════════════════════════════
-async function fetchFxRates() {
-  const hit = aCache.get('fx');
-  if (hit && Date.now() - hit.ts < 10 * 60000) return hit.data;
-
-  // 1순위: open.er-api.com (완전 무료, CORS 없음)
-  const sources = [
-    'https://open.er-api.com/v6/latest/USD',
-    'https://api.exchangerate-api.com/v4/latest/USD',
-  ];
-
-  for (const url of sources) {
-    try {
-      const text = await httpGet(url);
-      const json = JSON.parse(text);
-      const rates = json.rates || json.conversion_rates || {};
-      if (rates.KRW) {
-        const data = {
-          USDKRW: { price: +(rates.KRW).toFixed(2),        name: 'USD/KRW', unit: '원', source: 'er-api' },
-          EURKRW: { price: +(rates.KRW / rates.EUR).toFixed(2), name: 'EUR/KRW', unit: '원', source: 'er-api' },
-          CNYKRW: { price: +(rates.KRW / rates.CNY).toFixed(2), name: 'CNY/KRW', unit: '원', source: 'er-api' },
-          JPYKRW: { price: +(rates.KRW / rates.JPY * 100).toFixed(2), name: 'JPY/KRW(100엔)', unit: '원', source: 'er-api' },
-        };
-        aCache.set('fx', { data, ts: Date.now() });
-        console.log(`✅ FX: USD/KRW=${data.USDKRW.price}`);
-        return data;
-      }
-    } catch (e) { console.warn(`FX ${url.slice(0,40)}:`, e.message); }
-  }
-
-  // 폴백: 마지막 캐시 or 참고값
-  const fallback = {
-    USDKRW: { price: 1380, name: 'USD/KRW', unit: '원', source: 'fallback' },
-    EURKRW: { price: 1510, name: 'EUR/KRW', unit: '원', source: 'fallback' },
-    CNYKRW: { price: 190,  name: 'CNY/KRW', unit: '원', source: 'fallback' },
-    JPYKRW: { price: 930,  name: 'JPY/KRW(100엔)', unit: '원', source: 'fallback' },
-  };
-  return fallback;
-}
-
-// ════════════════════════════════════════════════════
-// 환율 히스토리 — Naver (서버에서 가능) or Yahoo
+// 환율 히스토리 — 네이버 증권(현찰 사실 때) → 실패하면 Yahoo(국제 종가, 기준이 다름을 표시) → 그래도 실패하면 빈 값
+// ※ 고정값·가짜(시드) 값은 만들지 않습니다. 못 가져왔으면 못 가져왔다고 알립니다.
 // ════════════════════════════════════════════════════
 async function fetchFxHistory(pair, startYmd) {
-  // 1순위: 네이버 증권 (기존 앱과 동일 방식)
-  const naverCode = pair === 'USDKRW' ? 'FX_USDKRW' : 'FX_EURKRW';
   try {
-    const rows = await naverFxHistoryCrawl(naverCode, startYmd);
-    if (rows.length > 10) {
-      console.log(`✅ 네이버 FX History ${pair}: ${rows.length}건`);
-      return rows;
+    const r = await naverFxHistoryCrawl(pair, startYmd);
+    if (r.rows.length > 10) {
+      console.log(`✅ 네이버 FX History ${pair}: ${r.rows.length}건 (${FX_BASIS_LABEL[r.basis]})`);
+      return { rows: r.rows, source: 'naver', basis: r.basis };
     }
-  } catch(e) { console.warn(`네이버 FX History ${pair}:`, e.message); }
+  } catch (e) { console.warn(`네이버 FX History ${pair}:`, e.message); }
 
-  // 2순위: Yahoo Finance
-  const yahooSymbol = pair === 'USDKRW' ? 'USDKRW=X' : 'EURKRW=X';
-  const startTs = Math.floor(new Date(startYmd + 'T00:00:00Z').getTime() / 1000);
-  const endTs   = Math.floor(Date.now() / 1000) + 86400;
-
-  for (const host of ['query1', 'query2']) {
-    try {
-      const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${startTs}&period2=${endTs}&interval=1d`;
-      const text = await httpGet(url, { Referer: 'https://finance.yahoo.com/', Accept: 'application/json' });
-      const json = JSON.parse(text);
-      const result = json?.chart?.result?.[0];
-      const q = result?.indicators?.quote?.[0] || {};
-      const ts = result?.timestamp || [];
-      const rows = [];
-      for (let i = 0; i < ts.length; i++) {
-        const close = Number(q.close?.[i]);
-        if (!Number.isFinite(close) || close <= 0) continue;
-        rows.push({ time: Number(ts[i]), open: Number((q.open?.[i]||close).toFixed(2)), high: Number((q.high?.[i]||close).toFixed(2)), low: Number((q.low?.[i]||close).toFixed(2)), close: Number(close.toFixed(2)) });
-      }
-      const filtered = dedupeByTime(rows).filter(r => ymdFromUnix(r.time) >= startYmd);
-      if (filtered.length > 5) {
-        console.log(`✅ FX History ${pair}: ${filtered.length}건`);
-        return filtered;
-      }
-    } catch (e) { console.warn(`FX History ${pair} ${host}:`, e.message); }
+  // 2순위: Yahoo Finance — 국제 종가라서 '사실 때' 환율이 아니다 (basis:'yahoo' 로 화면에 표시)
+  const yr = await yahooFxDaily(pair, startYmd);
+  if (yr.length > 5) {
+    console.log(`✅ FX History ${pair}: Yahoo ${yr.length}건 (사실 때 아님)`);
+    return {
+      rows: yr.map(r => ({ time: dateToUnix(r.ymd), open: r.price, high: r.price, low: r.price, close: +r.price.toFixed(2) })),
+      source: 'yahoo', basis: 'yahoo',
+    };
   }
-
-  // 폴백: er-api 현재가 기반 시드
-  return generateFxSeed(pair, startYmd);
-}
-
-function generateFxSeed(pair, startYmd) {
-  const base = pair === 'USDKRW' ? 1490 : 1760; // 2026년 현재 수준
-  const rows = [];
-  // 오늘 기준 420일 전부터
-  const start = new Date(Date.now() - 420*86400000);
-  let p = base * 0.93; // 1년 전 수준에서 시작
-  for (let d = 0; d < 430; d++) {
-    const date = new Date(start); date.setUTCDate(date.getUTCDate() + d);
-    if ([0,6].includes(date.getUTCDay())) continue;
-    if (date > new Date()) break;
-    p *= 1 + (Math.random() - 0.5) * 0.008;
-    p = Math.max(base * 0.85, Math.min(base * 1.15, p));
-    const ymd = date.toISOString().slice(0,10), pr = +p.toFixed(2);
-    rows.push({ time: dateToUnix(ymd), open: pr, high: +(pr*1.003).toFixed(2), low: +(pr*0.997).toFixed(2), close: pr });
-  }
-  return rows;
+  return { rows: [], source: 'none', basis: null };
 }
 
 // ════════════════════════════════════════════════════
@@ -914,27 +871,36 @@ function genSeed(sym) {
 
 async function getHistory(sym) {
   const c = histCache[sym];
+  const isFx = sym === 'USDKRW' || sym === 'EURKRW';
   // 캐시 유효하면 바로 반환
   if (c.d.length > 5 && Date.now() - c.at < HIST_TTL) return c.d;
+  // 환율은 수집에 실패하면 5분 동안은 다시 시도하지 않고 빈 값을 돌려준다 (요청마다 네이버를 수십 번 두드리지 않도록)
+  if (isFx && c.failUntil && Date.now() < c.failUntil) return [];
 
-  let rows = [];
+  let rows = [], meta = null;
   try {
     if (sym === 'LH')     rows = await yahooHistory('HE=F', START_YMD);
     if (sym === 'ZC')     rows = await yahooHistory('ZC=F', START_YMD);
     if (sym === 'ZS')     rows = await yahooHistory('ZS=F', START_YMD);
     if (sym === 'KAMIS')  rows = await fetchEkapepiaHistory(START_YMD); // ekapepia로 교체
-    if (sym === 'USDKRW') rows = await fetchFxHistory('USDKRW', START_YMD);
-    if (sym === 'EURKRW') rows = await fetchFxHistory('EURKRW', START_YMD);
+    if (isFx) { const r = await fetchFxHistory(sym, START_YMD); rows = r.rows; meta = { source: r.source, basis: r.basis }; }
   } catch (e) { console.warn(`getHistory ${sym}:`, e.message); }
 
   if (rows.length > 5) {
-    c.d = rows; c.at = Date.now(); c.isReal = true;
+    c.d = rows; c.at = Date.now(); c.isReal = true; c.meta = meta; c.failUntil = 0;
     console.log(`✅ ${sym} history: ${rows.length}건 (실데이터)`);
     return rows;
   }
 
-  // 항상 시드 데이터 반환 (절대 빈 배열 반환 안 함) — 단, isReal=false로 명시
-  const seed = ['USDKRW','EURKRW'].includes(sym) ? generateFxSeed(sym, START_YMD) : genRealisticSeed(sym);
+  // 환율은 가짜(시드) 값을 만들지 않는다 — 못 가져왔으면 빈 값 (화면이 '수집 실패'로 표시)
+  if (isFx) {
+    c.d = []; c.isReal = false; c.meta = null; c.failUntil = Date.now() + 5 * 60000;
+    console.warn(`⚠️ ${sym} 환율 이력 수집 실패 — 가짜 값으로 채우지 않음`);
+    return [];
+  }
+
+  // 그 밖의 항목(LH 등)은 기존대로 시드 데이터 반환 — 단, isReal=false로 명시
+  const seed = genRealisticSeed(sym);
   c.d = seed;
   c.at = Date.now() - HIST_TTL + 30*60000; // 30분 후 재시도
   c.isReal = false;
@@ -1021,12 +987,12 @@ function rangeLabel(rows, period) {
 // ════════════════════════════════════════════════════
 async function getCurrentPrices() {
   const hit = aCache.get('current');
-  if (hit && Date.now()-hit.ts < 8*60000) return hit.data;
+  if (hit && Date.now()-hit.ts < (hit.ttl || 8*60000)) return hit.data;
 
   // 병렬로 모두 요청, 각각 독립 실패 허용
-  const [naverFxRes, fxRes, lhRes, zcRes, zsRes, kamisRes] = await Promise.allSettled([
-    naverFxCurrentCrawl(),   // 1순위: 네이버 실시간 크롤링
-    fetchFxRates(),           // 2순위: open.er-api.com
+  const [usdRes, eurRes, lhRes, zcRes, zsRes, kamisRes] = await Promise.allSettled([
+    naverFxLatest('USDKRW'),   // 네이버 증권 — 현찰 사실 때
+    naverFxLatest('EURKRW'),
     yahooCurrent('HE=F'),
     yahooCurrent('ZC=F'),
     yahooCurrent('ZS=F'),
@@ -1035,21 +1001,16 @@ async function getCurrentPrices() {
 
   const results = {};
 
-  // 환율 — 네이버 우선, 실패 시 er-api
-  const naverFx = naverFxRes.status === 'fulfilled' ? naverFxRes.value : null;
-  const erApiFx = fxRes.status === 'fulfilled' ? fxRes.value : null;
-
-  if (naverFx?.USDKRW) {
-    Object.assign(results, naverFx);
-    console.log('✅ 환율 소스: 네이버 증권');
-  } else if (erApiFx) {
-    Object.assign(results, erApiFx);
-    console.log('✅ 환율 소스: open.er-api.com');
-  } else {
-    results.USDKRW = { price: 1490, name: 'USD/KRW', unit: '원', source: 'fallback' };
-    results.EURKRW = { price: 1760, name: 'EUR/KRW', unit: '원', source: 'fallback' };
-    console.warn('⚠️ 환율 모든 소스 실패 → 참고값');
+  // 환율 — 네이버 증권 '현찰 사실 때'. 못 가져오면 다른 출처·고정값으로 채우지 않고 실패로 알린다
+  const fxErrors = {};
+  for (const [pair, r] of [['USDKRW', usdRes], ['EURKRW', eurRes]]) {
+    if (r.status === 'fulfilled' && r.value) results[pair] = r.value;
+    else {
+      fxErrors[pair] = (r.reason && r.reason.message) || '수집 실패';
+      console.warn(`⚠️ ${pair} 환율 수집 실패:`, fxErrors[pair]);
+    }
   }
+  if (Object.keys(fxErrors).length) results.fxErrors = fxErrors;
 
   // CME Lean Hog
   if (lhRes.status === 'fulfilled' && lhRes.value) {
@@ -1075,7 +1036,8 @@ async function getCurrentPrices() {
     results.KAMIS = { price: 4750, name: '국내 지육 도매가', unit: '원/kg', source: 'fallback' };
   }
 
-  aCache.set('current', { data: results, ts: Date.now() });
+  // 환율 수집에 실패했으면 1분 뒤 다시 시도 (실패 결과를 8분 동안 붙들고 있지 않음)
+  aCache.set('current', { data: results, ts: Date.now(), ttl: Object.keys(fxErrors).length ? 60 * 1000 : 8 * 60000 });
   return results;
 }
 
@@ -1090,17 +1052,19 @@ async function analyzeImportTiming() {
     getHistory('LH'),
   ]);
 
-  const usdHist  = filterByPeriod(usdHistAll, 'monthly');
-  const eurHist  = filterByPeriod(eurHistAll, 'monthly');
-  const lhHist   = filterByPeriod(lhHistAll,  'monthly');
+  // 실데이터가 아닌 이력(수집 실패·추정 패턴)으로는 추세·예측을 계산하지 않는다
+  const realMonthly = (sym, rows) => (histCache[sym]?.isReal === true ? filterByPeriod(rows, 'monthly') : []);
+  const usdHist = realMonthly('USDKRW', usdHistAll);
+  const eurHist = realMonthly('EURKRW', eurHistAll);
+  const lhHist  = realMonthly('LH', lhHistAll);
 
   const usd = current?.USDKRW?.price;
   const eur = current?.EURKRW?.price;
   const lh  = current?.LH?.price;
 
-  // 추세 계산 (최근 30일)
+  // 추세 계산 (최근 30일) — 자료가 모자라면 '횡보'로 꾸미지 않고 null
   function calcTrend(rows) {
-    if (rows.length < 4) return { dir:'횡보', slope:0, pct:0 };
+    if (rows.length < 4) return null;
     const closes = rows.map(r=>r.close);
     const first = closes.slice(0, Math.ceil(closes.length/3)).reduce((a,b)=>a+b,0) / Math.ceil(closes.length/3);
     const last  = closes.slice(-Math.ceil(closes.length/3)).reduce((a,b)=>a+b,0) / Math.ceil(closes.length/3);
@@ -1113,9 +1077,9 @@ async function analyzeImportTiming() {
   const eurTrend = calcTrend(eurHist);
   const lhTrend  = calcTrend(lhHist);
 
-  // 2~3개월 후 환율 예측
+  // 2~3개월 후 환율 예측 (추세 자료가 없으면 계산하지 않음)
   function forecastRange(cur, trend, histRows) {
-    if (!cur) return { low: null, high: null, base: null };
+    if (!cur || !trend) return { low: null, high: null, base: null };
     // 최근 변동성 계산
     const closes = histRows.map(r=>r.close);
     let vol = 0.025;
@@ -1137,40 +1101,60 @@ async function analyzeImportTiming() {
   const usdForecast = forecastRange(usd, usdTrend, usdHist);
   const eurForecast = forecastRange(eur, eurTrend, eurHist);
 
+  // 판정 기준값(달러 1,400원·유로 1,500원)은 매매기준율 수준으로 잡아 둔 고정 숫자다.
+  // 화면의 환율이 '현찰 사실 때'(매매기준율보다 높음)이므로, 같은 비율(사실 때 ÷ 매매기준율)만큼 올려서 비교한다 → 기준을 바꿔도 판정 기준은 그대로
+  const kOf = c => (c && c.basis === 'buy' && c.std > 0 && c.price > 0) ? c.price / c.std : 1;
+  const usdK = kOf(current?.USDKRW), eurK = kOf(current?.EURKRW);
+  const baseTxt = (b0, k) => k === 1 ? `${b0.toLocaleString()}원` : `${b0.toLocaleString()}원 → 사실 때 환산 ${Math.round(b0 * k).toLocaleString()}원`;
+
   // 매입 신호
   const signals = { buy: 0, wait: 0 };
   const analysis = [];
 
   if (usd) {
-    const base = 1400; // 현재 환율 수준 반영
-    if (usd < base - 30 && usdTrend.dir !== '상승') {
+    const b0 = 1400;                                  // 현재 환율 수준 반영
+    const base = b0 * usdK, lo = base - 30 * usdK, hi = base + 60 * usdK;
+    const dir = usdTrend ? usdTrend.dir : null;
+    const tag = `USD/KRW ${usd.toLocaleString()}원`;
+    if (usd < lo && dir && dir !== '상승') {
       signals.buy += 3;
-      analysis.push({ msg: `✅ USD/KRW ${usd.toLocaleString()}원 — 기준(${base}원) 대비 저환율, 수입 비용 유리` });
-    } else if (usd > base + 60) {
+      analysis.push({ msg: `✅ ${tag} — 기준(${baseTxt(b0, usdK)}) 대비 저환율, 수입 비용 유리` });
+    } else if (usd > hi) {
       signals.wait += 3;
-      analysis.push({ msg: `🔴 USD/KRW ${usd.toLocaleString()}원 — 고환율 ${Math.round(usd-base)}원 초과. 수입원가 부담` });
-    } else if (usdTrend.dir === '하락') {
+      analysis.push({ msg: `🔴 ${tag} — 고환율 ${Math.round(usd-base)}원 초과. 수입원가 부담` });
+    } else if (dir === '하락') {
       signals.buy += 1;
-      analysis.push({ msg: `🟡 USD/KRW ${usd.toLocaleString()}원 — 하락 추세(${usdTrend.pct}%). 추가 하락 후 매입도 고려` });
-    } else if (usdTrend.dir === '상승') {
+      analysis.push({ msg: `🟡 ${tag} — 하락 추세(${usdTrend.pct}%). 추가 하락 후 매입도 고려` });
+    } else if (dir === '상승') {
       signals.wait += 2;
-      analysis.push({ msg: `⚠️ USD/KRW ${usd.toLocaleString()}원 — 상승 추세(+${usdTrend.pct}%). 2~3달 후 더 오를 위험` });
+      analysis.push({ msg: `⚠️ ${tag} — 상승 추세(+${usdTrend.pct}%). 2~3달 후 더 오를 위험` });
+    } else if (dir === '횡보') {
+      analysis.push({ msg: `🔵 ${tag} — 횡보 구간. 지금 계약 나쁘지 않은 시점` });
     } else {
-      analysis.push({ msg: `🔵 USD/KRW ${usd.toLocaleString()}원 — 횡보 구간. 지금 계약 나쁘지 않은 시점` });
+      analysis.push({ msg: `⚪ ${tag} — 추세 자료 없음(환율 이력 수집 실패). 현재 값만 확인했고 방향 판단은 보류` });
     }
+  } else {
+    analysis.push({ msg: '⚠️ USD/KRW — 환율을 가져오지 못해 환율 신호를 계산하지 않았습니다' });
   }
 
   if (eur) {
-    const base = 1500;
-    if (eur < base - 50 && eurTrend.dir !== '상승') {
+    const b0 = 1500;
+    const base = b0 * eurK, lo = base - 50 * eurK, hi = base + 70 * eurK;
+    const dir = eurTrend ? eurTrend.dir : null;
+    const tag = `EUR/KRW ${eur.toLocaleString()}원`;
+    if (eur < lo && dir && dir !== '상승') {
       signals.buy += 2;
-      analysis.push({ msg: `✅ EUR/KRW ${eur.toLocaleString()}원 — EU 지육 수입 비용 유리` });
-    } else if (eur > base + 70) {
+      analysis.push({ msg: `✅ ${tag} — EU 지육 수입 비용 유리` });
+    } else if (eur > hi) {
       signals.wait += 2;
-      analysis.push({ msg: `⚠️ EUR/KRW ${eur.toLocaleString()}원 — EU 수입 비용 높음` });
+      analysis.push({ msg: `⚠️ ${tag} — EU 수입 비용 높음` });
+    } else if (dir) {
+      analysis.push({ msg: `🔵 ${tag} — 보통 수준` });
     } else {
-      analysis.push({ msg: `🔵 EUR/KRW ${eur.toLocaleString()}원 — 보통 수준` });
+      analysis.push({ msg: `⚪ ${tag} — 추세 자료 없음(환율 이력 수집 실패). 방향 판단은 보류` });
     }
+  } else {
+    analysis.push({ msg: '⚠️ EUR/KRW — 환율을 가져오지 못해 환율 신호를 계산하지 않았습니다' });
   }
 
   if (lh) {
@@ -1230,30 +1214,50 @@ async function analyzeImportTiming() {
   // 최종 판정
   let verdict, verdictClass;
   const net = signals.buy - signals.wait;
-  if (net >= 3)      { verdict = '🟢 지금 계약 권장 — 환율·지육가 조건 우호적'; verdictClass = 'green'; }
+  if (!usd)          { verdict = '⚪ 판단 보류 — USD/KRW 환율을 가져오지 못했습니다'; verdictClass = 'yellow'; }
+  else if (net >= 3) { verdict = '🟢 지금 계약 권장 — 환율·지육가 조건 우호적'; verdictClass = 'green'; }
   else if (net <= -2){ verdict = '🔴 계약 대기 권장 — 환율 또는 지육가 불리';   verdictClass = 'red'; }
   else if (net >= 1) { verdict = '🟡 조건부 매입 — 분할 계약 전략 추천';         verdictClass = 'yellow'; }
   else               { verdict = '🟡 중립 — 추세 확인 후 결정';                  verdictClass = 'yellow'; }
 
-  return { verdict, verdictClass, analysis, trends: { usd: usdTrend, eur: eurTrend, lh: lhTrend }, forecasts: { usd: usdForecast, eur: eurForecast }, importCost, current: { usd, eur, lh }, signals };
+  // 화면이 "어느 출처·어느 기준 환율인지" 보여줄 수 있게 함께 돌려준다
+  const fxInfo = c => c ? { basis: c.basis, basisLabel: c.basisLabel, date: c.date, source: c.source } : null;
+  return {
+    verdict, verdictClass, analysis,
+    trends: { usd: usdTrend, eur: eurTrend, lh: lhTrend },
+    forecasts: { usd: usdForecast, eur: eurForecast },
+    importCost, current: { usd, eur, lh }, signals,
+    fx: {
+      usd: fxInfo(current?.USDKRW), eur: fxInfo(current?.EURKRW), errors: current?.fxErrors || null,
+      history: { usd: histCache.USDKRW?.meta || null, eur: histCache.EURKRW?.meta || null },
+    },
+  };
 }
 
 // ════════════════════════════════════════════════════
 // AI 프롬프트
 // ════════════════════════════════════════════════════
+// 환율 표시용 보조 — 프롬프트에 '어느 출처·어느 기준·기준일'을 함께 적는다
+function fxTxt(c) {
+  if (!c || !c.price) return 'N/A (수집 실패)';
+  return `${Number(c.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}원 (네이버 ${c.basisLabel || '기준 미상'}${c.date ? ', ' + c.date + ' 기준' : ''})`;
+}
+const trTxt = t => t ? `${t.dir} (${t.pct}%)` : '자료 없음';
+const fcTxt = f => (f && f.base) ? `${f.low}~${f.high}원 (기준: ${f.base})` : '자료 없음';
+
 function buildTimingPrompt(timing, current) {
   const { trends, forecasts, importCost } = timing;
   return `당신은 수안푸드(한국 냉동 돼지고기 지육 수입 전문업체)의 수석 구매 전략 분석가입니다.
 
 【현재 시장 데이터 — ${kstNow()}】
-- USD/KRW: ${current?.USDKRW?.price||'N/A'}원 | 30일 추세: ${trends.usd.dir} (${trends.usd.pct}%)
-- EUR/KRW: ${current?.EURKRW?.price||'N/A'}원 | 30일 추세: ${trends.eur.dir} (${trends.eur.pct}%)
-- CME Lean Hog: ${current?.LH?.price||'N/A'}¢/lb | 30일 추세: ${trends.lh.dir} (${trends.lh.pct}%)
+- USD/KRW: ${fxTxt(current?.USDKRW)} | 30일 추세: ${trTxt(trends.usd)}
+- EUR/KRW: ${fxTxt(current?.EURKRW)} | 30일 추세: ${trTxt(trends.eur)}
+- CME Lean Hog: ${current?.LH?.price||'N/A'}¢/lb | 30일 추세: ${trTxt(trends.lh)}
 - 국내 지육 도매가: ${current?.KAMIS?.price||'N/A'}원/kg
 
 【2~3개월 후 예측】
-- USD/KRW 예측 범위: ${forecasts.usd.low||'?'}~${forecasts.usd.high||'?'}원 (기준: ${forecasts.usd.base||'?'})
-- EUR/KRW 예측 범위: ${forecasts.eur.low||'?'}~${forecasts.eur.high||'?'}원
+- USD/KRW 예측 범위: ${fcTxt(forecasts.usd)}
+- EUR/KRW 예측 범위: ${fcTxt(forecasts.eur)}
 
 【수입 원가 시뮬레이션】
 - 현재 환율 기준 수입원가: ${importCost.currentKrwPerKg||'N/A'}원/kg
@@ -1278,7 +1282,7 @@ function buildPigPrompt(period, histData, current) {
   const fmt = rows => (rows||[]).slice(-12).map(r=>`${ymdFromUnix(r.time)}: ${r.close}`).join(', ')||'없음';
   return `수안푸드 돼지고기 지육 수입 ${label} 분석
 
-현재: LH ${current?.LH?.price||'?'}¢/lb, 국내도매가 ${current?.KAMIS?.price||'?'}원/kg, USD ${current?.USDKRW?.price||'?'}원, EUR ${current?.EURKRW?.price||'?'}원
+현재: LH ${current?.LH?.price||'?'}¢/lb, 국내도매가 ${current?.KAMIS?.price||'?'}원/kg, USD ${fxTxt(current?.USDKRW)}, EUR ${fxTxt(current?.EURKRW)}
 LH 이력: ${fmt(histData.LH)}
 옥수수: ${fmt(histData.ZC)}
 대두: ${fmt(histData.ZS)}
@@ -1293,9 +1297,8 @@ LH 이력: ${fmt(histData.LH)}
 }
 
 function buildMarketPrompt(current) {
-  const usdKrw = current?.USDKRW?.price || 1380;
   return `한국 냉동 수입 돼지고기 시장 전문 분석 (${kstNow()})
-환율: USD/KRW ${usdKrw}원, EUR/KRW ${current?.EURKRW?.price||'N/A'}원
+환율: USD/KRW ${fxTxt(current?.USDKRW)}, EUR/KRW ${fxTxt(current?.EURKRW)}
 
 분석 (한국어 Markdown, 1000~1300자):
 ### 1. 2025~2026 냉동 돼지고기 수입 현황 (총량 및 전년 대비)
@@ -1309,7 +1312,7 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.2.0' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.3.0' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -1328,10 +1331,30 @@ app.get('/api/history', async (req, res) => {
     const rows = filterByPeriod(all, period);
     // 캐시에 기록된 실데이터 여부 확인
     const isReal = histCache[sym]?.isReal !== false;
-    res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length, isReal });
+    const meta = histCache[sym]?.meta || null;      // 환율: 어느 출처·어느 기준 값인지
+    res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length, isReal,
+               source: meta?.source || null, basis: meta?.basis || null, basisLabel: meta ? FX_BASIS_LABEL[meta.basis] : null });
   } catch (e) { res.status(500).json({ ok:false, error:e.message }); }
 });
 
+
+// 진단용 — 네이버 환율 표를 어떻게 읽었는지(머리글·읽은 칸·첫 줄)를 브라우저에서 바로 확인
+app.get('/api/fx-debug', async (_, res) => {
+  const out = { ok: true, at: kstNow(), wanted: FX_BASIS_LABEL.buy };
+  for (const pair of Object.keys(FX_CODES)) {
+    try {
+      const html = await fetchText(fxPageUrl(pair, 1), 'euc-kr', 8000);
+      const p = parseNaverFxTable(html);
+      out[pair] = {
+        ok: p.rows.length > 0, htmlChars: html.length,
+        headerLeaves: p.leaves, stdCol: p.stdCol, buyCol: p.buyCol,
+        rawFirstRows: p.sample, parsedFirstRows: p.rows.slice(0, 3),
+        basisUsed: p.rows.length && p.rows[0].buy != null ? 'buy' : 'std',
+      };
+    } catch (e) { out[pair] = { ok: false, error: e.message }; }
+  }
+  res.json(out);
+});
 
 // EU 공식 지육가 API
 app.get('/api/eu-pig', async (_, res) => {
@@ -1400,28 +1423,12 @@ app.get('/api/analysis/market', async (_, res) => {
 
 // ════════════════════════════════════════════════════
 // 품목 전략 (v3.2)
-//  1) GET  /api/fx-monthly        : 네이버 증권 일별 환율 → 월평균 (수입 실적의 환율효과 분리용)
+//  1) GET  /api/fx-monthly        : 네이버 증권 일별 환율('현찰 사실 때') → 월평균 (수입 실적의 환율효과 분리용)
 //  2) POST /api/analysis/items    : 우리 회사 수입 실적 집계표 + 주간회의 내용 → AI 품목 판단
 // ※ 원칙: 수집에 실패하면 가짜(시드) 값으로 채우지 않는다. 못 가져왔으면 못 가져왔다고 알린다.
 // ════════════════════════════════════════════════════
 
-// 네이버 환율 일별 시세 1페이지 파싱 (naverFxHistoryCrawl 의 행 파싱 규칙과 동일)
-function parseNaverFxPageHtml(html) {
-  const $ = cheerio.load(html);
-  const out = [];
-  $('table tbody tr').each((_, tr) => {
-    const cols = $(tr).find('td')
-      .map((__, td) => $(td).text().replace(/\s+/g, ' ').trim())
-      .get().filter(Boolean);
-    if (cols.length < 2) return;
-    const ymd = cols[0].replace(/\./g, '-');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
-    const price = parseFloat(cols[1].replace(/,/g, ''));
-    if (!Number.isFinite(price) || price < 100) return;
-    out.push({ ymd, price });
-  });
-  return out;
-}
+// (네이버 일별 시세 표 파싱은 위쪽 parseNaverFxTable 하나를 현재가·이력·월평균이 함께 쓴다)
 
 function addDaysYmd(ymd, days) {
   return new Date(Date.parse(ymd + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10);
@@ -1454,7 +1461,7 @@ async function naverFxDailySince(code, startYmd, fetcher = fetchText, opt = {}) 
   const fetchPage = async (p) => {
     const url = `https://finance.naver.com/marketindex/exchangeDailyQuote.naver?marketindexCd=${code}&page=${p}`;
     for (let attempt = 0; attempt < 2; attempt++) {
-      try { return parseNaverFxPageHtml(await fetcher(url, 'euc-kr', 10000)); }
+      try { return parseNaverFxTable(await fetcher(url, 'euc-kr', 10000)).rows; }
       catch (e) { if (attempt === 1) return null; }
     }
     return null;
@@ -1469,7 +1476,7 @@ async function naverFxDailySince(code, startYmd, fetcher = fetchText, opt = {}) 
     results.forEach(r => {
       if (r === null) return;                 // 수신 실패 → 아래 누락 점검에서 걸러짐
       if (r.length === 0) { ended = true; return; }
-      for (const row of r) byDate.set(row.ymd, row.price);
+      for (const row of r) byDate.set(row.ymd, row);
     });
     page += nums.length;
     if (byDate.size === before) ended = true;   // 한 묶음이 통째로 새 날짜를 못 가져오면 끝으로 간주
@@ -1477,12 +1484,12 @@ async function naverFxDailySince(code, startYmd, fetcher = fetchText, opt = {}) 
     if (oldest && oldest < startYmd) reached = true;
   }
 
-  const rows = [...byDate.entries()]
-    .map(([ymd, price]) => ({ ymd, price }))
+  const raw = [...byDate.values()]
     .filter(r => r.ymd >= startYmd)
     .sort((a, b) => (a.ymd < b.ymd ? -1 : 1));
+  const { basis, rows } = fxPickBasis(raw);          // 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준, 아니면 전부 매매기준율
   const problems = fxDailyProblems(rows, startYmd, today);
-  return { rows, problems, complete: problems.length === 0 };
+  return { rows, problems, complete: problems.length === 0, basis };
 }
 
 // Yahoo 일별 환율 (네이버가 불완전할 때만 대체) — 실패하면 빈 배열, 시드 사용 안 함
@@ -1549,14 +1556,14 @@ async function getFxMonthly(startYm, deps = {}) {
           console.warn(`⚠️ 네이버 ${pair} 월평균 수집 불완전(${why}) → Yahoo 시도`);
           const yr = await (deps.yahoo || yahooFxDaily)(pair, startYmd);
           if (yr.length && !fxDailyProblems(yr, startYmd, today).length) {
-            res = { rows: yr, problems: [], complete: true };
+            res = { rows: yr, problems: [], complete: true, basis: 'yahoo' };
             source = 'yahoo';
           } else {
             throw new Error(`수집 불완전: ${why}`);
           }
         }
         out[slot] = {
-          source, days: res.rows.length,
+          source, basis: res.basis, basisLabel: FX_BASIS_LABEL[res.basis], days: res.rows.length,
           lastDate: res.rows[res.rows.length - 1].ymd,
           months: fxMonthlyFromDaily(res.rows, todayYm),
         };
@@ -1671,6 +1678,12 @@ function sanitizeItemsPayload(body) {
   return { ok: true, meeting, perf, force: !!body.force };
 }
 
+// 환율 출처·기준 설명 (예: "USD 네이버 증권 현찰 사실 때 / EUR 네이버 증권 현찰 사실 때")
+function fxBasisText(fx) {
+  const part = (x, nm) => x ? `${nm} ${x.source === 'naver' ? '네이버 증권' : 'Yahoo Finance'} ${x.basisLabel || FX_BASIS_LABEL[x.basis] || ''}`.trim() : null;
+  return [part(fx?.usd, 'USD'), part(fx?.eur, 'EUR')].filter(Boolean).join(' / ');
+}
+
 function buildItemsPrompt({ perf, meeting, fx, cur, timing, today }) {
   const nextYear = +today.slice(0, 4) + 1;
   const sgn = v => (v > 0 ? '+' : '');
@@ -1697,7 +1710,7 @@ function buildItemsPrompt({ perf, meeting, fx, cur, timing, today }) {
     const rl = perf.recentLabels.length ? ` ${perf.recentLabels[0]}~${perf.recentLabels[perf.recentLabels.length - 1]}` : '';
     L.push(`
 【A. 우리 회사 수입 실적 — ${y0}년 1~${cutoff}월 vs ${y1}년 1~${cutoff}월 (동기간 비교)】
-(수량=톤, 외화단가=외화/kg, 원화단가=원/kg. 집계 단위: ${perf.level === 'origin' ? '품목+원산지별' : '품목별'}. 환율: ${perf.fxPref === 'company' ? '회사 적용환율 우선(없으면 월평균)' : '네이버 증권 월평균'}. 표는 매입액 기준 상위 ${perf.groups.length}개${perf.groupsTotal > perf.groups.length ? ` (전체 ${perf.groupsTotal}개 중)` : ''})
+(수량=톤, 외화단가=외화/kg, 원화단가=원/kg. 집계 단위: ${perf.level === 'origin' ? '품목+원산지별' : '품목별'}. 환율: ${perf.fxPref === 'company' ? '회사 적용환율 우선(없으면 월평균)' : '월평균'} (월평균 출처: ${fxBasisText(fx) || '없음'}). 표는 매입액 기준 상위 ${perf.groups.length}개${perf.groupsTotal > perf.groups.length ? ` (전체 ${perf.groupsTotal}개 중)` : ''})
 | 품목 | 통화 | 수량(톤) 작년→올해 | 수량 증감 | 외화단가 작년→올해 | 평균환율 작년→올해 | 원화단가(원/kg) 작년→올해 | 원화단가 증감 | 환율효과(원/kg) | 가격효과(원/kg) | 올해 매입액(백만원) | 수입개월수 작년/올해 | 최근6개월 수량(톤)${rl} | 자동신호 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|`);
     for (const g of perf.groups) {
@@ -1722,7 +1735,7 @@ function buildItemsPrompt({ perf, meeting, fx, cur, timing, today }) {
     const yms = [...new Set([...um.keys(), ...em.keys()])].sort().filter(ym => ym >= from);
     const cell = m => m ? `${m.avg.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${m.partial ? '*' : ''}` : '-';
     L.push(`
-【C. 월평균 환율 — 네이버 증권 매매기준율의 일별 평균 (실데이터, 원)】
+【C. 월평균 환율 — ${fxBasisText(fx)}의 일별 평균 (실데이터, 원 · 회사가 실제로 결제한 환율과는 다를 수 있음)】
 | 월 | USD/KRW | EUR/KRW |
 |---|---|---|
 ${yms.map(ym => `| ${ym} | ${cell(um.get(ym))} | ${cell(em.get(ym))} |`).join('\n')}
@@ -1734,8 +1747,8 @@ ${yms.map(ym => `| ${ym} | ${cell(um.get(ym))} | ${cell(em.get(ym))} |`).join('\
   // D. 현재 시장 (실데이터만)
   const real = x => x && x.price != null && x.source !== 'fallback';
   const snap = [];
-  if (real(cur?.USDKRW)) snap.push(`- USD/KRW 현재 ${cur.USDKRW.price}원`);
-  if (real(cur?.EURKRW)) snap.push(`- EUR/KRW 현재 ${cur.EURKRW.price}원`);
+  if (real(cur?.USDKRW)) snap.push(`- USD/KRW 현재 ${fxTxt(cur.USDKRW)}`);
+  if (real(cur?.EURKRW)) snap.push(`- EUR/KRW 현재 ${fxTxt(cur.EURKRW)}`);
   if (real(cur?.LH))     snap.push(`- CME Lean Hog 선물 ${cur.LH.price}¢/lb`);
   if (real(cur?.KAMIS))  snap.push(`- 국내 지육 도매가(축산물품질평가원) ${cur.KAMIS.price}원/kg`);
   if (timing && histCache.USDKRW?.isReal === true && timing.trends?.usd) {
@@ -1822,7 +1835,7 @@ app.post('/api/analysis/items', async (req, res) => {
       withTimeout(getCurrentPrices(), 12000),
       withTimeout(analyzeImportTiming(), 15000),
     ]);
-    if (pl.perf && fx) pl.perf.quality.fxSource = [fx.usd && `USD ${fx.usd.source}`, fx.eur && `EUR ${fx.eur.source}`].filter(Boolean).join(', ');
+    if (pl.perf && fx) pl.perf.quality.fxSource = fxBasisText(fx);
 
     const prompt = buildItemsPrompt({ perf: pl.perf, meeting: pl.meeting, fx, cur, timing, today });
     console.log(`🧩 품목 전략 AI 요청: 품목 ${pl.perf?.groups.length ?? 0}개, 회의 ${pl.meeting.length}자, 프롬프트 ${prompt.length}자`);
@@ -1874,7 +1887,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.2.0', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.3.0', buildId:BUILD_ID, time:kstNow() }));
 
 // KAMIS 설정값 브라우저에 안전하게 전달 (키만 노출, WAF 우회용)
 app.get('/api/kamis-config', (_, res) => {
@@ -2096,13 +2109,15 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxPageHtml, naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
+  _test: { parseNaverFxTable, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, fetchFxHistory,
+           naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
+           getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
 };
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.2 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.3 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
