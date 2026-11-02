@@ -120,6 +120,56 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 @keyframes spin{to{transform:rotate(360deg)}}
 .mbtn{background:transparent;border:1px solid #334155;color:#64748b;padding:5px 14px;border-radius:5px;font-size:.73rem;cursor:pointer;margin-top:8px}
 .mbtn:hover{background:#334155;color:#e2e8f0}
+/* ── 품목 전략 ── */
+#page-items .card{margin-bottom:14px}
+#page-items .g2 .card{margin-bottom:0}
+.dz{border:2px dashed #475569;border-radius:10px;padding:22px 14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:#0f172a}
+.dz:hover,.dz:focus-visible{border-color:#60a5fa;background:#0b1f3a;outline:none}
+.dz.over{border-color:#60a5fa;border-style:solid;background:#0b2545}
+.dzi{font-size:1.6rem;margin-bottom:6px}
+.dzt{font-size:.82rem;font-weight:700;color:#e2e8f0}
+.dzs{font-size:.68rem;color:#64748b;margin-top:4px;line-height:1.6}
+.fchip{display:flex;align-items:center;gap:8px;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:6px 8px;margin-top:8px;font-size:.74rem}
+.fchip .fn1{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cbd5e1}
+.fchip .fm{color:#64748b;font-size:.66rem;white-space:nowrap}
+.fchip button{background:transparent;border:none;color:#64748b;cursor:pointer;font-size:.8rem;padding:2px 6px;border-radius:4px}
+.fchip button:hover{background:#7f1d1d;color:#fca5a5}
+.fchip input[type=checkbox]{accent-color:#2563eb;cursor:pointer;width:14px;height:14px}
+.itnote{font-size:.7rem;color:#94a3b8;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:8px 10px;margin-top:8px;line-height:1.7}
+.itwarn{font-size:.72rem;color:#fbbf24;background:#1c1400;border:1px solid #854d0e;border-radius:7px;padding:8px 10px;margin-top:8px;line-height:1.7}
+.itwarn.itbad{color:#fca5a5;background:#1f0808;border-color:#991b1b}
+#it-res>.itwarn,#it-save-warn>.itwarn,#it-fx>.itwarn,#it-fx>.itnote{margin:0 0 10px}
+.itprev{margin-top:6px;font-size:.7rem;color:#94a3b8}
+.itprev summary{cursor:pointer}
+.itprev pre{white-space:pre-wrap;word-break:break-word;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px;margin-top:4px;max-height:200px;overflow:auto;color:#cbd5e1;font-family:inherit;line-height:1.6}
+.itmap{border:1px solid #334155;border-radius:8px;padding:8px 10px;margin-bottom:8px;background:#0f172a}
+.itmap>summary{cursor:pointer;font-size:.76rem;color:#e2e8f0;line-height:1.6}
+.mapgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:10px}
+.mapgrid label,.itctl label{display:flex;flex-direction:column;gap:3px;font-size:.66rem;color:#64748b}
+.itsel{background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:5px 6px;font-size:.74rem;font-family:inherit;max-width:100%}
+.itctl{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.tscroll{overflow-x:auto;max-width:100%}
+.dt td.l,.dt th.l{text-align:left}
+.dt td.num{white-space:nowrap}
+.itmain th,.itmain td{padding:6px 8px;vertical-align:top}
+.itmain th .fn{color:#64748b;font-weight:400;margin:0}
+.itmain td:first-child,.itmain th:first-child{min-width:104px}
+.itmain td.fn{color:#64748b;font-size:.64rem}
+.itchk{display:flex;align-items:flex-start;gap:6px;margin-top:10px;font-size:.72rem;color:#cbd5e1;line-height:1.6;cursor:pointer}
+.itchk input{margin-top:3px;accent-color:#2563eb}
+.pill{display:inline-block;font-size:.6rem;font-weight:700;padding:1px 6px;border-radius:4px;margin:1px 2px 1px 0;white-space:nowrap}
+.itadv{margin-top:8px;font-size:.7rem;color:#94a3b8}
+.itadv summary{cursor:pointer}
+.itfx>summary{cursor:pointer;font-size:.74rem;color:#94a3b8;line-height:1.6}
+.itfx .tscroll{margin-top:8px;max-height:260px;overflow-y:auto}
+.abox table{border-collapse:collapse;width:100%;font-size:.74rem;margin:8px 0;display:block;overflow-x:auto}
+.abox th{background:#1e293b;color:#94a3b8;padding:5px 8px;border:1px solid #334155;text-align:left;white-space:nowrap}
+.abox td{padding:5px 8px;border:1px solid #334155;color:#cbd5e1;vertical-align:top}
+.abox blockquote{border-left:3px solid #334155;padding-left:10px;color:#94a3b8;margin:6px 0}
+.abox code{background:#1e293b;padding:1px 4px;border-radius:3px;font-size:.74rem}
+.abox h2{font-size:.95rem;color:#f1f5f9;margin:14px 0 6px;font-weight:700}
+.abox h1{font-size:1rem;color:#f1f5f9;margin:14px 0 6px;font-weight:700}
+@media(max-width:750px){.itmain{font-size:.7rem;min-width:860px}.mapgrid{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -138,6 +188,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <div class="tab-nav">
   <button class="tab-btn hl active" onclick="switchTab('timing',this)">🎯 수입 타이밍</button>
   <button class="tab-btn" onclick="switchTab('market',this)">🌍 수입육 시장동향</button>
+  <button class="tab-btn" onclick="switchTab('items',this)">🧩 품목 전략</button>
   <button class="tab-btn" onclick="switchTab('weekly',this)">📊 주간 보고서</button>
   <button class="tab-btn" onclick="switchTab('monthly',this)">📅 월간 보고서</button>
   <button class="tab-btn" onclick="switchTab('yearly',this)">📈 연간 보고서</button>
@@ -288,6 +339,60 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   </div>
 </div>
 
+<!-- 품목 전략 -->
+<div id="page-items" class="page">
+  <div class="ph">
+    <div><div class="pt">품목 전략</div><div class="ps">우리 회사 수입 실적(수량·단가·환율)과 주간회의 내용을 근거로 올해·내년 추가/축소 품목 판단</div></div>
+    <span class="bdg">엑셀 끌어놓기</span>
+  </div>
+
+  <div class="g2" id="it-drops">
+    <div class="card">
+      <div class="ch"><span class="ct">① 주간회의 엑셀</span><span class="tag tz" id="it-m-stat">미등록</span></div>
+      <div class="dz" id="dz-meeting" tabindex="0" role="button" aria-label="주간회의 엑셀 올리기">
+        <div class="dzi">📋</div>
+        <div class="dzt">주간회의 엑셀을 여기로 끌어다 놓으세요</div>
+        <div class="dzs">또는 눌러서 파일 선택 · 여러 개 가능 (.xlsx .xls .csv)<br>모든 시트의 글을 읽어 AI에 근거 자료로 전달합니다</div>
+        <input type="file" accept=".xlsx,.xlsm,.xls,.csv" multiple hidden>
+      </div>
+      <div id="it-m-msg"></div>
+      <div id="it-m-files"></div>
+      <div id="it-m-prev"></div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">② 우리 회사 수입 실적 엑셀</span><span class="tag tz" id="it-p-stat">미등록</span></div>
+      <div class="dz" id="dz-perf" tabindex="0" role="button" aria-label="수입 실적 엑셀 올리기">
+        <div class="dzi">📊</div>
+        <div class="dzt">작년·올해 수입 실적 엑셀을 여기로 끌어다 놓으세요</div>
+        <div class="dzs">또는 눌러서 파일 선택 · 여러 개 가능 (.xlsx .xls .csv)<br>필요한 열: 품목 · 수량 · 날짜(입항·선적·신고일) · 단가 또는 금액 (선택: 원산지·통화·적용환율)</div>
+        <input type="file" accept=".xlsx,.xlsm,.xls,.csv" multiple hidden>
+      </div>
+      <div id="it-p-msg"></div>
+      <div id="it-p-files"></div>
+    </div>
+  </div>
+
+  <div style="height:14px"></div>
+  <div id="it-save-warn"></div>
+  <div id="it-fx"></div>
+  <div id="it-map"></div>
+  <div id="it-res"></div>
+
+  <div class="card" id="it-ai-card">
+    <div class="ch"><span class="ct" style="font-size:.9rem">AI 품목 판단 — 올해·내년 추가 / 축소 품목</span><span class="amdl" id="it-ai-model">—</span></div>
+    <div id="it-ai-note"></div>
+    <button class="abtn" id="it-ai-btn" data-act="ai-run" style="margin-top:10px" disabled>AI 품목 판단 실행</button>
+    <div class="abox" id="it-ai-box"><p class="aph">엑셀을 올리면 실행할 수 있습니다.</p></div>
+  </div>
+
+  <div class="g2" id="it-charts" style="display:none">
+    <div class="card"><div class="ch"><span class="ct">월별 수입량 (작년 vs 올해)</span><span class="tag tb">톤</span></div><div class="cw"><canvas id="it-ch-qty"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">USD 수입단가 vs 환율</span><span class="tag to">월별</span></div><div class="cw"><canvas id="it-ch-fx"></canvas></div></div>
+  </div>
+
+  <div style="margin:14px 0 24px"><button class="mbtn" data-act="clear-all">올린 자료와 AI 결과 모두 지우기</button></div>
+</div>
+
 <script>
 // ─── 전역 ────────────────────────────────────────────
 const charts = {};
@@ -349,6 +454,7 @@ function switchTab(name, btn) {
     loaded.add(name);
     if (name === 'timing')      loadTiming().catch(e => console.error('timing:', e));
     else if (name === 'market') loadMarket().catch(e => console.error('market:', e));
+    else if (name === 'items')  { try { initItems(); } catch (e) { console.error('items:', e); } }
     else                        loadPeriod(name).catch(e => console.error(name + ':', e));
   }
 }
@@ -1020,6 +1126,1228 @@ window.addEventListener('DOMContentLoaded', () => {
     console.log('KAMIS 캐시 자정 갱신');
   }, msToMidnight);
 });
+</script>
+<script>
+// ==ITEMS-CORE-START==
+// ───────────────────────────────────────────────────────────────
+// 품목 전략 · 계산 로직 (화면과 무관한 순수 함수 — 테스트에서 이 구간만 따로 실행함)
+// ───────────────────────────────────────────────────────────────
+const IT_SYN = {
+  item:   ['품목','품명','제품명','제품','상품명','상품','부위','부위명','품목명','규격','item','product','description'],
+  origin: ['원산지','원산지국','국가','수출국','생산국','공급국','origin','country'],
+  date:   ['수입일','수입일자','수입신고일','신고일','신고일자','선적일','선적일자','입항일','입항일자','입고일','입고일자','도착일','결제일','계약일','발주일','일자','날짜','연월','년월','기준월','수입월','입고월','선적월','계약월','date','eta','etd'],
+  year:   ['연도','년도','년','연','year','기준연도','수입연도'],
+  month:  ['월','month'],
+  qty:    ['수량','중량','수입량','물량','입고량','순중량','총중량','수입중량','입고중량','qty','quantity','weight','netweight'],
+  price:  ['단가','수입단가','매입단가','수입가격','가격','unitprice','price','cif단가','fob단가'],
+  amount: ['금액','수입금액','총액','매입금액','결제금액','신고금액','과세가격','cif금액','fob금액','amount','totalamount'],
+  cur:    ['통화','통화코드','통화단위','currency'],
+  fx:     ['환율','적용환율','결제환율','매입환율','신고환율','exchangerate','fxrate','fx'],
+};
+const IT_ROLES = ['item','qty','price','amount','date','origin','cur','fx','year','month'];
+const IT_EXACT_ONLY = { year: true, month: true };       // '월','연' 같은 한 글자 열 이름은 완전히 같을 때만 인정
+const IT_FX_RANGE = { USD: [700, 2500], EUR: [800, 3000] };   // 회사 적용환율로 인정할 범위(오입력 방지)
+const IT_SUBTOTAL = /(합계|소계|총계|누계)|^(계|total|sum|subtotal|grand ?total)$/i;
+
+function itNorm(s) {
+  return String(s == null ? '' : s).normalize('NFKC').toLowerCase()
+    .replace(/[\s_\-\/\\·.,:;()\[\]{}<>'"`~!@#$%^&*+=|?]/g, '');
+}
+const IT_SYN_N = {};
+Object.keys(IT_SYN).forEach(k => { IT_SYN_N[k] = IT_SYN[k].map(itNorm); });
+
+function itScoreRole(role, h) {
+  let best = 0;
+  for (const s of IT_SYN_N[role]) {
+    if (!s) continue;
+    if (h === s) best = Math.max(best, 100 + s.length);
+    else if (!IT_EXACT_ONLY[role] && s.length >= 2 && h.indexOf(s) >= 0) best = Math.max(best, 10 + s.length);
+  }
+  return best;
+}
+
+// 머리글 문자열 배열 → { 역할: 열번호 }.  열마다 "가장 잘 맞는 역할"을 먼저 정하고, 역할마다 가장 잘 맞는 열을 고른다.
+function itAssignRoles(headers) {
+  const best = headers.map(h => {
+    if (!h) return null;
+    let br = null, bs = 0;
+    for (const role of IT_ROLES) {
+      if (/코드|code|번호/.test(h) && role !== 'cur' && role !== 'fx') continue;
+      const s = itScoreRole(role, h);
+      if (s > bs) { bs = s; br = role; }
+    }
+    return br ? { role: br, score: bs } : null;
+  });
+  const pick = {};
+  best.forEach((b, c) => {
+    if (!b) return;
+    if (!pick[b.role] || b.score > pick[b.role].score) pick[b.role] = { col: c, score: b.score };
+  });
+  const out = {};
+  Object.keys(pick).forEach(r => { out[r] = pick[r].col; });
+  return out;
+}
+
+function itHeadersOfRow(row) {
+  return (row || []).map(c => (typeof c === 'string' ? itNorm(c) : ''));
+}
+
+// 위쪽 30행 중 머리글로 가장 그럴듯한 행을 찾는다
+function itFindHeader(aoa, maxScan) {
+  let best = { hdr: -1, hits: 0, map: {} };
+  const lim = Math.min(aoa.length, maxScan || 30);
+  for (let r = 0; r < lim; r++) {
+    const headers = itHeadersOfRow(aoa[r]);
+    if (headers.filter(Boolean).length < 2) continue;
+    const map = itAssignRoles(headers);
+    const n = Object.keys(map).length;
+    const hits = n + (map.item != null ? 1 : 0) + (map.qty != null ? 1 : 0);
+    if (hits > best.hits) best = { hdr: r, hits, map };
+  }
+  return best;
+}
+
+function itToNum(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  let s = String(v).trim();
+  if (!s) return null;
+  s = s.replace(/[,\s]/g, '').replace(/^(US\$|USD|EUR|KRW|\$|€|₩)/i, '').replace(/(원|USD|EUR|KRW|kg|ton|톤)$/i, '');
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
+  const n = parseFloat(s);
+  return isFinite(n) ? n : null;
+}
+
+function itClean(v) {
+  return String(v == null ? '' : v).normalize('NFKC').replace(/\s+/g, ' ').trim();
+}
+
+function itParseCur(v) {
+  if (v == null || String(v).trim() === '') return null;
+  const s = String(v).trim().toUpperCase();
+  if (/USD|US\$|\$|달러/.test(s)) return 'USD';
+  if (/EUR|€|유로/.test(s)) return 'EUR';
+  if (/KRW|₩|원|^W$/.test(s)) return 'KRW';
+  return 'OTHER';
+}
+
+function itYearHint(s) {
+  const m = String(s == null ? '' : s).match(/(20\d{2})/);
+  return m ? +m[1] : null;
+}
+
+function itParseMonthCell(v) {
+  if (v == null || v === '') return null;
+  const n = typeof v === 'number' ? v : (String(v).trim().match(/^(\d{1,2})\s*월?$/) || [])[1];
+  const m = Math.round(Number(n));
+  return (m >= 1 && m <= 12) ? m : null;
+}
+
+// 날짜 칸 → { y, m }.  엑셀 날짜 일련번호 · 2025-03-15 · 2025.03 · 2025년 3월 · 202503 · 20250315 · (연도 힌트가 있을 때) 3월
+function itParseYm(v, hint) {
+  const ok = (y, m) => (y >= 2000 && y <= 2100 && m >= 1 && m <= 12) ? { y: y, m: m } : null;
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') {
+    if (v > 20000 && v < 80000) { const d = new Date(Math.round((v - 25569) * 86400000)); return ok(d.getUTCFullYear(), d.getUTCMonth() + 1); }
+    if (v === Math.floor(v)) {
+      if (v >= 200001 && v <= 210012) return ok(Math.floor(v / 100), v % 100);
+      if (v >= 20000101 && v <= 21001231) return ok(Math.floor(v / 10000), Math.floor(v / 100) % 100);
+      if (v >= 1 && v <= 12 && hint) return ok(hint, v);
+    }
+    return null;
+  }
+  if (v instanceof Date) return ok(v.getFullYear(), v.getMonth() + 1);
+  const s = String(v).trim();
+  let m = s.match(/(\d{4})\s*[-./년]\s*(\d{1,2})/);
+  if (m) return ok(+m[1], +m[2]);
+  m = s.match(/^(\d{4})(\d{2})(\d{2})?$/);
+  if (m) return ok(+m[1], +m[2]);
+  m = s.match(/^(\d{1,2})\s*월$/);
+  if (m && hint) return ok(hint, +m[1]);
+  return null;
+}
+
+function itDefaultOpts() {
+  return { qtyUnit: 'kg', priceUnit: 'kg', cur: 'USD', priceMode: 'unit', fxPref: 'company' };
+}
+
+// 머리글 글자와 값의 크기로 단위·통화를 "추정" (화면에서 사용자가 바꿀 수 있고, 추정 근거도 보여준다)
+function itDetectOpts(aoa, hdr, map) {
+  const o = itDefaultOpts();
+  const why = [];
+  const hText = c => (c == null ? '' : itNorm((aoa[hdr] || [])[c]));
+  const colNums = c => {
+    const v = [];
+    for (let r = hdr + 1; r < aoa.length && v.length < 500; r++) {
+      const x = itToNum((aoa[r] || [])[c]);
+      if (x != null && x > 0) v.push(x);
+    }
+    return v;
+  };
+  const med = a => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  const qh = hText(map.qty), ph = hText(map.price), ah = hText(map.amount);
+
+  // 통화: 단가/금액 머리글에서
+  const rawHdr = c => (c == null ? '' : String((aoa[hdr] || [])[c] == null ? '' : (aoa[hdr] || [])[c]));
+  const curSrc = rawHdr(map.price) + ' ' + rawHdr(map.amount);
+  const c0 = itParseCur(curSrc);
+  if (c0 && c0 !== 'OTHER') o.cur = c0;
+  if (map.cur != null) why.push('통화는 "' + rawHdr(map.cur).trim() + '" 열의 값을 사용 (빈 칸은 ' + o.cur + ')');
+  else if (c0 && c0 !== 'OTHER') why.push('통화 ' + c0 + ' (머리글)');
+  else why.push('통화 USD (머리글에 표시 없음 — 기본값)');
+
+  // 수량 단위
+  if (/ton|톤|mt/.test(qh)) { o.qtyUnit = 'ton'; why.push('수량 단위 톤 (머리글)'); }
+  else if (/kg|킬로/.test(qh)) { o.qtyUnit = 'kg'; why.push('수량 단위 kg (머리글)'); }
+  else {
+    const m = med(map.qty != null ? colNums(map.qty) : []);
+    if (m != null && m < 500) { o.qtyUnit = 'ton'; why.push('수량 중앙값 ' + m + ' → 톤으로 추정'); }
+    else if (m != null) { o.qtyUnit = 'kg'; why.push('수량 중앙값 ' + m + ' → kg 으로 추정'); }
+  }
+
+  // 단가 방식·단위
+  if (map.price != null) {
+    o.priceMode = 'unit';
+    if (/ton|톤|mt/.test(ph)) { o.priceUnit = 'ton'; why.push('단가 단위 톤당 (머리글)'); }
+    else if (/kg|킬로/.test(ph)) { o.priceUnit = 'kg'; why.push('단가 단위 kg당 (머리글)'); }
+    else {
+      const m = med(colNums(map.price));
+      const big = o.cur === 'KRW' ? 50000 : 100;
+      if (m != null && m > big) { o.priceUnit = 'ton'; why.push('단가 중앙값 ' + m + ' → 톤당으로 추정'); }
+      else if (m != null) { o.priceUnit = 'kg'; why.push('단가 중앙값 ' + m + ' → kg당으로 추정'); }
+    }
+  } else if (map.amount != null) {
+    o.priceMode = 'amount';
+    why.push('단가 열이 없어 금액÷수량으로 계산');
+  }
+  o.why = why;
+  return o;
+}
+
+// 표(aoa) + 설정 → 정리된 행들.  spec = { hdr, map, opts, yearHint, sheet }
+function itNormalize(aoa, spec) {
+  const hdr = spec.hdr, map = spec.map || {}, opts = spec.opts || itDefaultOpts();
+  const stats = { total: 0, used: 0, noItem: 0, noItemQty: 0, subtotal: 0, noQty: 0, noPrice: 0, noDate: 0, badCur: 0, badFx: 0, ymSource: 'none' };
+  const rows = [];
+  if (hdr == null || hdr < 0 || map.item == null || map.qty == null) return { rows: rows, stats: stats };
+
+  const hasDateCols = map.date != null || map.month != null || map.year != null;
+  const fixedYm = !hasDateCols ? itParseYm(spec.sheet, spec.yearHint) : null;   // 날짜 열이 없을 때만 시트 이름(예: 2026-03, 3월)을 연월로 사용
+  stats.ymSource = hasDateCols ? 'column' : (fixedYm ? 'sheet' : 'none');
+
+  const getYm = r => {
+    if (map.date != null) { const ym = itParseYm(r[map.date], spec.yearHint); if (ym) return ym; }
+    if (map.year != null && map.month != null) {
+      let y = itToNum(r[map.year]); if (y != null && y < 100) y += 2000;
+      const m = itParseMonthCell(r[map.month]);
+      if (y && m && y >= 2000 && y <= 2100) return { y: y, m: m };
+    }
+    if (map.month != null && map.year == null && spec.yearHint) {
+      const m = itParseMonthCell(r[map.month]);
+      if (m) return { y: spec.yearHint, m: m };
+    }
+    return hasDateCols ? null : fixedYm;
+  };
+
+  let lastItem = '', lastOrigin = '';
+  for (let i = hdr + 1; i < aoa.length; i++) {
+    const r = aoa[i];
+    if (!r || r.every(c => c == null || c === '')) continue;
+    stats.total++;
+    let item = itClean(r[map.item]);
+    let origin = map.origin != null ? itClean(r[map.origin]) : '';
+    if (item && IT_SUBTOTAL.test(item)) { stats.subtotal++; continue; }
+    const qty = itToNum(r[map.qty]);
+    if (!item) {
+      // 품목 칸이 빈 줄: (사용자가 켰을 때만) 바로 위 줄과 같은 품목으로 보고, 줄 안 어딘가에 '합계'가 적혀 있으면 합계 줄로 보고 제외
+      if (spec.fillItem && lastItem && qty > 0) {
+        if (r.some(c => typeof c === 'string' && IT_SUBTOTAL.test(itClean(c)))) { stats.subtotal++; continue; }
+        item = lastItem; if (!origin) origin = lastOrigin; lastOrigin = origin;      // 원산지가 비어 있으면 바로 위 줄의 원산지
+      } else { stats.noItem++; if (qty > 0) stats.noItemQty++; continue; }
+    } else { lastItem = item; lastOrigin = origin; }
+    if (!(qty > 0)) { stats.noQty++; continue; }
+    const qtyKg = qty * (opts.qtyUnit === 'ton' ? 1000 : 1);
+    const ym = getYm(r);
+    if (!ym) { stats.noDate++; continue; }
+    let cur = opts.cur;
+    if (map.cur != null) {
+      const c = itParseCur(r[map.cur]);
+      if (c === 'OTHER') { stats.badCur++; continue; }
+      if (c) cur = c;
+    }
+    let p;
+    if (opts.priceMode === 'amount') {
+      const a = map.amount != null ? itToNum(r[map.amount]) : null;
+      if (!(a > 0)) { stats.noPrice++; continue; }
+      p = a / qtyKg;
+    } else {
+      const u = map.price != null ? itToNum(r[map.price]) : null;
+      if (!(u > 0)) { stats.noPrice++; continue; }
+      p = u / (opts.priceUnit === 'ton' ? 1000 : 1);
+    }
+    let f = null;
+    if (map.fx != null && cur !== 'KRW') {
+      const x = itToNum(r[map.fx]);
+      const rg = IT_FX_RANGE[cur];
+      if (x != null && rg && x >= rg[0] && x <= rg[1]) f = x;
+      else if (x != null) stats.badFx++;
+    }
+    rows.push({ item: item, origin: origin, y: ym.y, m: ym.m, q: qtyKg, p: p, c: cur, f: f });
+    stats.used++;
+  }
+  return { rows: rows, stats: stats };
+}
+
+// 환율 월평균 조회. fx = { usd:{map:{'2025-01':1456.2}}, eur:{...} }
+function itFxLookup(fx, cur, y, m) {
+  const pair = cur === 'USD' ? 'usd' : (cur === 'EUR' ? 'eur' : null);
+  if (!pair || !fx || !fx[pair] || !fx[pair].map) return null;
+  const v = fx[pair].map[y + '-' + String(m).padStart(2, '0')];
+  return v == null ? null : v;
+}
+
+function itFlags(g) {
+  const f = [];
+  const q0 = g.q[0], q1 = g.q[1];
+  if (q0 <= 0 && q1 > 0) f.push('신규');
+  else if (q0 > 0 && q1 <= 0) f.push('미수입');
+  else if (q0 > 0 && q1 > 0) {
+    const dq = (q1 - q0) / q0;
+    if (dq >= 0.2) f.push('물량↑'); else if (dq <= -0.2) f.push('물량↓');
+    const k0 = g.k[0], k1 = g.k[1];
+    if (k0 > 0 && k1 > 0) {
+      const dk = (k1 - k0) / k0;
+      if (dk >= 0.08) f.push('원가↑'); else if (dk <= -0.08) f.push('원가↓');
+      if (g.fxKg != null && Math.abs(g.fxKg) / k0 >= 0.05) f.push(g.fxKg > 0 ? '환율부담' : '환율이득');
+    }
+  }
+  const mm = Math.max(g.mon[0].size, g.mon[1].size);
+  if (mm > 0 && mm < 3) f.push('표본적음');
+  return f;
+}
+
+// 핵심 집계.  작년(y0)·올해(y1) 같은 기간(1~cutoff월)을 비교하고, 원화 매입비용 변화를 물량·가격·환율 효과로 정확히 나눈다.
+//   매입액 증감 = 물량효과 + 가격효과 + 환율효과
+//   물량·구성효과 = (올해수량-작년수량) × 작년외화단가 × 작년환율
+//   가격효과     = 올해수량 × (올해외화단가-작년외화단가) × 작년환율
+//   환율효과     = 올해수량 × 올해외화단가 × (올해환율-작년환율)
+// 같은 품목이 통화(USD/EUR)별로 나뉘면 통화별로 따로 계산해 합산한다.
+function itAggregate(rows, fx, sel) {
+  const y0 = sel.y0, y1 = sel.y1, cutoff = sel.cutoff, level = sel.level, preferCompany = sel.fxPref !== 'monthly';
+  const ex = { noFx: 0 };
+  let used = 0;
+  const keyName = r => level === 'origin' ? (r.item + ' · ' + (r.origin || '원산지 미기재')) : r.item;
+  const units = new Map();
+  for (const r of rows) {
+    if ((r.y !== y0 && r.y !== y1) || r.m > cutoff) continue;
+    let f = 1;
+    if (r.c !== 'KRW') {
+      f = (preferCompany && r.f) ? r.f : itFxLookup(fx, r.c, r.y, r.m);
+      if (f == null) { ex.noFx++; continue; }
+    }
+    const name = keyName(r);
+    const gk = name.toLowerCase().replace(/\s+/g, '');
+    const uk = gk + '\u0001' + r.c;
+    let u = units.get(uk);
+    if (!u) { u = { gk: gk, name: name, cur: r.c, q: [0, 0], fc: [0, 0], kc: [0, 0], mon: [new Set(), new Set()] }; units.set(uk, u); }
+    const s = r.y === y1 ? 1 : 0;
+    const fcost = r.q * r.p;
+    u.q[s] += r.q; u.fc[s] += fcost; u.kc[s] += fcost * f; u.mon[s].add(r.m);
+    used++;
+  }
+  const groups = new Map();
+  for (const u of units.values()) {
+    let g = groups.get(u.gk);
+    if (!g) { g = { key: u.gk, name: u.name, curs: new Set(), q: [0, 0], cost: [0, 0], mon: [new Set(), new Set()], vol: 0, pri: 0, fxe: 0, units: [] }; groups.set(u.gk, g); }
+    g.curs.add(u.cur);
+    const q0 = u.q[0], q1 = u.q[1];
+    if (q0 > 0 && q1 > 0) {
+      const P0 = u.fc[0] / q0, P1 = u.fc[1] / q1, F0 = u.kc[0] / u.fc[0], F1 = u.kc[1] / u.fc[1];
+      g.vol += (q1 - q0) * P0 * F0;
+      g.pri += q1 * (P1 - P0) * F0;
+      g.fxe += q1 * P1 * (F1 - F0);
+    } else if (q1 > 0) g.vol += u.kc[1];
+    else if (q0 > 0) g.vol -= u.kc[0];
+    for (let s = 0; s < 2; s++) { g.q[s] += u.q[s]; g.cost[s] += u.kc[s]; u.mon[s].forEach(m => g.mon[s].add(m)); }
+    g.units.push(u);
+  }
+  const T = { q: [0, 0], cost: [0, 0], vol: 0, pri: 0, fxe: 0, usdFc: [0, 0], usdKc: [0, 0] };
+  const list = [];
+  for (const g of groups.values()) {
+    g.k = [g.q[0] > 0 ? g.cost[0] / g.q[0] : null, g.q[1] > 0 ? g.cost[1] / g.q[1] : null];
+    if (g.curs.size === 1) {
+      const u = g.units[0];
+      g.cur = u.cur;
+      g.P = [u.q[0] > 0 ? u.fc[0] / u.q[0] : null, u.q[1] > 0 ? u.fc[1] / u.q[1] : null];
+      g.F = [u.fc[0] > 0 ? u.kc[0] / u.fc[0] : null, u.fc[1] > 0 ? u.kc[1] / u.fc[1] : null];
+    } else { g.cur = '혼합'; g.P = [null, null]; g.F = [null, null]; }
+    const both = g.q[0] > 0 && g.q[1] > 0;                 // 작년·올해 모두 수입한 품목만 가격·환율 효과를 말할 수 있음 (신규/미수입은 해당 없음)
+    g.fxKg = both ? g.fxe / g.q[1] : null;
+    g.priKg = both ? g.pri / g.q[1] : null;
+    g.flags = itFlags(g);
+    for (let s = 0; s < 2; s++) { T.q[s] += g.q[s]; T.cost[s] += g.cost[s]; }
+    T.vol += g.vol; T.pri += g.pri; T.fxe += g.fxe;
+    for (const u of g.units) if (u.cur === 'USD') for (let s = 0; s < 2; s++) { T.usdFc[s] += u.fc[s]; T.usdKc[s] += u.kc[s]; }
+    list.push(g);
+  }
+  list.sort((a, b) => (b.cost[0] + b.cost[1]) - (a.cost[0] + a.cost[1]));
+  T.k = [T.q[0] > 0 ? T.cost[0] / T.q[0] : null, T.q[1] > 0 ? T.cost[1] / T.q[1] : null];
+  T.usdF = [T.usdFc[0] > 0 ? T.usdKc[0] / T.usdFc[0] : null, T.usdFc[1] > 0 ? T.usdKc[1] / T.usdFc[1] : null];
+  return { list: list, totals: T, excluded: ex, used: used };
+}
+
+// 최근 6개월(y1-cutoff 까지) 품목별 수량 — 추세 확인용
+function itRecent(rows, level, y1, cutoff) {
+  const labels = [];
+  let y = y1, m = cutoff;
+  for (let i = 0; i < 6; i++) { labels.unshift(y + '-' + String(m).padStart(2, '0')); m--; if (m < 1) { m = 12; y--; } }
+  const idx = {}; labels.forEach((l, i) => { idx[l] = i; });
+  const byKey = new Map();
+  for (const r of rows) {
+    const i = idx[r.y + '-' + String(r.m).padStart(2, '0')];
+    if (i == null) continue;
+    const name = level === 'origin' ? (r.item + ' · ' + (r.origin || '원산지 미기재')) : r.item;
+    const gk = name.toLowerCase().replace(/\s+/g, '');
+    let a = byKey.get(gk); if (!a) { a = [0, 0, 0, 0, 0, 0]; byKey.set(gk, a); }
+    a[i] += r.q;
+  }
+  return { labels: labels, byKey: byKey };
+}
+
+// 월별 수량(작년·올해)과 USD 거래 평균 단가(수량 가중)
+function itMonthly(rows, fx, y0, y1) {
+  const qty = {}; qty[y0] = new Array(12).fill(0); qty[y1] = new Array(12).fill(0);
+  const usd = new Map();
+  let lastM1 = 0;
+  for (const r of rows) {
+    if (r.y !== y0 && r.y !== y1) continue;
+    qty[r.y][r.m - 1] += r.q;
+    if (r.y === y1 && r.m > lastM1) lastM1 = r.m;
+    if (r.c === 'USD') {
+      const k = r.y + '-' + String(r.m).padStart(2, '0');
+      const o = usd.get(k) || { q: 0, fc: 0 };
+      o.q += r.q; o.fc += r.q * r.p; usd.set(k, o);
+    }
+  }
+  const series = [];
+  for (const y of [y0, y1]) {
+    for (let m = 1; m <= 12; m++) {
+      if (y === y1 && m > Math.max(lastM1, 1)) break;
+      const k = y + '-' + String(m).padStart(2, '0');
+      const o = usd.get(k);
+      series.push({ ym: k, price: o ? o.fc / o.q : null, fx: itFxLookup(fx, 'USD', y, m) });
+    }
+  }
+  return { qty: qty, series: series, lastM1: lastM1 };
+}
+
+// 기본 비교 연도·월: 가장 최근 연도 vs 그 전년, 월은 데이터가 있는 마지막 달(진행 중인 달이면 직전 달)
+function itDefaultSel(rows, now) {
+  const years = Array.from(new Set(rows.map(r => r.y))).sort((a, b) => a - b);
+  const y1 = years[years.length - 1];
+  const last = Math.max.apply(null, rows.filter(r => r.y === y1).map(r => r.m));
+  let cutoff = last;
+  if (now && y1 === now.y && last === now.m && now.d < 28 && last > 1) cutoff = last - 1;
+  return { y0: y1 - 1, y1: y1, cutoff: cutoff, years: years };
+}
+
+function itColLetter(i) {
+  let s = ''; i = i + 1;
+  while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); }
+  return s;
+}
+
+// 엑셀(배열) → 회의 텍스트
+function itSheetToText(aoa, maxLines) {
+  const lines = [];
+  for (const row of aoa) {
+    const cells = (row || []).map(c => String(c == null ? '' : c).replace(/\s+/g, ' ').trim()).filter(Boolean);
+    if (cells.length) lines.push(cells.join(' | '));
+    if (lines.length >= (maxLines || 800)) { lines.push('…(행 생략)'); break; }
+  }
+  return lines.join('\n');
+}
+
+const IT_MEETING_FILE_CAP = 10000;
+const IT_MEETING_TOTAL_CAP = 18000;
+// AI 에 보낼 회의 텍스트: 체크된 파일만, 길이 제한을 넘으면 오래된 파일부터 제외
+function itMeetingForAI(files) {
+  const inc = files.filter(f => f.include && f.text);
+  let total = 0;
+  const used = [], dropped = [];
+  for (let i = inc.length - 1; i >= 0; i--) {
+    const block = '### 파일: ' + inc[i].name + '\n' + inc[i].text;
+    if (total + block.length > IT_MEETING_TOTAL_CAP && used.length) { dropped.push(inc[i].name); continue; }
+    used.unshift(block); total += block.length;
+  }
+  return { text: used.join('\n\n'), used: used.length, dropped: dropped };
+}
+
+// 단위·통화를 잘못 골랐을 때 눈에 띄게 경고 (냉동 돼지고기 수입단가는 대략 1~6 USD/kg 수준)
+function itSanity(rows, sel) {
+  const warns = [];
+  const by = { USD: [], EUR: [], KRW: [] };
+  for (const r of rows) if ((r.y === sel.y0 || r.y === sel.y1) && by[r.c]) by[r.c].push(r.p);
+  const med = a => { const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  [['USD', 0.5, 15], ['EUR', 0.5, 15], ['KRW', 1500, 30000]].forEach(c => {
+    const arr = by[c[0]];
+    if (!arr.length) return;
+    const m = med(arr);
+    if (m < c[1] || m > c[2]) warns.push(c[0] + ' 단가 중앙값이 ' + (Math.round(m * 1000) / 1000) + '/kg 로 일반적인 범위(' + c[1] + '~' + c[2] + ')를 벗어납니다. 수량 단위(kg/톤)·단가 단위·통화 선택을 확인하세요.');
+  });
+  return warns;
+}
+
+// 여러 시트·파일에 "똑같은 행"(같은 달·품목·원산지·수량·단가)이 있으면 같은 선적이 이중으로 집계됐을 수 있어 알려준다.
+// (시트가 나라별·연도별로 나뉘어 같은 달이 겹치는 것만으로는 경고하지 않음)
+function itDupRows(tables, sel) {
+  const seen = new Map();
+  let n = 0;
+  const months = new Set();
+  tables.forEach(t => {
+    t.rows.forEach(r => {
+      if ((r.y !== sel.y0 && r.y !== sel.y1) || r.m > sel.cutoff) return;
+      const sig = [r.item.toLowerCase().replace(/\s+/g, ''), (r.origin || '').toLowerCase(), r.y, r.m, r.q, r.p, r.c].join('|');
+      const first = seen.get(sig);
+      if (first == null) seen.set(sig, t.id);
+      else if (first !== t.id) { n++; months.add(r.y + '-' + String(r.m).padStart(2, '0')); }
+    });
+  });
+  return { n: n, months: Array.from(months).sort() };
+}
+
+// AI 로 보낼 집계표 (화면에 보이는 표 그대로). 매입액 상위 40개
+function itBuildAiPerf(res, sel, extra) {
+  const rec = extra.recent;
+  const groups = res.list.slice(0, 40).map(g => ({
+    name: g.name, cur: g.cur,
+    q0: g.q[0], q1: g.q[1], p0: g.P[0], p1: g.P[1], f0: g.F[0], f1: g.F[1],
+    k0: g.k[0], k1: g.k[1], c0: g.cost[0], c1: g.cost[1],
+    fxKg: g.fxKg, priKg: g.priKg, m0: g.mon[0].size, m1: g.mon[1].size,
+    flags: g.flags, recent: (rec.byKey.get(g.key) || [0, 0, 0, 0, 0, 0]),
+  }));
+  const T = res.totals;
+  return {
+    y0: sel.y0, y1: sel.y1, cutoff: sel.cutoff, level: sel.level, fxPref: sel.fxPref,
+    totals: { q0: T.q[0], q1: T.q[1], c0: T.cost[0], c1: T.cost[1], k0: T.k[0], k1: T.k[1], vol: T.vol, pri: T.pri, fxe: T.fxe, usdF0: T.usdF[0], usdF1: T.usdF[1] },
+    groups: groups, groupsTotal: res.list.length, recentLabels: rec.labels,
+    quality: extra.quality,
+  };
+}
+// ==ITEMS-CORE-END==
+
+// ───────────────────────────────────────────────────────────────
+// 품목 전략 · 화면 (DOM 처리)
+// ───────────────────────────────────────────────────────────────
+const IT_LS = 'suan_items_v1';
+const IT_XLSX_URLS = [
+  'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+];
+const IT = {
+  inited: false, seq: 1,
+  meeting: [],      // { id, name, text, chars, truncated, include }
+  tables: [],       // { id, file, sheet, aoa|null, hdr, map, opts, yearHint, rows, stats }
+  sel: { y0: null, y1: null, cutoff: null, years: [], level: 'item', fxPref: 'company', auto: true, showAll: false },
+  fx: null, fxState: 'idle', fxErr: '', fxFrom: null, fxP: null,
+  res: null, mon: null, recent: null,
+  ai: null, aiBusy: false, aiErr: '',
+  open: {}, msg: { meeting: null, perf: null }, saveWarn: '',
+};
+
+function itEl(id) { return document.getElementById(id); }
+function itEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function itAllRows() { return IT.tables.reduce((a, t) => a.concat(t.rows), []); }
+function itActive() { const p = itEl('page-items'); return !!(p && p.classList.contains('active')); }
+
+// AI 가 만든 마크다운 → 안전한 HTML (스크립트·이벤트 속성·위험한 링크 제거)
+function itSafeHtml(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  t.content.querySelectorAll('script,style,iframe,object,embed,link,meta,base,form,input,button,textarea,select,svg,math,img,picture,source,video,audio,canvas').forEach(n => n.remove());   // 그림·미디어도 제거(외부 주소로 자료가 새는 것을 방지)
+  t.content.querySelectorAll('*').forEach(n => {
+    Array.from(n.attributes).forEach(a => {
+      const nm = a.name.toLowerCase(), v = a.value.replace(/[\s\u0000-\u001f]/g, '').toLowerCase();
+      if (nm.indexOf('on') === 0 || nm === 'style' || ((nm === 'href' || nm === 'src' || nm === 'xlink:href' || nm === 'action' || nm === 'formaction') && /^(javascript|data|vbscript):/.test(v))) n.removeAttribute(a.name);
+    });
+    if (n.tagName === 'A') { n.setAttribute('target', '_blank'); n.setAttribute('rel', 'noopener noreferrer'); }
+  });
+  return t.innerHTML;
+}
+
+// 표시 형식
+const itT   = kg => kg == null ? '-' : (kg / 1000).toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const itW   = n => n == null ? '-' : Math.round(n).toLocaleString('ko-KR');
+const itD2  = n => n == null ? '-' : Number(n).toFixed(2);
+const itSW  = n => n == null ? '-' : (n > 0 ? '+' : '') + Math.round(n).toLocaleString('ko-KR');
+function itBig(n) {
+  if (n == null) return '-';
+  const a = Math.abs(n), s = n < 0 ? '-' : '';
+  return a >= 1e8 ? s + (a / 1e8).toFixed(2) + '억원' : s + Math.round(a / 1e4).toLocaleString('ko-KR') + '만원';
+}
+const itSBig = n => (n > 0 ? '+' : '') + itBig(n);
+
+// 브라우저 저장소 (실패해도 동작에는 영향 없음)
+function itLsGet(key, ttl) {
+  try { const raw = localStorage.getItem(key); if (!raw) return null; const o = JSON.parse(raw); if (ttl && Date.now() - o.ts > ttl) return null; return o.data; } catch (e) { return null; }
+}
+function itLsSet(key, data) { try { localStorage.setItem(key, JSON.stringify({ data: data, ts: Date.now() })); return true; } catch (e) { return false; } }
+
+// ── 엑셀 라이브러리(SheetJS) 지연 로딩: 이 탭에서 파일을 다룰 때만 받는다 ──
+let _itXlsxP = null;
+function itLoadXlsx() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (_itXlsxP) return _itXlsxP;
+  _itXlsxP = new Promise((resolve, reject) => {
+    let i = 0;
+    const next = () => {
+      if (i >= IT_XLSX_URLS.length) { _itXlsxP = null; reject(new Error('엑셀 읽기 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.')); return; }
+      const s = document.createElement('script');
+      s.src = IT_XLSX_URLS[i++]; s.async = true;
+      s.onload = () => (window.XLSX ? resolve(window.XLSX) : next());
+      s.onerror = () => { s.remove(); next(); };
+      document.head.appendChild(s);
+    };
+    next();
+  });
+  return _itXlsxP;
+}
+
+// ── 환율 월평균 ──
+function itPrepFx(j) {
+  const mk = p => {
+    if (!p) return null;
+    const map = {};
+    (p.months || []).forEach(m => { map[m.ym] = m.avg; });
+    return { source: p.source, lastDate: p.lastDate, days: p.days, months: p.months || [], map: map };
+  };
+  return { from: j.from, asOf: j.asOf, usd: mk(j.usd), eur: mk(j.eur), errors: j.errors || {} };
+}
+function itEnsureFx(fromYm) {
+  // '요청한 시작월'을 기준으로 이미 충분히 받았는지 판단한다 (서버가 시작월을 조정해 돌려줘도 같은 요청을 되풀이하지 않도록)
+  if (IT.fxFrom != null && IT.fxFrom <= fromYm) {
+    if (IT.fxP) return IT.fxP;                                                       // 받는 중
+    if (IT.fxState === 'ok' && IT.fx) return Promise.resolve(IT.fx);                 // 이미 받음
+    if (IT.fxState === 'err') return Promise.resolve(null);                          // 실패 후 자동 재시도 금지(무한 반복 방지) — '다시 시도' 버튼이나 새 파일 업로드로만
+  }
+  IT.fxFrom = fromYm; IT.fxState = 'loading'; IT.fxErr = '';
+  const ck = 'suan_it_fx_' + fromYm;
+  const cached = itLsGet(ck, 6 * 3600 * 1000);
+  if (cached && cached.ok) { IT.fx = itPrepFx(cached); IT.fxState = 'ok'; return Promise.resolve(IT.fx); }
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 100000);
+  IT.fxP = fetch('/api/fx-monthly?from=' + fromYm, { signal: ctrl.signal })
+    .then(r => r.text().then(t => {
+      let j = null; try { j = JSON.parse(t); } catch (e) {}
+      if (!r.ok || !j || !j.ok) throw new Error((j && j.error ? j.error + (j.errors ? ' ' + JSON.stringify(j.errors) : '') : 'HTTP ' + r.status));
+      return j;
+    }))
+    .then(j => { IT.fx = itPrepFx(j); IT.fxState = 'ok'; itLsSet(ck, j); })
+    .catch(e => { IT.fxState = 'err'; IT.fxErr = e.name === 'AbortError' ? '응답 시간 초과' : e.message; })
+    .finally(() => { clearTimeout(to); IT.fxP = null; itRecompute(); itRenderAll(); });
+  return IT.fxP;
+}
+
+// ── 저장 / 복원 ──
+function itSave() {
+  IT.saveWarn = '';
+  const total = IT.tables.reduce((s, t) => s + t.rows.length, 0);
+  const data = {
+    v: 1, seq: IT.seq, meeting: IT.meeting, ai: IT.ai,
+    sel: { level: IT.sel.level, fxPref: IT.sel.fxPref, auto: IT.sel.auto, y0: IT.sel.y0, y1: IT.sel.y1, cutoff: IT.sel.cutoff },
+    tables: total > 30000 ? [] : IT.tables.map(t => ({
+      id: t.id, file: t.file, sheet: t.sheet, hdr: t.hdr, map: t.map, opts: t.opts, yearHint: t.yearHint, stats: t.stats,
+      rows: t.rows.map(r => [r.item, r.origin, r.y, r.m, r.q, r.p, r.c, r.f]),
+    })),
+  };
+  if (total > 30000) IT.saveWarn = '행이 3만 건을 넘어 수입 실적은 브라우저에 저장하지 않았습니다 (새로고침하면 다시 올려야 합니다).';
+  try { localStorage.setItem(IT_LS, JSON.stringify(data)); }
+  catch (e) { IT.saveWarn = '브라우저 저장 공간이 부족해 이번 자료는 저장하지 못했습니다 (새로고침하면 다시 올려야 합니다).'; }
+}
+function itLoadSaved() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(IT_LS) || 'null'); } catch (e) { d = null; }
+  if (!d || d.v !== 1) return;
+  IT.seq = d.seq || 1;
+  IT.meeting = Array.isArray(d.meeting) ? d.meeting : [];
+  IT.ai = d.ai || null;
+  (d.tables || []).forEach(t => {
+    IT.tables.push({
+      id: t.id, file: t.file, sheet: t.sheet, aoa: null, hdr: t.hdr, map: t.map || {}, opts: t.opts || itDefaultOpts(), yearHint: t.yearHint, stats: t.stats || {},
+      rows: (t.rows || []).map(a => ({ item: a[0], origin: a[1], y: a[2], m: a[3], q: a[4], p: a[5], c: a[6], f: a[7] })),
+    });
+  });
+  if (d.sel) {
+    IT.sel.level = d.sel.level === 'origin' ? 'origin' : 'item';
+    IT.sel.fxPref = d.sel.fxPref === 'monthly' ? 'monthly' : 'company';
+    IT.sel.auto = d.sel.auto !== false;
+    if (!IT.sel.auto) { IT.sel.y0 = d.sel.y0; IT.sel.y1 = d.sel.y1; IT.sel.cutoff = d.sel.cutoff; }
+  }
+}
+
+// ── 파일 읽기 ──
+function itSetMsg(kind, text, level) {
+  IT.msg[kind] = text ? { text: text, level: level || 'info' } : null;
+  const el = itEl(kind === 'meeting' ? 'it-m-msg' : 'it-p-msg');
+  if (!el) return;
+  const m = IT.msg[kind];
+  el.innerHTML = m ? '<div class="' + (m.level === 'bad' ? 'itwarn itbad' : (m.level === 'warn' ? 'itwarn' : 'itnote')) + '">' + itEsc(m.text) + '</div>' : '';
+}
+async function itReadWorkbook(XLSX, file) {
+  const buf = await file.arrayBuffer();
+  if (/\.csv$/i.test(file.name)) {
+    let text;
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+    catch (e) { try { text = new TextDecoder('euc-kr').decode(buf); } catch (e2) { text = new TextDecoder('utf-8').decode(buf); } }
+    return XLSX.read(text, { type: 'string', dateNF: 'yyyy-mm-dd' });
+  }
+  return XLSX.read(new Uint8Array(buf), { type: 'array', dateNF: 'yyyy-mm-dd' });
+}
+function itIsHidden(wb, i) {
+  const s = wb.Workbook && wb.Workbook.Sheets && wb.Workbook.Sheets[i];
+  return !!(s && s.Hidden);
+}
+const IT_MAX_ROWS = 100000;
+// 세로로 합쳐진 칸(품목·원산지를 위 칸 하나에만 적어 둔 경우)은 아래 칸에도 같은 값을 채운다 — 가로로만 합쳐진 제목 칸은 건드리지 않음
+function itUnmergeDown(XLSX, ws) {
+  (ws['!merges'] || []).forEach(m => {
+    if (!m || !m.s || !m.e || m.e.r <= m.s.r) return;
+    const tl = ws[XLSX.utils.encode_cell(m.s)];
+    if (!tl || tl.v == null) return;
+    for (let r = m.s.r; r <= Math.min(m.e.r, m.s.r + 5000); r++) {
+      for (let c = m.s.c; c <= m.e.c; c++) {
+        if (r === m.s.r && c === m.s.c) continue;
+        const a = XLSX.utils.encode_cell({ r: r, c: c });
+        if (!ws[a]) ws[a] = { t: tl.t, v: tl.v, w: tl.w, z: tl.z };
+      }
+    }
+  });
+}
+// 실제 값이 있는 칸까지만 범위로 잡고 A1 기준으로 맞춘다 (서식만 칠해진 빈 칸 때문에 범위가 수백만 행으로 잡히는 파일 방지, 엑셀 행 번호와 일치)
+function itTrimSheet(XLSX, ws) {
+  let maxR = -1, maxC = -1;
+  for (const k in ws) {
+    if (k.charCodeAt(0) === 33) continue;                 // '!ref', '!merges' 같은 메타 항목
+    const a = XLSX.utils.decode_cell(k);
+    if (a.r > maxR) maxR = a.r;
+    if (a.c > maxC) maxC = a.c;
+  }
+  if (maxR < 0) { delete ws['!ref']; return { rows: 0, cut: false }; }
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.min(maxR, IT_MAX_ROWS - 1), c: Math.min(maxC, 255) } });
+  return { rows: maxR + 1, cut: maxR >= IT_MAX_ROWS };
+}
+function itAddMeeting(XLSX, file, wb) {
+  const sheets = [];
+  let hidden = 0;
+  wb.SheetNames.forEach((sn, i) => {
+    if (itIsHidden(wb, i)) { hidden++; return; }
+    const ws = wb.Sheets[sn];
+    if (!ws) return;
+    itUnmergeDown(XLSX, ws);
+    if (!itTrimSheet(XLSX, ws).rows) return;
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: false });
+    const txt = itSheetToText(aoa);
+    if (txt) sheets.push({ name: sn, txt: txt });
+  });
+  const lenOf = x => x.name.length + 12 + x.txt.length;
+  const full = sheets.reduce((n, x) => n + lenOf(x), 0);
+  // 길이 제한을 넘으면 앞쪽 시트만 남기지 않고, 시트마다 앞부분을 고르게 남긴다 (여러 주차가 시트로 나뉜 파일 대비)
+  const per = full > IT_MEETING_FILE_CAP ? Math.max(200, Math.floor(IT_MEETING_FILE_CAP / sheets.length) - 30) : Infinity;
+  let text = sheets.map(x => '[시트: ' + x.name + ']\n' + (x.txt.length > per ? x.txt.slice(0, per) + '\n…(이하 생략)' : x.txt)).join('\n\n').trim();
+  let truncated = full > IT_MEETING_FILE_CAP;
+  if (text.length > IT_MEETING_FILE_CAP) { text = text.slice(0, IT_MEETING_FILE_CAP) + '\n…(이하 생략)'; truncated = true; }
+  IT.meeting.push({ id: IT.seq++, name: file.name, text: text, chars: full, truncated: truncated, include: true, hidden: hidden });
+}
+function itMakeTable(fileName, sheetName, aoa) {
+  const hd = itFindHeader(aoa);
+  // 머리글을 못 찾아도 1행을 머리글로 가정해 두면, 사용자가 열을 직접 고르는 즉시 동작한다
+  const t = { id: 0, file: fileName, sheet: sheetName, aoa: aoa, hdr: hd.hdr >= 0 ? hd.hdr : 0, map: hd.hdr >= 0 ? hd.map : {}, yearHint: itYearHint(sheetName) || itYearHint(fileName), opts: null, optsTouched: false, rows: [], stats: null };
+  t.opts = itDetectOpts(aoa, t.hdr, t.map);
+  itRebuild(t);
+  return t;
+}
+function itRebuild(t) {
+  const r = itNormalize(t.aoa, t);
+  t.rows = r.rows; t.stats = r.stats;
+}
+function itAddPerf(XLSX, file, wb) {
+  const cut = [];
+  wb.SheetNames.forEach((sn, i) => {
+    if (itIsHidden(wb, i)) return;
+    const ws = wb.Sheets[sn];
+    if (!ws) return;
+    itUnmergeDown(XLSX, ws);
+    const tr = itTrimSheet(XLSX, ws);
+    if (!tr.rows) return;
+    if (tr.cut) cut.push(sn);
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true });
+    if (!aoa.length) return;
+    const t = itMakeTable(file.name, sn, aoa);
+    t.id = IT.seq++;
+    IT.tables.push(t);
+  });
+  return cut;
+}
+function itReadErr(e) {
+  const m = String((e && e.message) || e);
+  if (/password|encrypt|암호/i.test(m)) return '암호가 걸린 파일입니다. 암호를 해제한 뒤 다시 올려 주세요.';
+  return '파일을 읽을 수 없습니다 (' + m + ')';
+}
+async function itHandleFiles(kind, fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const isXl = f => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name);
+  const bad = files.filter(f => !isXl(f)), good = files.filter(isXl);
+  if (!good.length) { itSetMsg(kind, '엑셀(.xlsx .xls .csv) 파일만 올릴 수 있습니다: ' + bad.map(f => f.name).join(', '), 'warn'); return; }
+  itSetMsg(kind, '⏳ 엑셀을 읽는 중입니다…', 'info');
+  let XLSX;
+  try { XLSX = await itLoadXlsx(); } catch (e) { itSetMsg(kind, e.message, 'bad'); return; }
+  const errs = [], infos = [];
+  const before = { m: IT.meeting.length, t: IT.tables.length };
+  for (const f of good) {
+    try {
+      const wb = await itReadWorkbook(XLSX, f);
+      if (kind === 'meeting') itAddMeeting(XLSX, f, wb);
+      else { const cut = itAddPerf(XLSX, f, wb); if (cut.length) infos.push(f.name + ': ' + cut.join(', ') + ' 시트는 ' + IT_MAX_ROWS.toLocaleString('ko-KR') + '행까지만 읽었습니다'); }
+    } catch (e) { errs.push(f.name + ': ' + itReadErr(e)); }
+  }
+  const added = kind === 'meeting' ? IT.meeting.length - before.m : IT.tables.length - before.t;
+  const notes = [];
+  if (bad.length) notes.push('엑셀이 아닌 파일은 제외했습니다: ' + bad.map(f => f.name).join(', '));
+  if (errs.length) notes.push(errs.join(' / '));
+  if (infos.length) notes.push(infos.join(' / '));
+  if (!errs.length && !added) notes.push('읽을 수 있는 시트가 없습니다 (빈 파일이거나 숨김 시트만 있습니다).');
+  itSetMsg(kind, notes.join(' · '), errs.length || !added ? 'bad' : 'warn');
+  if (kind === 'perf' && added && IT.fxState === 'err') { IT.fxState = 'idle'; IT.fxFrom = null; }   // 새로 올리면 환율을 한 번 다시 시도
+  itAfterChange();
+}
+function itSetupDrop(zoneId, kind) {
+  const z = itEl(zoneId), input = z.querySelector('input[type=file]');
+  ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove('over'); }));
+  z.addEventListener('drop', e => { e.stopPropagation(); if (e.dataTransfer && e.dataTransfer.files) itHandleFiles(kind, e.dataTransfer.files); });
+  z.addEventListener('click', e => { if (e.target === input) return; input.click(); });
+  z.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('change', () => { itHandleFiles(kind, input.files); input.value = ''; });
+}
+
+// ── 변경 후 공통 처리 ──
+function itAfterChange() { itSave(); itRecompute(); itRenderAll(); }
+function itRecompute() {
+  const rows = itAllRows();
+  IT.res = null; IT.mon = null; IT.recent = null;
+  if (!rows.length) return;
+  const now = new Date();
+  const d = itDefaultSel(rows, { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() });
+  IT.sel.years = d.years;
+  if (IT.sel.auto || IT.sel.y1 == null || d.years.indexOf(IT.sel.y1) < 0) { IT.sel.y0 = d.y0; IT.sel.y1 = d.y1; IT.sel.cutoff = d.cutoff; }
+  const needFx = rows.some(r => r.c !== 'KRW');
+  if (needFx) itEnsureFx(IT.sel.y0 + '-01');
+  if (needFx && !IT.fx && IT.fxState === 'loading') return;    // 환율이 도착하면 다시 계산됨
+  IT.res = itAggregate(rows, IT.fx, IT.sel);
+  IT.recent = itRecent(rows, IT.sel.level, IT.sel.y1, IT.sel.cutoff);
+  IT.mon = itMonthly(rows, IT.fx, IT.sel.y0, IT.sel.y1);
+}
+function itRenderAll() {
+  itRenderFiles(); itRenderFx(); itRenderMap(); itRenderResult(); itRenderAi(); itRenderCharts();
+  const w = itEl('it-save-warn'); if (w) w.innerHTML = IT.saveWarn ? '<div class="itwarn">' + itEsc(IT.saveWarn) + '</div>' : '';
+}
+
+// ── 파일 목록 ──
+function itRenderFiles() {
+  const m = itEl('it-m-files');
+  m.innerHTML = IT.meeting.map(f =>
+    '<div class="fchip"><input type="checkbox" data-mi="' + f.id + '"' + (f.include ? ' checked' : '') + ' title="AI 분석에 포함"><span class="fn1">📋 ' + itEsc(f.name) + '</span>' +
+    '<span class="fm">' + f.chars.toLocaleString('ko-KR') + '자' + (f.truncated ? ' · 앞부분만' : '') + (f.chars ? '' : ' · 내용 없음') + '</span>' +
+    '<button data-act="rm-meeting" data-id="' + f.id + '" title="삭제">✕</button></div>').join('');
+  const mi = IT.meeting.filter(f => f.include && f.text).length;
+  const st = itEl('it-m-stat');
+  st.textContent = IT.meeting.length ? ('파일 ' + IT.meeting.length + '개 · AI 포함 ' + mi + '개') : '미등록';
+  st.className = 'tag ' + (IT.meeting.length ? 'tg' : 'tz');
+
+  const byFile = new Map();
+  IT.tables.forEach(t => { const a = byFile.get(t.file) || { tables: 0, rows: 0 }; a.tables++; a.rows += t.rows.length; byFile.set(t.file, a); });
+  itEl('it-p-files').innerHTML = Array.from(byFile.entries()).map(e =>
+    '<div class="fchip"><span class="fn1">📊 ' + itEsc(e[0]) + '</span><span class="fm">시트 ' + e[1].tables + '개 · ' + e[1].rows.toLocaleString('ko-KR') + '행 인식</span>' +
+    '<button data-act="rm-perf" data-file="' + itEsc(e[0]) + '" title="삭제">✕</button></div>').join('');
+  const ps = itEl('it-p-stat'), total = itAllRows().length;
+  ps.textContent = IT.tables.length ? (total.toLocaleString('ko-KR') + '행 인식') : '미등록';
+  ps.className = 'tag ' + (total ? 'tg' : (IT.tables.length ? 'to' : 'tz'));
+
+  const prev = itEl('it-m-prev');
+  prev.innerHTML = IT.meeting.filter(f => f.text).map(f =>
+    '<details class="itprev"><summary>' + itEsc(f.name) + ' — 읽은 내용 미리보기</summary><pre>' + itEsc(f.text.slice(0, 1500)) + (f.text.length > 1500 ? '\n…' : '') + '</pre></details>').join('');
+  ['meeting', 'perf'].forEach(k => itSetMsg(k, IT.msg[k] ? IT.msg[k].text : '', IT.msg[k] ? IT.msg[k].level : ''));
+}
+
+// ── 환율 카드 ──
+function itRenderFx() {
+  const box = itEl('it-fx');
+  if (IT.fxState === 'loading') {
+    box.innerHTML = '<div class="itnote">⏳ 환율 월평균(네이버 증권)을 불러오는 중입니다. 처음 한 번은 20~40초 걸릴 수 있습니다. 그동안 엑셀을 올려 두셔도 됩니다.</div>'; return;
+  }
+  if (IT.fxState === 'err') {
+    box.innerHTML = '<div class="itwarn">❌ 환율 월평균을 가져오지 못했습니다 (' + itEsc(IT.fxErr) + '). 환율이 필요한 계산(원화 환산·환율효과)은 하지 않습니다. 엑셀에 적용환율 열이 있으면 그 값은 사용합니다. <button class="mbtn" data-act="fx-retry">다시 시도</button></div>'; return;
+  }
+  if (!IT.fx) { box.innerHTML = ''; return; }
+  const from = (IT.sel.y0 || (new Date().getFullYear() - 1)) + '-01';
+  const u = IT.fx.usd, e = IT.fx.eur;
+  const yms = Array.from(new Set((u ? u.months : []).map(m => m.ym).concat((e ? e.months : []).map(m => m.ym)))).sort().filter(ym => ym >= from);
+  const um = {}, em = {};
+  if (u) u.months.forEach(m => { um[m.ym] = m; });
+  if (e) e.months.forEach(m => { em[m.ym] = m; });
+  const cell = m => m ? m.avg.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (m.partial ? ' *' : '') + ' <span class="fn">(' + m.n + '일)</span>' : '-';
+  const src = [u ? 'USD ' + (u.source === 'naver' ? '네이버 증권' : 'Yahoo') + ' ~' + u.lastDate : 'USD 없음', e ? 'EUR ' + (e.source === 'naver' ? '네이버 증권' : 'Yahoo') + ' ~' + e.lastDate : 'EUR 없음'].join(' · ');
+  const errs = Object.keys(IT.fx.errors || {});
+  box.innerHTML = '<details class="itfx card"><summary>💱 환율 월평균 사용 중 — ' + itEsc(src) + (errs.length ? ' · ⚠️ ' + itEsc(errs.join(',')) + ' 수집 실패' : '') + '</summary>' +
+    '<div class="tscroll"><table class="dt"><thead><tr><th>월</th><th>USD/KRW</th><th>EUR/KRW</th></tr></thead><tbody>' +
+    yms.map(ym => '<tr><td>' + ym + '</td><td>' + cell(um[ym]) + '</td><td>' + cell(em[ym]) + '</td></tr>').join('') +
+    '</tbody></table></div><p class="fn">네이버 증권 매매기준율의 일별 값을 월별로 평균한 값입니다. * 표시는 진행 중인 달(오늘까지의 평균)입니다.</p></details>';
+}
+
+// ── 열 인식 결과 / 수동 지정 ──
+const IT_ROLE_LABEL = { item: '품목', origin: '원산지', date: '날짜(입항·선적·수입일)', year: '연도(분리된 경우)', month: '월(분리된 경우)', qty: '수량', price: '단가', amount: '금액', cur: '통화(열)', fx: '적용환율(열)' };
+function itRoleSelect(t, role, required) {
+  const row = t.aoa[Math.max(t.hdr, 0)] || [];
+  let o = '<option value="">(사용 안 함)</option>';
+  for (let c = 0; c < Math.max(row.length, 1); c++) {
+    const lab = String(row[c] == null ? '' : row[c]).trim();
+    if (!lab && t.map[role] !== c) continue;
+    o += '<option value="' + c + '"' + (t.map[role] === c ? ' selected' : '') + '>' + itColLetter(c) + ': ' + itEsc(lab.slice(0, 24)) + '</option>';
+  }
+  return '<label>' + IT_ROLE_LABEL[role] + (required ? ' *' : '') + '<select class="itsel" data-t="' + t.id + '" data-role="' + role + '">' + o + '</select></label>';
+}
+function itOptSelect(t, name, label, choices) {
+  return '<label>' + label + '<select class="itsel" data-t="' + t.id + '" data-opt="' + name + '">' +
+    choices.map(c => '<option value="' + c[0] + '"' + (t.opts[name] === c[0] ? ' selected' : '') + '>' + c[1] + '</option>').join('') + '</select></label>';
+}
+function itSkipText(st) {
+  const a = [];
+  if (st.subtotal) a.push('합계/소계 ' + st.subtotal);
+  if (st.noQty) a.push('수량 없음 ' + st.noQty);
+  if (st.noDate) a.push('날짜 인식 불가 ' + st.noDate);
+  if (st.noPrice) a.push('단가/금액 없음 ' + st.noPrice);
+  if (st.noItem) a.push('품목 없음 ' + st.noItem);
+  if (st.badCur) a.push('지원하지 않는 통화 ' + st.badCur);
+  return a.length ? '제외된 행: ' + a.join(', ') : '';
+}
+function itMapTableHtml(t) {
+  const st = t.stats || {};
+  const ok = t.rows.length;
+  const status = ok ? '<span class="cu">✅ ' + ok.toLocaleString('ko-KR') + '행 인식</span>' : '<span class="cd">⚠️ 인식된 행 없음 — 열을 지정해 주세요</span>';
+  const open = IT.open[t.id] !== undefined ? IT.open[t.id] : !ok;
+  let body = '';
+  if (t.aoa) {
+    const symNote = st.ymSource === 'sheet' ? '<div class="fn">※ 날짜 열이 없어 시트 이름(' + itEsc(t.sheet) + ')을 연월로 사용했습니다.</div>' : '';
+    const pv = t.rows.slice(0, 5).map(r => '<tr><td class="l">' + itEsc(r.item) + '</td><td class="l">' + itEsc(r.origin || '-') + '</td><td>' + r.y + '-' + String(r.m).padStart(2, '0') + '</td><td class="num">' + r.q.toLocaleString('ko-KR') + '</td><td class="num">' + r.p.toFixed(3) + ' ' + r.c + '</td><td>' + (r.f ? r.f.toLocaleString('ko-KR') : '-') + '</td></tr>').join('');
+    body =
+      '<div class="mapgrid">' +
+        '<label>머리글 행 번호<input class="itsel" type="number" min="1" max="' + t.aoa.length + '" value="' + (t.hdr + 1) + '" data-t="' + t.id + '" data-hdr="1"></label>' +
+        itRoleSelect(t, 'item', true) + itRoleSelect(t, 'origin') + itRoleSelect(t, 'date') + itRoleSelect(t, 'qty', true) + itRoleSelect(t, 'price') + itRoleSelect(t, 'amount') +
+      '</div>' +
+      '<div class="mapgrid">' +
+        itOptSelect(t, 'qtyUnit', '수량 단위', [['kg', 'kg'], ['ton', '톤(ton)']]) +
+        itOptSelect(t, 'priceMode', '단가 계산 방식', [['unit', '단가 열 사용'], ['amount', '금액 ÷ 수량']]) +
+        itOptSelect(t, 'priceUnit', '단가 단위', [['kg', 'kg당'], ['ton', '톤당']]) +
+        itOptSelect(t, 'cur', '통화 (통화 열이 없을 때)', [['USD', 'USD 달러'], ['EUR', 'EUR 유로'], ['KRW', 'KRW 원']]) +
+      '</div>' +
+      ((st.noItemQty && !t.fillItem) ? '<div class="itwarn">품목 칸이 비어 있는데 수량이 있는 줄이 ' + st.noItemQty + '개 있어 제외했습니다. 위 줄과 같은 품목이라면 아래 체크를 켜세요.</div>' : '') +
+      '<label class="itchk"><input type="checkbox" data-t="' + t.id + '" data-fill="1"' + (t.fillItem ? ' checked' : '') + '> 품목 칸이 빈 줄은 바로 위 줄과 같은 품목으로 처리 <span class="fn">(합계 줄이 품목 칸 없이 숫자만 있으면 이중 집계될 수 있으니, 켠 뒤 수량을 엑셀과 비교해 보세요)</span></label>' +
+      '<details class="itadv"><summary>고급: 연도·월 분리 열, 통화 열, 적용환율 열</summary><div class="mapgrid">' + itRoleSelect(t, 'year') + itRoleSelect(t, 'month') + itRoleSelect(t, 'cur') + itRoleSelect(t, 'fx') + '</div></details>' +
+      ((t.opts.why && t.opts.why.length) ? '<div class="fn">자동 추정 근거: ' + t.opts.why.map(itEsc).join(' · ') + '</div>' : '') + symNote +
+      (pv ? '<div class="slb" style="margin-top:8px">해석 미리보기 (처음 5행 — 숫자가 엑셀과 맞는지 확인)</div><div class="tscroll"><table class="dt"><thead><tr><th>품목</th><th>원산지</th><th>연월</th><th>수량(kg 환산)</th><th>단가(통화/kg 환산)</th><th>회사 환율</th></tr></thead><tbody>' + pv + '</tbody></table></div>' : '');
+  } else {
+    body = '<div class="fn">저장된 자료를 사용 중입니다. 열 지정을 바꾸려면 엑셀을 다시 올려 주세요.</div>';
+  }
+  const skip = itSkipText(st);
+  return '<details class="itmap" data-tid="' + t.id + '"' + (open ? ' open' : '') + '><summary>📄 ' + itEsc(t.file) + ' · ' + itEsc(t.sheet) + ' — ' + status + (skip ? ' <span class="fn">· ' + itEsc(skip) + '</span>' : '') + '</summary>' + body + '</details>';
+}
+function itRenderMap() {
+  const box = itEl('it-map');
+  if (!IT.tables.length) { box.innerHTML = ''; return; }
+  const bad = IT.tables.filter(t => !t.rows.length).length;
+  box.innerHTML = '<div class="card"><div class="ch"><span class="ct">열 인식 결과 확인</span><span class="tag ' + (bad ? 'to' : 'tg') + '">' + (bad ? '확인 필요 ' + bad + '곳' : '자동 인식됨') + '</span></div>' +
+    '<div class="fn" style="margin:0 0 8px">엑셀의 어느 열이 품목·수량·단가인지 자동으로 찾았습니다. 틀렸으면 직접 고르세요. 각 시트를 펼쳐 \'해석 미리보기\'의 숫자가 엑셀과 맞는지 한 번 확인해 주세요.</div>' +
+    IT.tables.map(itMapTableHtml).join('') + '</div>';
+}
+
+// ── 결과: KPI + 품목표 ──
+const IT_FLAG_STYLE = { '신규': 'background:#1e3a5f;color:#60a5fa', '미수입': 'background:#3f3f46;color:#d4d4d8', '물량↑': 'background:#14532d;color:#86efac', '물량↓': 'background:#7f1d1d;color:#fca5a5', '원가↑': 'background:#7f1d1d;color:#fca5a5', '원가↓': 'background:#14532d;color:#86efac', '환율부담': 'background:#431407;color:#fb923c', '환율이득': 'background:#14532d;color:#86efac', '표본적음': 'background:#1e293b;color:#94a3b8;border:1px solid #334155' };
+function itPill(f) { return '<span class="pill" style="' + (IT_FLAG_STYLE[f] || '') + '">' + itEsc(f) + '</span>'; }
+function itPair(a, b, fmt) { return '<span style="color:#64748b">' + (a == null ? '-' : fmt(a)) + '</span> → <b>' + (b == null ? '-' : fmt(b)) + '</b>'; }
+function itPct(a, b, upGood) {
+  if (a > 0 && b > 0) {
+    const p = (b - a) / a * 100;
+    const cls = Math.abs(p) < 0.05 ? '' : ((p > 0) === upGood ? 'cu' : 'cd');
+    return '<span class="' + cls + '">' + (p >= 0 ? '+' : '') + p.toFixed(1) + '%</span>';
+  }
+  if (b > 0) return '<span style="color:#60a5fa">신규</span>';
+  if (a > 0) return '<span style="color:#a1a1aa">미수입</span>';
+  return '-';
+}
+function itEffCell(v, cls) { return v == null ? '-' : '<span class="' + (Math.abs(v) < 0.5 ? '' : (v > 0 ? 'cd' : 'cu')) + '">' + itSW(v) + '</span>'; }
+
+function itQuality() {
+  const sum = k => IT.tables.reduce((s, t) => s + ((t.stats && t.stats[k]) || 0), 0);
+  const now = new Date();
+  const partial = !!(IT.sel.y1 === now.getFullYear() && IT.sel.cutoff === now.getMonth() + 1);
+  const srcs = IT.fx ? [IT.fx.usd && ('USD ' + IT.fx.usd.source), IT.fx.eur && ('EUR ' + IT.fx.eur.source)].filter(Boolean).join(', ') : '';
+  return {
+    rowsUsed: IT.res ? IT.res.used : 0, rowsTotal: sum('total'),
+    noFx: IT.res ? IT.res.excluded.noFx : 0, noDate: sum('noDate'), noQty: sum('noQty'), noPrice: sum('noPrice'),
+    partialMonth: partial, fxSource: srcs,
+  };
+}
+
+function itRenderResult() {
+  const box = itEl('it-res');
+  const rows = itAllRows();
+  if (!IT.tables.length) { box.innerHTML = ''; return; }
+  if (!rows.length) { box.innerHTML = '<div class="card"><p class="aph">인식된 수입 행이 없습니다. 위 \'열 인식 결과 확인\'에서 품목·수량·날짜·단가 열을 지정해 주세요.</p></div>'; return; }
+  if (!IT.res) { box.innerHTML = '<div class="card"><p class="aph">⏳ 환율 월평균을 불러온 뒤 계산합니다…</p></div>'; return; }
+  const res = IT.res, T = res.totals, s = IT.sel;
+  const hasOrigin = rows.some(r => r.origin);
+  const yrs = s.years.slice();
+  [s.y0, s.y1].forEach(y => { if (yrs.indexOf(y) < 0) yrs.push(y); });
+  yrs.sort((a, b) => a - b);
+  const yOpt = cur => yrs.map(y => '<option value="' + y + '"' + (y === cur ? ' selected' : '') + '>' + y + '년</option>').join('');
+  const cOpt = Array.from({ length: 12 }, (_, i) => '<option value="' + (i + 1) + '"' + (i + 1 === s.cutoff ? ' selected' : '') + '>' + (i + 1) + '월</option>').join('');
+
+  const warns = [];
+  if (s.y0 >= s.y1) warns.push('올해는 작년보다 뒤의 연도여야 합니다.');
+  const has0 = rows.some(r => r.y === s.y0), has1 = rows.some(r => r.y === s.y1);
+  if (!has0) warns.push(s.y0 + '년 데이터가 없어 비교할 수 없습니다 (올해 실적만 표시).');
+  if (!has1) warns.push(s.y1 + '년 데이터가 없습니다.');
+  if (res.excluded.noFx) warns.push('환율을 구하지 못해 계산에서 뺀 행이 ' + res.excluded.noFx.toLocaleString('ko-KR') + '건 있습니다' + (IT.fxState === 'err' ? ' (환율 수집 실패).' : '.'));
+  itSanity(rows, s).forEach(w => warns.push(w));
+  const dup = itDupRows(IT.tables, s);
+  if (dup.n) warns.push('여러 시트/파일에 똑같은 행(같은 달·품목·원산지·수량·단가)이 ' + dup.n.toLocaleString('ko-KR') + '건 있습니다 (' + dup.months.slice(0, 6).join(', ') + (dup.months.length > 6 ? ' 외' : '') + '). 같은 선적이 이중으로 집계됐을 수 있으니 확인하세요.');
+  const skipped = IT.tables.filter(t => t.stats && t.stats.noItemQty && !t.fillItem);
+  if (skipped.length) warns.push('품목 칸이 비어 있어 제외된 줄(수량 있음)이 ' + skipped.reduce((n, t) => n + t.stats.noItemQty, 0).toLocaleString('ko-KR') + '개 있습니다. \'열 인식 결과 확인\'에서 "빈 줄은 위 줄과 같은 품목으로 처리"를 켜 보세요.');
+  const q = itQuality();
+  if (q.partialMonth) warns.push('비교 마지막 달(' + s.cutoff + '월)이 아직 진행 중인 달입니다. 올해 수치가 작게 보일 수 있어, 한 달 앞당겨 비교하는 것을 권장합니다.');
+
+  const kpi = (l, v, sub) => '<div class="kpi"><div class="kl">' + l + '</div><div class="kv">' + v + '</div><div class="ku">' + sub + '</div></div>';
+  const kpis =
+    kpi('올해 수입량 (1~' + s.cutoff + '월)', itT(T.q[1]) + '<span style="font-size:.7rem;color:#64748b"> 톤</span>', '작년 ' + itT(T.q[0]) + '톤 · ' + itPct(T.q[0], T.q[1], true)) +
+    kpi('올해 매입액 (원화)', itBig(T.cost[1]), '작년 ' + itBig(T.cost[0]) + ' · ' + itPct(T.cost[0], T.cost[1], false)) +
+    kpi('평균 원화단가', itW(T.k[1]) + '<span style="font-size:.7rem;color:#64748b"> 원/kg</span>', '작년 ' + itW(T.k[0]) + ' · ' + itPct(T.k[0], T.k[1], false)) +
+    kpi('환율 효과', '<span class="' + (T.fxe > 0 ? 'cd' : 'cu') + '">' + itSBig(T.fxe) + '</span>', 'USD 평균환율 ' + itD2(T.usdF[0]) + ' → ' + itD2(T.usdF[1]) + '원') +
+    kpi('가격 효과 / 물량·구성', '<span class="' + (T.pri > 0 ? 'cd' : 'cu') + '">' + itSBig(T.pri) + '</span>', '물량·구성 효과 ' + itSBig(T.vol));
+
+  const list = s.showAll ? res.list : res.list.slice(0, 40);
+  const th = '<th class="l">품목</th><th>수량(톤)<br><span class="fn">작년→올해</span></th><th>증감</th><th>외화단가/kg<br><span class="fn">작년→올해</span></th><th>평균환율<br><span class="fn">작년→올해</span></th><th>원화단가(원/kg)<br><span class="fn">작년→올해</span></th><th>증감</th><th>환율효과<br><span class="fn">원/kg</span></th><th>가격효과<br><span class="fn">원/kg</span></th><th>올해 매입액</th><th class="l">신호</th>';
+  const tr = list.map(g =>
+    '<tr><td class="l"><b>' + itEsc(g.name) + '</b> <span class="fn">' + itEsc(g.cur === '혼합' ? Array.from(g.curs).sort().join('+') : g.cur) + '</span></td>' +
+    '<td class="num">' + itPair(g.q[0], g.q[1], itT) + '</td><td>' + itPct(g.q[0], g.q[1], true) + '</td>' +
+    (g.cur === '혼합' ? '<td class="num fn" colspan="2" style="margin:0;text-align:center">통화 혼합 — 합산 원화단가만 표시</td>' : '<td class="num">' + itPair(g.P[0], g.P[1], itD2) + '</td><td class="num">' + itPair(g.F[0], g.F[1], itD2) + '</td>') +
+    '<td class="num">' + itPair(g.k[0], g.k[1], itW) + '</td><td>' + itPct(g.k[0], g.k[1], false) + '</td>' +
+    '<td class="num">' + itEffCell(g.fxKg) + '</td><td class="num">' + itEffCell(g.priKg) + '</td>' +
+    '<td class="num">' + itBig(g.cost[1]) + '</td><td class="l">' + g.flags.map(itPill).join('') + '</td></tr>').join('');
+  const totalRow = '<tr style="font-weight:700;background:#0f172a"><td class="l">합계</td><td class="num">' + itPair(T.q[0], T.q[1], itT) + '</td><td>' + itPct(T.q[0], T.q[1], true) + '</td><td class="num">-</td><td class="num">' + itPair(T.usdF[0], T.usdF[1], itD2) + ' <span class="fn">(USD)</span></td><td class="num">' + itPair(T.k[0], T.k[1], itW) + '</td><td>' + itPct(T.k[0], T.k[1], false) + '</td><td class="num">' + itEffCell(T.q[1] > 0 ? T.fxe / T.q[1] : null) + '</td><td class="num">' + itEffCell(T.q[1] > 0 ? T.pri / T.q[1] : null) + '</td><td class="num">' + itBig(T.cost[1]) + '</td><td></td></tr>';
+
+  box.innerHTML =
+    (warns.length ? warns.map(w => '<div class="itwarn">⚠️ ' + itEsc(w) + '</div>').join('') : '') +
+    '<div class="g5">' + kpis + '</div>' +
+    '<div class="card"><div class="ch"><span class="ct">품목별 실적 비교</span><span class="tag tg">' + s.y0 + '년 vs ' + s.y1 + '년 · 1~' + s.cutoff + '월</span></div>' +
+    '<div class="itctl">' +
+      '<label>올해<select class="itsel" data-sel="y1">' + yOpt(s.y1) + '</select></label>' +
+      '<label>작년<select class="itsel" data-sel="y0">' + yOpt(s.y0) + '</select></label>' +
+      '<label>비교 기간 1~<select class="itsel" data-sel="cutoff">' + cOpt + '</select></label>' +
+      '<label>집계 단위<select class="itsel" data-sel="level"><option value="item"' + (s.level === 'item' ? ' selected' : '') + '>품목별</option><option value="origin"' + (s.level === 'origin' ? ' selected' : '') + (hasOrigin ? '' : ' disabled') + '>품목+원산지별</option></select></label>' +
+      '<label>환율 기준<select class="itsel" data-sel="fxPref"><option value="company"' + (s.fxPref === 'company' ? ' selected' : '') + '>엑셀 적용환율 우선(없으면 월평균)</option><option value="monthly"' + (s.fxPref === 'monthly' ? ' selected' : '') + '>항상 네이버 월평균</option></select></label>' +
+    '</div>' +
+    '<div class="tscroll"><table class="dt itmain"><thead><tr>' + th + '</tr></thead><tbody>' + tr + totalRow + '</tbody></table></div>' +
+    (res.list.length > 40 ? '<button class="mbtn" data-act="show-all">' + (s.showAll ? '상위 40개만 보기' : '전체 ' + res.list.length + '개 보기') + '</button>' : '') +
+    '<p class="fn" style="line-height:1.7">원화단가 = 외화단가 × 환율. 변동 분해(올해 물량 기준): <b>환율효과</b> = 올해 외화단가 × (올해환율 − 작년환율) · <b>가격효과</b> = (올해 외화단가 − 작년 외화단가) × 작년환율 · <b>물량·구성효과</b> = (올해물량 − 작년물량) × 작년 원화단가. 세 효과의 합이 매입액 증감과 일치합니다. 환율효과가 +이면 환율 때문에 원가가 오른 것이라 빨간색, −이면 초록색입니다. 신호 기준: 물량 ±20%, 원화단가 ±8%, 환율효과가 작년 원화단가의 5% 이상, 수입 월수 3개월 미만이면 표본적음.</p></div>';
+}
+
+// ── AI ──
+function itAiPayload() {
+  const mt = itMeetingForAI(IT.meeting);
+  const p = { meeting: mt.text };
+  if (IT.res && IT.res.list.length) p.perf = itBuildAiPerf(IT.res, IT.sel, { recent: IT.recent, quality: itQuality() });
+  return { payload: p, meeting: mt };
+}
+function itSig(o) {
+  const s = JSON.stringify(o); let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return String(h);
+}
+function itRenderAi() {
+  const btn = itEl('it-ai-btn'), box = itEl('it-ai-box'), badge = itEl('it-ai-model'), note = itEl('it-ai-note');
+  const pk = itAiPayload();
+  const nGroups = pk.payload.perf ? Math.min(pk.payload.perf.groups.length, 40) : 0;
+  const can = !!(nGroups || pk.meeting.text.trim());
+  btn.disabled = IT.aiBusy || !can;
+  btn.textContent = IT.aiBusy ? '⏳ AI가 분석 중입니다 (보통 30~90초)…' : (IT.ai ? 'AI 품목 판단 다시 실행' : 'AI 품목 판단 실행');
+  const parts = [];
+  if (nGroups) parts.push('품목 ' + nGroups + '개 집계표(품목명·수량·단가·환율)');
+  if (pk.meeting.used) parts.push('주간회의 파일 ' + pk.meeting.used + '개(' + pk.meeting.text.length.toLocaleString('ko-KR') + '자)');
+  note.innerHTML =
+    '<div class="itnote">' + (can ? '<b>AI에 전달되는 내용:</b> ' + parts.map(itEsc).join(' + ') + (pk.meeting.dropped.length ? ' <span style="color:#fbbf24">※ 길이 제한으로 오래된 회의 파일 ' + pk.meeting.dropped.length + '개는 제외됨</span>' : '') :
+      '엑셀(수입 실적 또는 주간회의)을 올리면 실행할 수 있습니다.') +
+    '<br>전송은 서버를 거쳐 Google Gemini 로 이뤄집니다. <b>회사 수입 실적과 회의 내용이 외부로 나갑니다.</b> 무료(결제 미연결) Gemini 키는 구글 약관상 입력 내용이 서비스 개선에 쓰이고 사람이 검토할 수 있어 <b>민감한 자료에는 유료 키를 권장</b>합니다 (<a href="https://ai.google.dev/gemini/terms" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">구글 약관</a>). 보내고 싶지 않은 회의 파일은 위 목록의 체크를 해제하세요. 서버는 자료를 파일·DB에 저장하지 않습니다 (같은 자료로 다시 실행할 때를 위해 AI 결과만 메모리에 6시간 보관).</div>';
+  if (IT.ai && IT.ai.sig && can && IT.ai.sig !== itSig(pk.payload)) {
+    note.innerHTML += '<div class="itwarn">⚠️ 아래 분석은 이전 자료로 만든 것입니다. 자료·설정이 바뀌었으니 다시 실행해 주세요.</div>';
+  }
+  if (IT.aiErr) {
+    box.innerHTML = '<p style="color:#f87171;font-size:.8rem;line-height:1.7">' + itEsc(IT.aiErr) + '</p>';
+    badge.textContent = '실패';
+  } else if (IT.ai) {
+    let body;
+    try { body = typeof marked !== 'undefined' ? itSafeHtml(marked.parse(String(IT.ai.text || ''))) : null; } catch (e) { body = null; }
+    if (body == null) body = '<pre style="white-space:pre-wrap;font-size:.78rem;color:#cbd5e1;line-height:1.7">' + itEsc(IT.ai.text) + '</pre>';
+    box.innerHTML = body +
+      '<p class="fn" style="margin-top:10px">생성 ' + itEsc(IT.ai.at || '') + (IT.ai.cached ? ' · 같은 자료의 이전 결과(캐시)' : '') + ' · AI 판단은 참고용이며 표의 수치와 근거 표기를 함께 확인하세요.</p>';
+    badge.textContent = IT.ai.model ? IT.ai.model + (IT.ai.cached ? ' · 캐시' : '') : '—';
+  } else {
+    box.innerHTML = '<p class="aph">수입 실적(수량·단가)과 환율, 주간회의 내용을 종합해 올해 남은 기간·내년의 추가/축소/제외 품목을 판단합니다.</p>';
+    badge.textContent = '—';
+  }
+}
+async function itRunAI(force) {
+  if (IT.aiBusy) return;
+  const pk = itAiPayload();
+  if (!pk.payload.perf && !pk.meeting.text.trim()) return;
+  if (!itLsGet('suan_it_ai_ok')) {          // 이 브라우저에서 처음 보낼 때 한 번만 확인
+    const what = [];
+    if (pk.payload.perf) what.push('· 품목별 수량·단가·환율 집계표 (' + Math.min(pk.payload.perf.groups.length, 40) + '개 품목)');
+    if (pk.meeting.used) what.push('· 체크한 주간회의 내용 (' + pk.meeting.used + '개 파일)');
+    if (!confirm('AI 분석을 위해 아래 내용이 서버를 거쳐 Google Gemini 로 전송됩니다.\n\n' + what.join('\n') + '\n\n무료(결제 미연결) Gemini 키라면, 구글 약관상 입력 내용이 서비스 개선에 쓰이고 사람이 검토할 수 있습니다. 민감한 자료는 유료 키로 바꾼 뒤 사용하세요.\n\n계속할까요?')) return;
+    itLsSet('suan_it_ai_ok', 1);
+  }
+  IT.aiBusy = true; IT.aiErr = '';
+  itEl('it-ai-box').innerHTML = '<p class="aph">⏳ Gemini AI가 분석 중입니다. 처음에는 환율·시세를 함께 확인하느라 시간이 더 걸릴 수 있습니다…</p>';
+  itRenderAi();
+  const sig = itSig(pk.payload);
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 125000);
+  try {
+    const body = Object.assign({}, pk.payload, { force: !!force });
+    const r = await fetch('/api/analysis/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal });
+    const t = await r.text();
+    let j = null; try { j = JSON.parse(t); } catch (e) {}
+    if (!r.ok || !j || !j.ok) throw new Error((j && j.error) || ('서버 응답 오류 (HTTP ' + r.status + ')'));
+    IT.ai = { text: j.analysis, model: j.model, cached: !!j.cached, at: j.generatedAt || '', sig: sig };
+    itSave();
+  } catch (e) {
+    IT.aiErr = e.name === 'AbortError' ? '응답이 너무 오래 걸립니다. 잠시 후 다시 시도해 주세요.' : ('AI 분석 실패: ' + e.message);
+  } finally {
+    clearTimeout(to); IT.aiBusy = false; itRenderAi();
+  }
+}
+
+// ── 차트 ──
+function itRenderCharts() {
+  const wrap = itEl('it-charts');
+  if (!IT.res || !IT.mon || !itAllRows().length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  if (typeof Chart === 'undefined') return;
+  const s = IT.sel, m = IT.mon;
+  const grid = '#1e293b', tick = '#475569';
+  const base = { responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+    plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } }, tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9', borderColor: '#334155', borderWidth: 1 } } };
+  try {
+    if (charts['it-ch-qty']) { charts['it-ch-qty'].destroy(); delete charts['it-ch-qty']; }
+    const lbl = Array.from({ length: 12 }, (_, i) => (i + 1) + '월');
+    charts['it-ch-qty'] = new Chart(itEl('it-ch-qty').getContext('2d'), {
+      type: 'bar',
+      data: { labels: lbl, datasets: [
+        { label: s.y0 + '년', data: m.qty[s.y0].map(v => v ? +(v / 1000).toFixed(1) : null), backgroundColor: 'rgba(100,116,139,.75)' },
+        { label: s.y1 + '년', data: m.qty[s.y1].map(v => v ? +(v / 1000).toFixed(1) : null), backgroundColor: 'rgba(251,146,60,.85)' },
+      ] },
+      options: Object.assign({}, base, { scales: { x: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 } } }, y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 } }, title: { display: true, text: '톤', color: tick } } } }),
+    });
+    if (charts['it-ch-fx']) { charts['it-ch-fx'].destroy(); delete charts['it-ch-fx']; }
+    charts['it-ch-fx'] = new Chart(itEl('it-ch-fx').getContext('2d'), {
+      type: 'line',
+      data: { labels: m.series.map(x => x.ym.slice(2)), datasets: [
+        { label: 'USD 수입단가 (USD/kg, 수량가중)', data: m.series.map(x => x.price == null ? null : +x.price.toFixed(3)), borderColor: '#fb923c', backgroundColor: 'rgba(251,146,60,.15)', yAxisID: 'y', tension: .25, spanGaps: true, pointRadius: 3 },
+        { label: 'USD/KRW 월평균 (원)', data: m.series.map(x => x.fx), borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.12)', yAxisID: 'y1', tension: .25, spanGaps: true, pointRadius: 3 },
+      ] },
+      options: Object.assign({}, base, { scales: {
+        x: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, maxTicksLimit: 12 } },
+        y: { position: 'left', grid: { color: grid }, ticks: { color: '#fb923c', font: { size: 10 } }, title: { display: true, text: 'USD/kg', color: '#fb923c' } },
+        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#38bdf8', font: { size: 10 } }, title: { display: true, text: '원', color: '#38bdf8' } },
+      } }),
+    });
+  } catch (e) { console.error('items chart error', e); }
+}
+
+// ── 이벤트 ──
+function itOnClick(e) {
+  const a = e.target.closest('[data-act]');
+  if (!a) return;
+  const act = a.dataset.act;
+  if (act === 'rm-meeting') { IT.meeting = IT.meeting.filter(f => String(f.id) !== a.dataset.id); itAfterChange(); }
+  else if (act === 'rm-perf') { IT.tables = IT.tables.filter(t => t.file !== a.dataset.file); IT.sel.auto = true; itAfterChange(); }
+  else if (act === 'fx-retry') { IT.fxState = 'idle'; IT.fxFrom = null; itRecompute(); itRenderAll(); if (!IT.res && itAllRows().length === 0) itEnsureFx((new Date().getFullYear() - 1) + '-01'); }
+  else if (act === 'show-all') { IT.sel.showAll = !IT.sel.showAll; itRenderResult(); }
+  else if (act === 'ai-run') itRunAI(!!(IT.ai && IT.ai.sig === itSig(itAiPayload().payload)));   // 같은 자료로 다시 누르면 새로 분석 (자료가 바뀌었으면 일반 실행)
+  else if (act === 'clear-all') {
+    if (!confirm('올린 엑셀 자료와 AI 분석 결과를 모두 지울까요?')) return;
+    IT.meeting = []; IT.tables = []; IT.ai = null; IT.aiErr = ''; IT.sel.auto = true; IT.msg = { meeting: null, perf: null };
+    try { localStorage.removeItem(IT_LS); } catch (err) {}
+    itRecompute(); itRenderAll();
+  }
+}
+function itOnChange(e) {
+  const el = e.target;
+  if (el.dataset.mi) {      // 회의 파일 AI 포함 체크
+    const f = IT.meeting.find(x => String(x.id) === el.dataset.mi);
+    if (f) { f.include = el.checked; itSave(); itRenderFiles(); itRenderAi(); }
+    return;
+  }
+  if (el.dataset.sel) {     // 비교 연도·기간·단위
+    const k = el.dataset.sel;
+    if (k === 'level' || k === 'fxPref') IT.sel[k] = el.value; else { IT.sel[k] = +el.value; IT.sel.auto = false; }
+    itSave(); itRecompute(); itRenderAll(); return;
+  }
+  if (el.dataset.t) {       // 열 지정 / 옵션
+    const t = IT.tables.find(x => String(x.id) === el.dataset.t);
+    if (!t || !t.aoa) return;
+    if (el.dataset.hdr) {
+      t.hdr = Math.max(0, Math.min(t.aoa.length - 1, (parseInt(el.value, 10) || 1) - 1));
+      t.map = itAssignRoles(itHeadersOfRow(t.aoa[t.hdr]));
+      if (!t.optsTouched) t.opts = itDetectOpts(t.aoa, t.hdr, t.map);
+    } else if (el.dataset.role) {
+      if (el.value === '') delete t.map[el.dataset.role]; else t.map[el.dataset.role] = +el.value;
+      if (!t.optsTouched) t.opts = itDetectOpts(t.aoa, t.hdr, t.map);     // 열을 바꾸면 단위·통화 추정도 새로 (직접 고른 값이 있으면 유지)
+    } else if (el.dataset.opt) {
+      t.opts[el.dataset.opt] = el.value;
+      t.optsTouched = true; t.opts.why = ['직접 지정한 값을 사용 중'];
+    } else if (el.dataset.fill) {
+      t.fillItem = !!el.checked;
+    }
+    IT.open[t.id] = true;
+    itRebuild(t);
+    itAfterChange();
+  }
+}
+
+function initItems() {
+  if (IT.inited) return;
+  IT.inited = true;
+  try { itLoadSaved(); } catch (e) { console.warn('품목 전략 저장값 복원 실패', e); }
+  itSetupDrop('dz-meeting', 'meeting');
+  itSetupDrop('dz-perf', 'perf');
+  const page = itEl('page-items');
+  page.addEventListener('click', itOnClick);
+  page.addEventListener('change', itOnChange);
+  page.addEventListener('toggle', e => { const d = e.target; if (d && d.classList && d.classList.contains('itmap')) IT.open[d.dataset.tid] = d.open; }, true);
+  const isFileDrag = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;
+  window.addEventListener('dragover', e => { if (itActive() && isFileDrag(e)) e.preventDefault(); });
+  window.addEventListener('drop', e => { if (itActive() && isFileDrag(e)) e.preventDefault(); });
+  itRecompute();
+  if (!IT.fx && IT.fxState === 'idle') itEnsureFx((new Date().getFullYear() - 1) + '-01');   // 파일을 올리기 전에 미리 환율 월평균을 받아 둔다
+  itRenderAll();
+  setTimeout(() => { itLoadXlsx().catch(() => {}); }, 800);                                  // 엑셀 라이브러리도 미리 받아 두기
+}
 </script>
 <script>
 // PWA 서비스워커 등록
