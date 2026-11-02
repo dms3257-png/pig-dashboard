@@ -63,6 +63,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .kl{font-size:.65rem;color:#64748b;margin-bottom:4px}
 .kv{font-size:1.15rem;font-weight:700;color:#f1f5f9}
 .ku{font-size:.62rem;color:#475569;margin-top:2px}
+.whyclip{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .kc{font-size:.68rem;margin-top:3px;font-weight:600}
 .up{color:#4ade80}.dn{color:#f87171}
 /* 타이밍 */
@@ -452,7 +453,7 @@ function renderFxNote(cur, uH, eH) {
     const c = cur && cur[k];
     if (c && c.price) {
       if (c.basis === 'buy') okParts.push((nm + ' ' + (c.date || '')).trim());
-      else { lines.push('⚠️ ' + nm + ': 네이버 표에서 \'사실 때\' 칸을 읽지 못해 <b>' + fxEsc(c.basisLabel || '매매기준율') + '</b>을 표시 중입니다 (사실 때 아님).'); bump('warn'); }
+      else { lines.push('⚠️ ' + nm + ': 네이버 응답에 \'현찰 사실 때\' 값이 없어 <b>' + fxEsc(c.basisLabel || '매매기준율') + '</b>을 표시 중입니다 (사실 때 아님).'); bump('warn'); }
     } else {
       const why = cur && cur.fxErrors && cur.fxErrors[k];
       lines.push('❌ ' + nm + '/KRW 현재 환율 수집 실패' + (why ? ' (' + fxEsc(why) + ')' : '') + ' — 고정값으로 대신하지 않았습니다.'); bump('bad');
@@ -655,7 +656,7 @@ function renderKpi(id, data, keys) {
     if (isFx && (!d || !d.price)) {
       // 환율은 못 받았으면 못 받았다고 표시한다 (고정값·추정값으로 채우지 않음)
       const why = data?.fxErrors?.[item.k];
-      return `<div class="kpi" style="border:1px solid #7f1d1d"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5">${why ? fxEsc(why) + ' · ' : ''}고정값으로 대신하지 않음</div></div>`;
+      return `<div class="kpi" style="border:1px solid #7f1d1d"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5">${why ? `<span class="whyclip" title="${fxEsc(why)}">${fxEsc(why)}</span>` : ''}고정값으로 대신하지 않음</div></div>`;
     }
     if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
     const chgHtml = d.change != null ? `<div class="kc ${d.change>0?'up':'dn'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}${d.changePct?' ('+d.changePct+'%)':''}</div>` : '';
