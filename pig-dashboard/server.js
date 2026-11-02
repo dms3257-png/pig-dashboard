@@ -1,7 +1,8 @@
-// server.js - 수안푸드 지육가 대시보드 v3.3
+// server.js - 수안푸드 지육가 대시보드 v3.3.1
 // 안정화: 빠른 무료 API + 5초 타임아웃 + 즉시 폴백
 // v3.2: 품목 전략 탭 (환율 월평균 /api/fx-monthly + AI 품목 판단 POST /api/analysis/items)
 // v3.3: 환율을 네이버 증권 '현찰 사실 때'(살 때) 기준으로 통일 · 출처/기준일 표시 · 고정값과 가짜 시드 제거 (진단: /api/fx-debug)
+// v3.3.1: 네이버가 환율 화면을 새 사이트로 옮겨 예전 표가 비었음 → 새 JSON 주소(api.stock.naver.com)에서 매매기준율·현찰 사실 때를 날짜별로 수집
 
 const path    = require('path');
 const fs      = require('fs');
@@ -9,7 +10,6 @@ const crypto  = require('crypto');
 const express = require('express');
 const cors    = require('cors');
 const cheerio = require('cheerio');
-const iconv   = require('iconv-lite');
 
 const app = express();
 app.use(cors());
@@ -257,176 +257,238 @@ async function fetchEkapepiaHistory(startYmd) {
 
 
 
-// ── 네이버 전용 fetchText (euc-kr 지원) ──────────────
-async function fetchText(url, encoding = 'utf-8', timeout = 10000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml,*/*',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
-        'Referer': 'https://finance.naver.com/',
-      }
-    });
-    clearTimeout(t);
-    const buf = await res.arrayBuffer();
-    return encoding === 'euc-kr'
-      ? iconv.decode(Buffer.from(buf), 'euc-kr')
-      : new TextDecoder('utf-8').decode(buf);
-  } catch (e) { clearTimeout(t); throw e; }
-}
-
 // ════════════════════════════════════════════════════
 // 네이버 증권 환율 — '현찰 사실 때'(= 살 때) 기준
-//  · 일별 시세 표(exchangeDailyQuote)의 머리글 이름으로 '매매기준율'·'사실 때' 칸을 찾습니다 (칸 번호를 외워 두지 않음)
-//  · '사실 때' 칸을 못 찾거나 값이 이상하면(매매기준율보다 낮거나 6% 넘게 높음) 사실 때인 척하지 않고
+//  · 네이버가 환율 화면을 stock.naver.com(자바스크립트로 그리는 새 사이트)으로 옮기면서
+//    예전 표 페이지(finance.naver.com/marketindex/exchangeDailyQuote)는 더 이상 표를 주지 않습니다.
+//  · 새 사이트가 쓰는 JSON 주소(api.stock.naver.com/marketindex/exchange/FX_USDKRW/prices)는
+//    날짜마다 매매기준율(closePrice) · 현찰 사실 때(cashBuyValue) · 파실 때(cashSellValue) ·
+//    송금 보내실 때(sendValue) · 받으실 때(receiveValue)를 주고, 최신 날짜가 맨 앞입니다.
+//  · '사실 때' 값이 없거나 이상하면(매매기준율보다 낮거나 6% 넘게 높음) 사실 때인 척하지 않고
 //    매매기준율을 쓰되 basis 를 'std' 로 표시합니다 → 화면에는 "매매기준율"이라고 나옵니다
-//  · 수집에 실패해도 고정값·가짜(시드) 값으로 채우지 않습니다
+//  · 수집에 실패해도 고정값·가짜(시드) 값으로 채우지 않습니다. 실패 이유(HTTP 상태 등)는 그대로 알립니다
 // ════════════════════════════════════════════════════
 const FX_CODES = { USDKRW: 'FX_USDKRW', EURKRW: 'FX_EURKRW' };
 const FX_NAMES = { USDKRW: 'USD/KRW', EURKRW: 'EUR/KRW' };
 const FX_BASIS_LABEL = { buy: '현찰 사실 때', std: '매매기준율', yahoo: '국제 종가(Yahoo·사실 때 아님)' };
-const fxPageUrl = (pair, page) =>
-  `https://finance.naver.com/marketindex/exchangeDailyQuote.naver?marketindexCd=${FX_CODES[pair]}&page=${page}`;
+
+// 같은 내용을 주는 네이버 주소 후보. 앞에서부터 시도하고, 첫 페이지가 성공한 주소로 끝까지 수집합니다
+// (주소마다 한 페이지 크기가 달라서, 중간에 주소를 바꾸면 날짜가 겹치거나 빠집니다)
+const FX_SOURCES = [
+  { id: 'api.stock.naver.com', pageSize: 60, attempts: 2, timeout: 7000,
+    url: (code, page, size) => `https://api.stock.naver.com/marketindex/exchange/${code}/prices?page=${page}&pageSize=${size}` },
+  { id: 'stock.naver.com', pageSize: 20, attempts: 1, timeout: 5000,
+    url: (code, page, size) => `https://stock.naver.com/api/securityService/marketindex/exchange/${code}/prices?page=${page}&pageSize=${size}` },
+  { id: 'm.stock.naver.com', pageSize: 10, attempts: 1, timeout: 5000,
+    url: (code, page, size) => `https://m.stock.naver.com/front-api/marketIndex/prices?category=exchange&reutersCode=${code}&page=${page}&pageSize=${size}` },
+];
+const FX_RETRY = { ms: 250 };                       // 같은 주소를 한 번 더 시도하기 전 대기 (테스트에서는 0)
+const fxSleep = ms => new Promise(r => setTimeout(r, ms));
 
 function fxNum(s) {
   const n = parseFloat(String(s ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : null;
 }
 
-// 표의 머리글(th)을 열 단위로 펼친다. rowspan/colspan 이 섞여 있어도 열마다 '현찰/사실때' 같은 이름이 나온다
-function fxHeaderLeaves($, table) {
-  const grid = [];
-  let hr = 0;
-  $(table).find('tr').each((_, tr) => {
-    const $tr = $(tr);
-    if ($tr.children('td').length || !$tr.children('th').length) return;     // th 로만 된 줄이 머리글
-    grid[hr] = grid[hr] || [];
-    let c = 0;
-    $tr.children('th').each((__, th) => {
-      while (grid[hr][c] !== undefined) c++;
-      const text = $(th).text().replace(/\s+/g, '');
-      const cs = Math.max(1, parseInt($(th).attr('colspan') || '1', 10) || 1);
-      const rs = Math.max(1, parseInt($(th).attr('rowspan') || '1', 10) || 1);
-      for (let dr = 0; dr < rs; dr++) {
-        grid[hr + dr] = grid[hr + dr] || [];
-        for (let dc = 0; dc < cs; dc++) grid[hr + dr][c + dc] = text;
-      }
-      c += cs;
-    });
-    hr++;
-  });
-  const n = grid.reduce((m, r) => Math.max(m, r.length), 0);
-  const names = [];
-  for (let c = 0; c < n; c++) {
-    const parts = [];
-    grid.forEach(r => { const t = r[c]; if (t && parts[parts.length - 1] !== t) parts.push(t); });
-    names.push(parts.join('/'));
-  }
-  return names;
+// 'YYYY-MM-DD' / 'YYYY.MM.DD' / 'YYYYMMDD' (뒤에 시각이 붙어도 됨) → 'YYYY-MM-DD' (실제 있는 날짜만)
+function fxYmd(v) {
+  const s = String(v ?? '');
+  const m = s.match(/^(\d{4})[-.](\d{2})[-.](\d{2})/) || s.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (!m) return null;
+  const ymd = `${m[1]}-${m[2]}-${m[3]}`;
+  const d = new Date(ymd + 'T00:00:00Z');
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === ymd ? ymd : null;
 }
 
-// 일별 시세 표 1페이지 → { rows:[{ymd, std(매매기준율), buy(현찰 사실 때 또는 null)}], leaves, stdCol, buyCol, sample }
-function parseNaverFxTable(html) {
-  const $ = cheerio.load(html);
-  const out = { rows: [], leaves: [], stdCol: -1, buyCol: -1, sample: [] };
-  $('table').each((_, table) => {
-    if (out.rows.length) return;                                   // 날짜 줄이 있는 첫 번째 표만 사용
-    const dated = [];
-    $(table).find('tr').each((__, tr) => {
-      const tds = $(tr).children('td').map((___, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
-      if (tds.length < 2) return;
-      const ymd = tds[0].replace(/\./g, '-');
-      if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) dated.push({ ymd, tds });
+// 네이버 주소 하나를 읽어 { status, ok, url(최종 주소), contentType, text } 로 돌려준다 (HTTP 오류도 던지지 않고 그대로 보여줌)
+async function fetchNaverRaw(url, timeout = 10000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      },
     });
-    if (!dated.length) return;
-    const leaves = fxHeaderLeaves($, table);
-    const stdIdx = leaves.findIndex(n => /매매기준/.test(n));
-    const buyIdx = leaves.findIndex(n => /사실/.test(n));
-    const stdCol = stdIdx >= 0 ? stdIdx : 1;                       // 머리글을 못 읽으면 예전 방식(날짜 바로 다음 칸 = 매매기준율)
-    out.leaves = leaves; out.stdCol = stdCol; out.buyCol = buyIdx;
-    out.sample = dated.slice(0, 2).map(d => d.tds);
-    for (const d of dated) {
-      const std = fxNum(d.tds[stdCol]);
-      if (std == null || std < 100) continue;
-      let buy = null;
-      if (buyIdx >= 0 && d.tds.length === leaves.length) {          // 머리글과 칸 수가 같을 때만 믿는다
-        const b = fxNum(d.tds[buyIdx]);
-        if (b != null && b >= std - 0.005 && b <= std * 1.06) buy = b;   // 사실 때는 매매기준율 이상 — 크게 벗어나면 엉뚱한 칸을 읽은 것
-      }
-      out.rows.push({ ymd: d.ymd, std, buy });
-    }
-  });
+    const text = await res.text();
+    return {
+      status: res.status, ok: !!res.ok, url: res.url || url,
+      contentType: (res.headers && res.headers.get && res.headers.get('content-type')) || '', text,
+    };
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error(`시간 초과(${Math.round(timeout / 1000)}초)`);
+    throw new Error('연결 실패(' + ((e && e.cause && e.cause.code) || (e && e.message) || '알 수 없음') + ')');
+  } finally { clearTimeout(t); }
+}
+
+// JSON 응답을 읽는다. 실패하면 '왜'를 오류 문장에 담는다 (HTTP 상태 / JSON 이 아닌 응답이면 형식·크기·이동한 주소)
+async function fetchNaverJson(url, timeout = 10000) {
+  const r = await fetchNaverRaw(url, timeout);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  try { return JSON.parse(r.text); }
+  catch {
+    const ct = String(r.contentType || '').split(';')[0] || '형식 모름';
+    const moved = r.url && r.url !== url ? `, 이동됨 ${String(r.url).slice(0, 90)}` : '';
+    throw new Error(`JSON 아님(${ct}, ${r.text.length}자${moved})`);
+  }
+}
+
+// 응답에서 환율 줄 목록 찾기 — 목록 그대로이거나 result/datas/data/items 안에 있는 경우
+function fxItemsFrom(payload, depth = 0) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object' || depth > 1) return null;
+  for (const k of ['result', 'datas', 'data', 'items', 'prices', 'list']) {
+    const v = fxItemsFrom(payload[k], depth + 1);
+    if (v) return v;
+  }
+  return null;
+}
+
+// 응답 한 페이지 → { found, items, skipped, rows:[{ymd, std(매매기준율), buy(현찰 사실 때 또는 null)}], keys, sample }
+function parseNaverFxItems(payload) {
+  const items = fxItemsFrom(payload);
+  const out = { found: !!items, items: items ? items.length : 0, skipped: 0, rows: [], keys: [], sample: [] };
+  if (!items) return out;
+  const isObj = it => !!it && typeof it === 'object' && !Array.isArray(it);
+  const first = items.find(isObj);
+  if (first) out.keys = Object.keys(first).slice(0, 30);
+  out.sample = items.filter(isObj).slice(0, 2).map(it => ({
+    localTradedAt: it.localTradedAt, closePrice: it.closePrice, cashBuyValue: it.cashBuyValue,
+    cashSellValue: it.cashSellValue, sendValue: it.sendValue, receiveValue: it.receiveValue,
+  }));
+  for (const it of items) {
+    const ymd = isObj(it) ? fxYmd(it.localTradedAt) : null;
+    const std = isObj(it) ? fxNum(it.closePrice) : null;
+    if (!ymd || std == null || std < 100 || std > 100000) { out.skipped++; continue; }
+    const b = fxNum(it.cashBuyValue);
+    // 사실 때는 매매기준율 이상 — 크게 벗어나면(낮거나 6% 초과) 엉뚱한 값이므로 쓰지 않는다
+    out.rows.push({ ymd, std, buy: b != null && b >= std - 0.005 && b <= std * 1.06 ? b : null });
+  }
   return out;
 }
 
-// 한 번에 수집한 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준으로 쓴다 (섞이면 전부 매매기준율 — 기준이 섞인 평균을 만들지 않는다)
+// 수집한 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준으로 쓴다 (섞이면 전부 매매기준율 — 기준이 섞인 평균을 만들지 않는다)
+// 다만 50일 이상 모였고 값이 빠진 날이 2% 이하(최소 2일)이면 그 날짜만 빼고 사실 때 기준을 유지한다 (한두 줄 때문에 전체 기준이 바뀌지 않게)
 function fxPickBasis(rows) {
-  const useBuy = rows.length > 0 && rows.every(r => r.buy != null);
+  const have = rows.filter(r => r.buy != null);
+  const missing = rows.length - have.length;
+  const useBuy = have.length > 0 && (missing === 0 || (rows.length >= 50 && missing <= Math.max(2, Math.floor(rows.length * 0.02))));
+  const base = useBuy ? have : rows;
   return {
     basis: useBuy ? 'buy' : 'std',
-    rows: rows.map(r => ({ ymd: r.ymd, price: useBuy ? r.buy : r.std, std: r.std })),
+    rows: base.map(r => ({ ymd: r.ymd, price: useBuy ? r.buy : r.std, std: r.std })),
+    excluded: useBuy ? missing : 0,
   };
 }
 
-// 현재 환율 = 일별 시세 표의 가장 최근 줄 (값과 함께 기준일·기준을 돌려준다)
-async function naverFxLatest(pair, fetcher = fetchText) {
+// 한 페이지 읽기 — 일시 오류는 다시 시도하고, 주소가 바뀌었거나 막힌 오류(404·403 등)는 다시 해도 같으므로 바로 포기
+async function naverFxPage(src, code, page, fetcher, attempts = src.attempts) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const parsed = parseNaverFxItems(await fetcher(src.url(code, page, src.pageSize), src.timeout));
+      if (!parsed.found) throw new Error('응답에서 환율 목록을 찾지 못함');
+      return parsed;
+    } catch (e) {
+      lastErr = e;
+      if (/^HTTP 4\d\d/.test(e.message) && !/^HTTP (408|429)/.test(e.message)) break;
+      if (i + 1 < attempts && FX_RETRY.ms) await fxSleep(FX_RETRY.ms);
+    }
+  }
+  throw lastErr;
+}
+
+// 첫 페이지를 읽을 수 있는 주소를 찾는다 → { src, parsed }. 전부 실패하면 주소별 실패 이유를 모아 던진다
+async function naverFxFirstPage(code, fetcher) {
+  const errs = [];
+  for (const src of FX_SOURCES) {
+    try {
+      const parsed = await naverFxPage(src, code, 1, fetcher);
+      if (!parsed.rows.length) throw new Error(`읽을 수 있는 줄이 없음(${parsed.items}건 중 ${parsed.skipped}건 제외)`);
+      return { src, parsed };
+    } catch (e) { errs.push(`${src.id}: ${e.message}`); }
+  }
+  throw new Error('네이버 환율 수집 실패 — ' + errs.join(' / '));
+}
+
+// startYmd 이후 일별 환율 줄을 최신 → 과거 순서로 페이지를 넘기며 수집 → { rows, src, pages, stopped }
+// stopped: 중간 페이지를 못 읽어 멈춘 경우의 이유 (그때까지 모은 줄은 돌려준다)
+async function naverFxRowsSince(code, startYmd, opt = {}) {
+  const fetcher = opt.fetcher || fetchNaverJson;
+  const maxPages = opt.maxPages || 80;
+  const { src, parsed } = await naverFxFirstPage(code, fetcher);
+  const byDate = new Map();
+  let oldest = '9999-99-99';
+  const add = rows => {
+    let added = 0;
+    for (const r of rows) if (!byDate.has(r.ymd)) { byDate.set(r.ymd, r); added++; if (r.ymd < oldest) oldest = r.ymd; }
+    return added;
+  };
+  add(parsed.rows);
+  let pages = 1, stopped = null;
+  for (let page = 2; page <= maxPages && oldest >= startYmd; page++) {
+    try {
+      const p = await naverFxPage(src, code, page, fetcher, 2);
+      pages++;
+      if (!p.rows.length || add(p.rows) === 0) break;      // 끝에 닿았거나 같은 줄만 되풀이 → 더 받지 않음
+    } catch (e) { stopped = `${page}쪽 ${e.message}`; break; }
+  }
+  return { rows: [...byDate.values()], src: src.id, pages, stopped };
+}
+
+// 현재 환율 = 가장 최근 날짜 줄 (값과 함께 기준일·기준을 돌려준다)
+async function naverFxLatest(pair, fetcher = fetchNaverJson) {
   const key = 'naver_fx_latest_' + pair;
   const hit = aCache.get(key);
   if (hit && Date.now() - hit.ts < 5 * 60000) return hit.data;
 
-  let html, lastErr;
-  for (let attempt = 0; attempt < 2 && html === undefined; attempt++) {
-    try { html = await fetcher(fxPageUrl(pair, 1), 'euc-kr', 8000); } catch (e) { lastErr = e; }
-  }
-  if (html === undefined) throw new Error('네이버 증권 응답 없음 (' + (lastErr?.message || '연결 실패') + ')');
-  const parsed = parseNaverFxTable(html);
-  if (!parsed.rows.length) throw new Error('네이버 환율 표를 읽지 못했습니다');
-  const last = parsed.rows.reduce((a, b) => (b.ymd > a.ymd ? b : a));
+  const { src, parsed } = await naverFxFirstPage(FX_CODES[pair], fetcher);
+  const newest = [...parsed.rows].sort((a, b) => (a.ymd < b.ymd ? 1 : -1));
+  const last = newest.slice(0, 3).find(r => r.buy != null) || newest[0];   // 최신 줄에 사실 때가 비면 며칠 안쪽의 줄(날짜 표시됨)
   const basis = last.buy != null ? 'buy' : 'std';
   const data = {
     price: basis === 'buy' ? last.buy : last.std, std: last.std, date: last.ymd,
     basis, basisLabel: FX_BASIS_LABEL[basis], source: 'naver', name: FX_NAMES[pair], unit: '원',
   };
   aCache.set(key, { data, ts: Date.now() });
-  console.log(`✅ 네이버 ${pair} ${data.price} (${data.basisLabel}, ${data.date})`);
+  console.log(`✅ 네이버 ${pair} ${data.price} (${data.basisLabel}, ${data.date}, ${src.id})`);
   return data;
 }
 
 // 일별 환율 이력 (startYmd 이후) → { rows:[{time, open, high, low, close}], basis }
-async function naverFxHistoryCrawl(pair, startYmd, maxPages = 40, fetcher = fetchText) {
+// 같은 수집이 동시에 여러 번 요청돼도(서버 시작 직후 미리 불러오기 · 첫 화면 · 수입 타이밍이 겹침) 네이버에는 한 번만 묻는다
+const fxHistInflight = new Map();
+async function naverFxHistoryCrawl(pair, startYmd, maxPages = 80, fetcher = fetchNaverJson) {
   const cacheKey = 'naver_hist_' + pair;
   const hit = aCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < 6 * 3600000) return hit.data;
+  const jobKey = cacheKey + '|' + startYmd;
+  if (fxHistInflight.has(jobKey)) return fxHistInflight.get(jobKey);
 
-  const raw = [];
-  for (let page = 1; page <= maxPages; page++) {
-    try {
-      const parsed = parseNaverFxTable(await fetcher(fxPageUrl(pair, page), 'euc-kr', 10000));
-      if (!parsed.rows.length) break;
-      raw.push(...parsed.rows);
-      // startYmd보다 이전 데이터가 나오면 중단 (표는 최신 → 과거 순)
-      if (parsed.rows[parsed.rows.length - 1].ymd < startYmd) break;
-    } catch (e) {
-      console.warn(`naverFxHistory ${pair} p${page}:`, e.message);
-      break;
+  const job = (async () => {
+    const got = await naverFxRowsSince(FX_CODES[pair], startYmd, { fetcher, maxPages });
+    const inRange = got.rows.filter(r => r.ymd >= startYmd).sort((a, b) => (a.ymd < b.ymd ? -1 : 1));
+    // 중간에 멈췄는데 필요한 기간의 앞부분이 비었으면 '일부만 있는 이력'을 정상처럼 쓰지 않는다 (호출한 쪽이 다른 출처를 시도)
+    if (got.stopped && (!inRange.length || inRange[0].ymd > addDaysYmd(startYmd, 10))) {
+      throw new Error(`네이버 환율 이력 수집이 중간에 멈춤 — ${got.stopped}`);
     }
-  }
-
-  const { basis, rows: picked } = fxPickBasis(raw);
-  const rows = dedupeByTime(picked.map(r => {
-    const t = dateToUnix(r.ymd);
-    return { time: t, open: r.price, high: r.price, low: r.price, close: r.price, source: 'naver' };
-  })).filter(r => ymdFromUnix(r.time) >= startYmd);
-  const data = { rows, basis };
-  if (rows.length > 5) {
-    aCache.set(cacheKey, { data, ts: Date.now() });
-    console.log(`✅ 네이버 ${pair}: ${rows.length}건 (${FX_BASIS_LABEL[basis]})`);
-  }
-  return data;
+    const { basis, rows: picked, excluded } = fxPickBasis(inRange);
+    const rows = dedupeByTime(picked.map(r => {
+      const t = dateToUnix(r.ymd);
+      return { time: t, open: r.price, high: r.price, low: r.price, close: r.price, source: 'naver' };
+    }));
+    const data = { rows, basis, excluded, pages: got.pages, via: got.src };
+    if (rows.length > 5) {
+      aCache.set(cacheKey, { data, ts: Date.now() });
+      console.log(`✅ 네이버 ${pair}: ${rows.length}건 (${FX_BASIS_LABEL[basis]}, ${got.pages}쪽, ${got.src}${excluded ? ', 사실 때 값 없는 ' + excluded + '일 제외' : ''})`);
+    }
+    return data;
+  })();
+  fxHistInflight.set(jobKey, job);
+  try { return await job; } finally { fxHistInflight.delete(jobKey); }
 }
 
 
@@ -494,6 +556,7 @@ async function fetchFxHistory(pair, startYmd) {
       console.log(`✅ 네이버 FX History ${pair}: ${r.rows.length}건 (${FX_BASIS_LABEL[r.basis]})`);
       return { rows: r.rows, source: 'naver', basis: r.basis };
     }
+    console.warn(`네이버 FX History ${pair}: 줄 수가 너무 적음 (${r.rows.length}건)`);
   } catch (e) { console.warn(`네이버 FX History ${pair}:`, e.message); }
 
   // 2순위: Yahoo Finance — 국제 종가라서 '사실 때' 환율이 아니다 (basis:'yahoo' 로 화면에 표시)
@@ -1312,7 +1375,7 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.3.0' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.3.1' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -1338,20 +1401,64 @@ app.get('/api/history', async (req, res) => {
 });
 
 
-// 진단용 — 네이버 환율 표를 어떻게 읽었는지(머리글·읽은 칸·첫 줄)를 브라우저에서 바로 확인
-app.get('/api/fx-debug', async (_, res) => {
+// 진단용 — 네이버 환율 주소를 실제로 불러서 어떻게 읽었는지(HTTP 상태·응답 모양·첫 줄)를 브라우저에서 바로 확인
+//   /api/fx-debug         : 주소별 첫 페이지
+//   /api/fx-debug?deep=1  : 1년 6개월 치를 끝까지 받아 '사실 때' 값이 며칠 있는지까지 (요청이 50번쯤 나가므로 한 번에 하나, 1분에 한 번만)
+const FX_DEBUG = { busy: false, deepAt: 0, cooldownMs: 60000 };
+app.get('/api/fx-debug', async (req, res) => {
   const out = { ok: true, at: kstNow(), wanted: FX_BASIS_LABEL.buy };
-  for (const pair of Object.keys(FX_CODES)) {
-    try {
-      const html = await fetchText(fxPageUrl(pair, 1), 'euc-kr', 8000);
-      const p = parseNaverFxTable(html);
-      out[pair] = {
-        ok: p.rows.length > 0, htmlChars: html.length,
-        headerLeaves: p.leaves, stdCol: p.stdCol, buyCol: p.buyCol,
-        rawFirstRows: p.sample, parsedFirstRows: p.rows.slice(0, 3),
-        basisUsed: p.rows.length && p.rows[0].buy != null ? 'buy' : 'std',
-      };
-    } catch (e) { out[pair] = { ok: false, error: e.message }; }
+  const pairs = Object.keys(FX_CODES);
+  await Promise.all(pairs.map(async (pair) => {
+    const code = FX_CODES[pair];
+    const cands = [];
+    for (const src of FX_SOURCES) {
+      const url = src.url(code, 1, src.pageSize);
+      const d = { source: src.id, url };
+      try {
+        const r = await fetchNaverRaw(url, 8000);
+        d.status = r.status; d.contentType = String(r.contentType).split(';')[0]; d.chars = r.text.length;
+        if (r.url !== url) d.movedTo = String(r.url).slice(0, 200);
+        let json, jsonOk = false;
+        try { json = JSON.parse(r.text); jsonOk = true; } catch { /* 아래에서 오류로 표시 */ }
+        if (!r.ok || !jsonOk) d.head = r.text.replace(/\s+/g, ' ').slice(0, 300);
+        if (!r.ok) d.error = 'HTTP ' + r.status;
+        else if (!jsonOk) d.error = 'JSON 아님';
+        else {
+          const p = parseNaverFxItems(json);
+          d.found = p.found; d.items = p.items; d.skipped = p.skipped; d.keys = p.keys; d.sample = p.sample;
+          d.parsedFirstRows = p.rows.slice(0, 3);
+          d.basisUsed = p.rows.length && p.rows.every(x => x.buy != null) ? 'buy' : 'std';
+          d.ok = p.rows.length > 0;
+          if (!d.ok) d.error = p.found ? '읽을 수 있는 줄이 없음' : '응답에서 환율 목록을 찾지 못함';
+        }
+      } catch (e) { d.error = e.message; }
+      cands.push(d);
+    }
+    out[pair] = { used: (cands.find(c => c.ok) || {}).source || null, candidates: cands };
+  }));
+
+  if (String((req && req.query && req.query.deep) || '') === '1') {
+    if (FX_DEBUG.busy) out.deep = '다른 정밀 점검이 진행 중입니다. 잠시 뒤에 다시 열어 주세요';
+    else if (Date.now() - FX_DEBUG.deepAt < FX_DEBUG.cooldownMs) out.deep = '정밀 점검은 1분에 한 번만 할 수 있습니다. 잠시 뒤에 다시 열어 주세요';
+    else {
+      FX_DEBUG.busy = true; FX_DEBUG.deepAt = Date.now();
+      try {
+        const start = addDaysYmd(kstNow().slice(0, 10), -548);
+        await Promise.all(pairs.map(async (pair) => {
+          try {
+            const g = await naverFxRowsSince(FX_CODES[pair], start, {});
+            const rows = g.rows.filter(r => r.ymd >= start).sort((a, b) => (a.ymd < b.ymd ? -1 : 1));
+            const noBuy = rows.filter(r => r.buy == null).map(r => r.ymd);
+            out[pair].coverage = {
+              source: g.src, pages: g.pages, stopped: g.stopped,
+              from: rows.length ? rows[0].ymd : null, to: rows.length ? rows[rows.length - 1].ymd : null,
+              days: rows.length, withBuy: rows.length - noBuy.length, withoutBuy: noBuy.length,
+              withoutBuyFirst: noBuy.slice(0, 10), basisWouldBe: fxPickBasis(rows).basis,
+            };
+          } catch (e) { out[pair].coverage = { error: e.message }; }
+        }));
+      } finally { FX_DEBUG.busy = false; }
+    }
   }
   res.json(out);
 });
@@ -1428,7 +1535,7 @@ app.get('/api/analysis/market', async (_, res) => {
 // ※ 원칙: 수집에 실패하면 가짜(시드) 값으로 채우지 않는다. 못 가져왔으면 못 가져왔다고 알린다.
 // ════════════════════════════════════════════════════
 
-// (네이버 일별 시세 표 파싱은 위쪽 parseNaverFxTable 하나를 현재가·이력·월평균이 함께 쓴다)
+// (네이버 JSON 읽기는 위쪽 parseNaverFxItems / naverFxRowsSince 하나를 현재가·이력·월평균이 함께 쓴다)
 
 function addDaysYmd(ymd, days) {
   return new Date(Date.parse(ymd + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10);
@@ -1443,7 +1550,7 @@ function fxDailyProblems(rows, startYmd, todayYmd) {
   if (last < addDaysYmd(todayYmd, -10)) problems.push(`최신 ${last}까지만 수신`);
   for (let i = 1; i < rows.length; i++) {
     const gap = (Date.parse(rows[i].ymd + 'T00:00:00Z') - Date.parse(rows[i - 1].ymd + 'T00:00:00Z')) / 86400000;
-    if (gap > 13) {   // 페이지 하나(영업일 10건)가 통째로 빠지면 최소 14일 공백
+    if (gap > 13) {   // 페이지 하나가 통째로 빠지면 최소 14일 공백
       problems.push(`${rows[i - 1].ymd}~${rows[i].ymd} 구간 누락`);
       if (problems.length >= 4) break;
     }
@@ -1451,45 +1558,19 @@ function fxDailyProblems(rows, startYmd, todayYmd) {
   return problems;
 }
 
-// startYmd 이후 일별 환율을 네이버에서 수집 (페이지를 batch 개씩 병렬로 — 1~2년치도 빠르게)
-async function naverFxDailySince(code, startYmd, fetcher = fetchText, opt = {}) {
-  const batch    = opt.batch || 5;
-  const maxPages = opt.maxPages || 130;
-  const today    = opt.today || kstNow().slice(0, 10);
-  const byDate   = new Map();
+// startYmd 이후 일별 환율을 네이버에서 수집 (최신 → 과거로 페이지를 넘김 — 1~2년 치도 몇 번의 요청으로 끝남)
+// 첫 페이지를 어느 주소에서도 못 읽으면 rows 를 비우고 이유를 problems 로 돌려준다 (호출한 쪽이 다른 출처를 시도)
+async function naverFxDailySince(code, startYmd, fetcher = fetchNaverJson, opt = {}) {
+  const today = opt.today || kstNow().slice(0, 10);
+  let got;
+  try { got = await naverFxRowsSince(code, startYmd, { fetcher, maxPages: opt.maxPages }); }
+  catch (e) { return { rows: [], problems: [e.message], complete: false, basis: 'std', excluded: 0, src: null }; }
 
-  const fetchPage = async (p) => {
-    const url = `https://finance.naver.com/marketindex/exchangeDailyQuote.naver?marketindexCd=${code}&page=${p}`;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try { return parseNaverFxTable(await fetcher(url, 'euc-kr', 10000)).rows; }
-      catch (e) { if (attempt === 1) return null; }
-    }
-    return null;
-  };
-
-  let page = 1, ended = false, reached = false;
-  while (page <= maxPages && !ended && !reached) {
-    const nums = [];
-    for (let i = 0; i < batch && page + i <= maxPages; i++) nums.push(page + i);
-    const before = byDate.size;
-    const results = await Promise.all(nums.map(fetchPage));
-    results.forEach(r => {
-      if (r === null) return;                 // 수신 실패 → 아래 누락 점검에서 걸러짐
-      if (r.length === 0) { ended = true; return; }
-      for (const row of r) byDate.set(row.ymd, row);
-    });
-    page += nums.length;
-    if (byDate.size === before) ended = true;   // 한 묶음이 통째로 새 날짜를 못 가져오면 끝으로 간주
-    const oldest = [...byDate.keys()].sort()[0];
-    if (oldest && oldest < startYmd) reached = true;
-  }
-
-  const raw = [...byDate.values()]
-    .filter(r => r.ymd >= startYmd)
-    .sort((a, b) => (a.ymd < b.ymd ? -1 : 1));
-  const { basis, rows } = fxPickBasis(raw);          // 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준, 아니면 전부 매매기준율
+  const raw = got.rows.filter(r => r.ymd >= startYmd).sort((a, b) => (a.ymd < b.ymd ? -1 : 1));
+  const { basis, rows, excluded } = fxPickBasis(raw);   // 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준, 아니면 전부 매매기준율
   const problems = fxDailyProblems(rows, startYmd, today);
-  return { rows, problems, complete: problems.length === 0, basis };
+  if (got.stopped) problems.push('수집 중단: ' + got.stopped);
+  return { rows, problems, complete: problems.length === 0, basis, excluded, src: got.src };
 }
 
 // Yahoo 일별 환율 (네이버가 불완전할 때만 대체) — 실패하면 빈 배열, 시드 사용 안 함
@@ -1549,7 +1630,7 @@ async function getFxMonthly(startYm, deps = {}) {
     const pairs = [['USDKRW', 'FX_USDKRW', 'usd'], ['EURKRW', 'FX_EURKRW', 'eur']];
     await Promise.all(pairs.map(async ([pair, code, slot]) => {
       try {
-        let res = await naverFxDailySince(code, startYmd, deps.fetcher || fetchText, { today });
+        let res = await naverFxDailySince(code, startYmd, deps.fetcher || fetchNaverJson, { today });
         let source = 'naver';
         if (!res.complete) {
           const why = res.problems.slice(0, 2).join('; ');
@@ -1887,7 +1968,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.3.0', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.3.1', buildId:BUILD_ID, time:kstNow() }));
 
 // KAMIS 설정값 브라우저에 안전하게 전달 (키만 노출, WAF 우회용)
 app.get('/api/kamis-config', (_, res) => {
@@ -2109,7 +2190,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxTable, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, fetchFxHistory,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, fetchFxHistory,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2117,7 +2198,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.3 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.3.1 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
