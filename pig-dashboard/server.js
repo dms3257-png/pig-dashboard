@@ -1,8 +1,10 @@
-// server.js - 수안푸드 지육가 대시보드 v3.3.1
+// server.js - 수안푸드 지육가 대시보드 v3.4.0
+// v3.4.0: 수입 타이밍 판정 기준(달러 1,400원·유로 1,500원 고정)을 거시 지표 기준으로 재설정 — 기준·근거·설정일·검토일은 TIMING_CFG 한 곳
 // 안정화: 빠른 무료 API + 5초 타임아웃 + 즉시 폴백
 // v3.2: 품목 전략 탭 (환율 월평균 /api/fx-monthly + AI 품목 판단 POST /api/analysis/items)
 // v3.3: 환율을 네이버 증권 '현찰 사실 때'(살 때) 기준으로 통일 · 출처/기준일 표시 · 고정값과 가짜 시드 제거 (진단: /api/fx-debug)
 // v3.3.1: 네이버가 환율 화면을 새 사이트로 옮겨 예전 표가 비었음 → 새 JSON 주소(api.stock.naver.com)에서 매매기준율·현찰 사실 때를 날짜별로 수집
+// v3.3.2: 환율 기준을 다시 '매매기준율'(기본)로 — 기준은 FX_CFG.want 한 곳에서 정하며, Render 환경변수 FX_BASIS=buy 로 '현찰 사실 때'로 바꿀 수 있음
 
 const path    = require('path');
 const fs      = require('fs');
@@ -258,19 +260,24 @@ async function fetchEkapepiaHistory(startYmd) {
 
 
 // ════════════════════════════════════════════════════
-// 네이버 증권 환율 — '현찰 사실 때'(= 살 때) 기준
+// 네이버 증권 환율 — 기본은 '매매기준율', 환경변수 FX_BASIS=buy 이면 '현찰 사실 때'(= 살 때) 기준 (FX_CFG.want)
 //  · 네이버가 환율 화면을 stock.naver.com(자바스크립트로 그리는 새 사이트)으로 옮기면서
 //    예전 표 페이지(finance.naver.com/marketindex/exchangeDailyQuote)는 더 이상 표를 주지 않습니다.
 //  · 새 사이트가 쓰는 JSON 주소(api.stock.naver.com/marketindex/exchange/FX_USDKRW/prices)는
 //    날짜마다 매매기준율(closePrice) · 현찰 사실 때(cashBuyValue) · 파실 때(cashSellValue) ·
 //    송금 보내실 때(sendValue) · 받으실 때(receiveValue)를 주고, 최신 날짜가 맨 앞입니다.
-//  · '사실 때' 값이 없거나 이상하면(매매기준율보다 낮거나 6% 넘게 높음) 사실 때인 척하지 않고
-//    매매기준율을 쓰되 basis 를 'std' 로 표시합니다 → 화면에는 "매매기준율"이라고 나옵니다
+//  · 기본(매매기준율)은 closePrice 만 쓰므로 '사실 때' 값이 비어 있어도 상관없습니다
+//  · FX_BASIS=buy 일 때: '사실 때' 값이 없거나 이상하면(매매기준율보다 낮거나 6% 넘게 높음) 사실 때인 척하지 않고
+//    매매기준율을 쓰되 basis 를 'std' 로 표시합니다 → 화면에는 "매매기준율"이라고 나오고 경고가 붙습니다
 //  · 수집에 실패해도 고정값·가짜(시드) 값으로 채우지 않습니다. 실패 이유(HTTP 상태 등)는 그대로 알립니다
 // ════════════════════════════════════════════════════
 const FX_CODES = { USDKRW: 'FX_USDKRW', EURKRW: 'FX_EURKRW' };
 const FX_NAMES = { USDKRW: 'USD/KRW', EURKRW: 'EUR/KRW' };
-const FX_BASIS_LABEL = { buy: '현찰 사실 때', std: '매매기준율', yahoo: '국제 종가(Yahoo·사실 때 아님)' };
+// 화면·계산에 쓸 환율 기준: 'std' 매매기준율(기본) / 'buy' 현찰 사실 때 (Render 환경변수 FX_BASIS=buy)
+const FX_CFG = { want: String(process.env.FX_BASIS || '').trim().toLowerCase() === 'buy' ? 'buy' : 'std' };
+const FX_BASIS_LABEL = { buy: '현찰 사실 때', std: '매매기준율' };
+// Yahoo 국제 종가는 네이버 기준이 아니므로 "무엇이 아닌지"를 현재 기준에 맞춰 적는다
+const fxBasisLabel = b => (b === 'yahoo' ? `국제 종가(Yahoo·${FX_BASIS_LABEL[FX_CFG.want]} 아님)` : (FX_BASIS_LABEL[b] || '기준 미상'));
 
 // 같은 내용을 주는 네이버 주소 후보. 앞에서부터 시도하고, 첫 페이지가 성공한 주소로 끝까지 수집합니다
 // (주소마다 한 페이지 크기가 달라서, 중간에 주소를 바꾸면 날짜가 겹치거나 빠집니다)
@@ -372,7 +379,8 @@ function parseNaverFxItems(payload) {
 
 // 수집한 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준으로 쓴다 (섞이면 전부 매매기준율 — 기준이 섞인 평균을 만들지 않는다)
 // 다만 50일 이상 모였고 값이 빠진 날이 2% 이하(최소 2일)이면 그 날짜만 빼고 사실 때 기준을 유지한다 (한두 줄 때문에 전체 기준이 바뀌지 않게)
-function fxPickBasis(rows) {
+function fxPickBasis(rows, want = FX_CFG.want) {
+  if (want !== 'buy') return { basis: 'std', rows: rows.map(r => ({ ymd: r.ymd, price: r.std, std: r.std })), excluded: 0 };   // 기본: 매매기준율
   const have = rows.filter(r => r.buy != null);
   const missing = rows.length - have.length;
   const useBuy = have.length > 0 && (missing === 0 || (rows.length >= 50 && missing <= Math.max(2, Math.floor(rows.length * 0.02))));
@@ -447,11 +455,13 @@ async function naverFxLatest(pair, fetcher = fetchNaverJson) {
 
   const { src, parsed } = await naverFxFirstPage(FX_CODES[pair], fetcher);
   const newest = [...parsed.rows].sort((a, b) => (a.ymd < b.ymd ? 1 : -1));
-  const last = newest.slice(0, 3).find(r => r.buy != null) || newest[0];   // 최신 줄에 사실 때가 비면 며칠 안쪽의 줄(날짜 표시됨)
-  const basis = last.buy != null ? 'buy' : 'std';
+  const wantBuy = FX_CFG.want === 'buy';
+  // 사실 때 기준일 때만: 최신 줄에 사실 때가 비면 며칠 안쪽의 줄(날짜 표시됨)을 쓴다. 매매기준율(기본)은 가장 최근 줄
+  const last = wantBuy ? (newest.slice(0, 3).find(r => r.buy != null) || newest[0]) : newest[0];
+  const basis = wantBuy && last.buy != null ? 'buy' : 'std';
   const data = {
     price: basis === 'buy' ? last.buy : last.std, std: last.std, date: last.ymd,
-    basis, basisLabel: FX_BASIS_LABEL[basis], source: 'naver', name: FX_NAMES[pair], unit: '원',
+    basis, basisLabel: fxBasisLabel(basis), wanted: FX_CFG.want, source: 'naver', name: FX_NAMES[pair], unit: '원',
   };
   aCache.set(key, { data, ts: Date.now() });
   console.log(`✅ 네이버 ${pair} ${data.price} (${data.basisLabel}, ${data.date}, ${src.id})`);
@@ -546,7 +556,7 @@ async function callGemini(prompt, opts = {}) {
 }
 
 // ════════════════════════════════════════════════════
-// 환율 히스토리 — 네이버 증권(현찰 사실 때) → 실패하면 Yahoo(국제 종가, 기준이 다름을 표시) → 그래도 실패하면 빈 값
+// 환율 히스토리 — 네이버 증권(FX_CFG.want 기준) → 실패하면 Yahoo(국제 종가, 기준이 다름을 표시) → 그래도 실패하면 빈 값
 // ※ 고정값·가짜(시드) 값은 만들지 않습니다. 못 가져왔으면 못 가져왔다고 알립니다.
 // ════════════════════════════════════════════════════
 async function fetchFxHistory(pair, startYmd) {
@@ -559,10 +569,10 @@ async function fetchFxHistory(pair, startYmd) {
     console.warn(`네이버 FX History ${pair}: 줄 수가 너무 적음 (${r.rows.length}건)`);
   } catch (e) { console.warn(`네이버 FX History ${pair}:`, e.message); }
 
-  // 2순위: Yahoo Finance — 국제 종가라서 '사실 때' 환율이 아니다 (basis:'yahoo' 로 화면에 표시)
+  // 2순위: Yahoo Finance — 국제 종가라서 네이버 환율(매매기준율·사실 때)이 아니다 (basis:'yahoo' 로 화면에 표시)
   const yr = await yahooFxDaily(pair, startYmd);
   if (yr.length > 5) {
-    console.log(`✅ FX History ${pair}: Yahoo ${yr.length}건 (사실 때 아님)`);
+    console.log(`✅ FX History ${pair}: Yahoo ${yr.length}건 (${FX_BASIS_LABEL[FX_CFG.want]} 아님)`);
     return {
       rows: yr.map(r => ({ time: dateToUnix(r.ymd), open: r.price, high: r.price, low: r.price, close: +r.price.toFixed(2) })),
       source: 'yahoo', basis: 'yahoo',
@@ -1054,7 +1064,7 @@ async function getCurrentPrices() {
 
   // 병렬로 모두 요청, 각각 독립 실패 허용
   const [usdRes, eurRes, lhRes, zcRes, zsRes, kamisRes] = await Promise.allSettled([
-    naverFxLatest('USDKRW'),   // 네이버 증권 — 현찰 사실 때
+    naverFxLatest('USDKRW'),   // 네이버 증권 — FX_CFG.want 기준 (기본 매매기준율)
     naverFxLatest('EURKRW'),
     yahooCurrent('HE=F'),
     yahooCurrent('ZC=F'),
@@ -1064,7 +1074,7 @@ async function getCurrentPrices() {
 
   const results = {};
 
-  // 환율 — 네이버 증권 '현찰 사실 때'. 못 가져오면 다른 출처·고정값으로 채우지 않고 실패로 알린다
+  // 환율 — 네이버 증권(FX_CFG.want 기준). 못 가져오면 다른 출처·고정값으로 채우지 않고 실패로 알린다
   const fxErrors = {};
   for (const [pair, r] of [['USDKRW', usdRes], ['EURKRW', eurRes]]) {
     if (r.status === 'fulfilled' && r.value) results[pair] = r.value;
@@ -1107,6 +1117,33 @@ async function getCurrentPrices() {
 // ════════════════════════════════════════════════════
 // 수입 타이밍 정밀 분석
 // ════════════════════════════════════════════════════
+// ── 수입 타이밍 판정 기준 (한 곳에서만 고친다) ──────────────────────────────
+// 환율 기준값은 모두 '매매기준율'(원) 기준이다. 화면 환율이 '현찰 사실 때'(FX_BASIS=buy)면 같은 비율(사실 때 ÷ 매매기준율)만큼 올려서 비교한다.
+// 아래 숫자는 "참고용 시나리오 기준"이며 예측이 아니다. 시장 상황이 바뀌면 reviewOn(검토일)에 맞춰 다시 설정해야 한다.
+const TIMING_CFG = {
+  setOn: '2026-11-03',       // 기준을 정한 날
+  reviewOn: '2026-11-27',    // 검토일 — 한국은행 11/26 금통위 다음 날. 이 날짜가 지나면 거시 보정(tilt)을 자동으로 끄고 "기준 검토 필요"를 표시한다
+  usd: { center: 1345, favor: 1310, burden: 1385 },   // 중심 = 최근 2주 박스권 중심(약 1,335~1,347). 유리 = 중심 -2.5%, 부담 = 중심 +3% (위쪽 위험을 더 넓게 봄)
+  eur: { center: 1503, favor: 1465, burden: 1550 },   // 중심 = EUR/USD 약 1.12 x 달러 1,345원. 같은 비율 (-2.5% / +3%)
+  lh:  { cheap: 72, low: 85, high: 102, checked: false },   // CME 린호그 구간은 이번 조사에서 새로 검증하지 않았다 (checked:false → 화면에 표시)
+  outOfRangePct: 6,          // 현재 환율이 중심에서 이 % 이상 벗어나면 "기준 재검토 필요" 경고
+  // 거시 보정: 달러 쪽에 상승(원화 약세) 위험이 더 크다고 보는 근거 — 검토일 전까지만 '대기 신호' 1점을 더한다
+  tilt: { usdWait: 1 },
+  rationale: [
+    '원/달러: 11/2 마감 1,343.8원(2주 만에 최고). 외국인 연말 송금·수입 결제 수요 vs 수출업체 달러 매도로 박스권 — 세계일보 11/2',
+    '한국 성장: 3분기 GDP 전기비 +1.0%·전년비 +3.4%(반도체·설비투자 주도), 민간소비 -0.2% — 한국은행 10/27 발표 보도. 원화 지지 요인',
+    '한국 금리: 한은 10/22 기준금리 3.00% 동결(만장일치), 11/26 인상 전망이 우세 — 아주경제 10/22. 원화 지지 요인',
+    '미국: Fed 10/28 금리 동결(3.75~4.00%), 2명 인상 소수의견, 9월 PCE 전년비 3.6% — 달러 강세·추가 인상 위험. 달러인덱스는 18개월 고점 부근(약 102.5, FXStreet 제목 기준)',
+    '유로: ECB 10/29 동결(2.65%), 12월 인상 가능성 논의. EUR/USD 약 1.12 — RoboForex 10/30',
+    '해석: 원화 지지(성장·금리)와 달러 강세(Fed·DXY) 요인이 맞서 지금은 박스권 판단. 위쪽(원화 약세) 위험을 더 크게 보고 부담 기준을 넓게 잡았다',
+  ],
+  disclaimer: '참고용 시나리오 기준입니다. 투자·환헤지 자문이 아니며, 계약 결정은 담당자가 직접 판단하세요.',
+};
+const timingCfgState = () => {
+  const today = kstNow().slice(0, 10);
+  return { today, expired: today > TIMING_CFG.reviewOn };
+};
+
 async function analyzeImportTiming() {
   const [current, usdHistAll, eurHistAll, lhHistAll] = await Promise.all([
     getCurrentPrices(),
@@ -1164,27 +1201,29 @@ async function analyzeImportTiming() {
   const usdForecast = forecastRange(usd, usdTrend, usdHist);
   const eurForecast = forecastRange(eur, eurTrend, eurHist);
 
-  // 판정 기준값(달러 1,400원·유로 1,500원)은 매매기준율 수준으로 잡아 둔 고정 숫자다.
-  // 화면의 환율이 '현찰 사실 때'(매매기준율보다 높음)이므로, 같은 비율(사실 때 ÷ 매매기준율)만큼 올려서 비교한다 → 기준을 바꿔도 판정 기준은 그대로
+  // 판정 기준값은 TIMING_CFG (매매기준율 기준). 화면 환율이 '현찰 사실 때'면 같은 비율(사실 때 ÷ 매매기준율)만큼 올려서 비교한다
   const kOf = c => (c && c.basis === 'buy' && c.std > 0 && c.price > 0) ? c.price / c.std : 1;
   const usdK = kOf(current?.USDKRW), eurK = kOf(current?.EURKRW);
-  const baseTxt = (b0, k) => k === 1 ? `${b0.toLocaleString()}원` : `${b0.toLocaleString()}원 → 사실 때 환산 ${Math.round(b0 * k).toLocaleString()}원`;
+  const scaled = (v, k) => Math.round(v * k);
+  const baseTxt = (v, k) => k === 1 ? `${v.toLocaleString()}원` : `${v.toLocaleString()}원 → 사실 때 환산 ${scaled(v, k).toLocaleString()}원`;
+  const { expired } = timingCfgState();
+  const cfg = TIMING_CFG;
 
   // 매입 신호
   const signals = { buy: 0, wait: 0 };
   const analysis = [];
+  const outOfRange = (v, center, k) => Math.abs(v / (center * k) - 1) * 100 >= cfg.outOfRangePct;
 
   if (usd) {
-    const b0 = 1400;                                  // 현재 환율 수준 반영
-    const base = b0 * usdK, lo = base - 30 * usdK, hi = base + 60 * usdK;
+    const lo = cfg.usd.favor * usdK, hi = cfg.usd.burden * usdK;
     const dir = usdTrend ? usdTrend.dir : null;
     const tag = `USD/KRW ${usd.toLocaleString()}원`;
     if (usd < lo && dir && dir !== '상승') {
       signals.buy += 3;
-      analysis.push({ msg: `✅ ${tag} — 기준(${baseTxt(b0, usdK)}) 대비 저환율, 수입 비용 유리` });
+      analysis.push({ msg: `✅ ${tag} — 유리 기준(${baseTxt(cfg.usd.favor, usdK)}) 미만, 수입 비용 유리` });
     } else if (usd > hi) {
       signals.wait += 3;
-      analysis.push({ msg: `🔴 ${tag} — 고환율 ${Math.round(usd-base)}원 초과. 수입원가 부담` });
+      analysis.push({ msg: `🔴 ${tag} — 고환율: 부담 기준(${baseTxt(cfg.usd.burden, usdK)})보다 ${Math.round(usd - hi)}원 높음. 수입원가 부담` });
     } else if (dir === '하락') {
       signals.buy += 1;
       analysis.push({ msg: `🟡 ${tag} — 하락 추세(${usdTrend.pct}%). 추가 하락 후 매입도 고려` });
@@ -1196,38 +1235,51 @@ async function analyzeImportTiming() {
     } else {
       analysis.push({ msg: `⚪ ${tag} — 추세 자료 없음(환율 이력 수집 실패). 현재 값만 확인했고 방향 판단은 보류` });
     }
+    // 거시 보정 (검토일 전까지만)
+    if (!expired && cfg.tilt.usdWait) {
+      signals.wait += cfg.tilt.usdWait;
+      analysis.push({ msg: `🌐 거시 보정(${cfg.setOn} 설정, ${cfg.reviewOn} 검토): 달러 강세·Fed 인상 위험 vs 한국 성장·한은 인상이 맞서는 구간 — 원화 약세 위험을 조금 더 크게 봐 대기 신호 +${cfg.tilt.usdWait}` });
+    }
+    if (outOfRange(usd, cfg.usd.center, usdK)) {
+      analysis.push({ msg: `⚠️ USD/KRW 가 기준 중심(${baseTxt(cfg.usd.center, usdK)})에서 ${cfg.outOfRangePct}% 이상 벗어났습니다 — 판정 기준을 다시 검토해야 합니다` });
+    }
   } else {
     analysis.push({ msg: '⚠️ USD/KRW — 환율을 가져오지 못해 환율 신호를 계산하지 않았습니다' });
   }
 
   if (eur) {
-    const b0 = 1500;
-    const base = b0 * eurK, lo = base - 50 * eurK, hi = base + 70 * eurK;
+    const lo = cfg.eur.favor * eurK, hi = cfg.eur.burden * eurK;
     const dir = eurTrend ? eurTrend.dir : null;
     const tag = `EUR/KRW ${eur.toLocaleString()}원`;
     if (eur < lo && dir && dir !== '상승') {
       signals.buy += 2;
-      analysis.push({ msg: `✅ ${tag} — EU 지육 수입 비용 유리` });
+      analysis.push({ msg: `✅ ${tag} — 유리 기준(${baseTxt(cfg.eur.favor, eurK)}) 미만, EU 지육 수입 비용 유리` });
     } else if (eur > hi) {
       signals.wait += 2;
-      analysis.push({ msg: `⚠️ ${tag} — EU 수입 비용 높음` });
+      analysis.push({ msg: `⚠️ ${tag} — 부담 기준(${baseTxt(cfg.eur.burden, eurK)}) 초과, EU 수입 비용 높음` });
     } else if (dir) {
       analysis.push({ msg: `🔵 ${tag} — 보통 수준` });
     } else {
       analysis.push({ msg: `⚪ ${tag} — 추세 자료 없음(환율 이력 수집 실패). 방향 판단은 보류` });
     }
+    if (outOfRange(eur, cfg.eur.center, eurK)) {
+      analysis.push({ msg: `⚠️ EUR/KRW 가 기준 중심(${baseTxt(cfg.eur.center, eurK)})에서 ${cfg.outOfRangePct}% 이상 벗어났습니다 — 판정 기준을 다시 검토해야 합니다` });
+    }
   } else {
     analysis.push({ msg: '⚠️ EUR/KRW — 환율을 가져오지 못해 환율 신호를 계산하지 않았습니다' });
   }
+  if (expired) {
+    analysis.push({ msg: `⏰ 판정 기준 검토일(${cfg.reviewOn})이 지났습니다 — 거시 보정은 꺼졌고, 기준값을 다시 설정해야 합니다` });
+  }
 
   if (lh) {
-    if (lh < 72) {
+    if (lh < cfg.lh.cheap) {
       signals.buy += 3;
       analysis.push({ msg: `✅ CME Lean Hog ${lh}¢/lb — 역사적 저가. 지금 계약 후 2~3달 수령 시 가격 상승 전 매입` });
-    } else if (lh < 85) {
+    } else if (lh < cfg.lh.low) {
       signals.buy += 1;
       analysis.push({ msg: `🟡 CME Lean Hog ${lh}¢/lb — 보통~저가. 괜찮은 진입 시점` });
-    } else if (lh > 102) {
+    } else if (lh > cfg.lh.high) {
       signals.wait += 2;
       analysis.push({ msg: `⚠️ CME Lean Hog ${lh}¢/lb — 고가권. 조정 후 매입 검토` });
     } else {
@@ -1284,12 +1336,19 @@ async function analyzeImportTiming() {
   else               { verdict = '🟡 중립 — 추세 확인 후 결정';                  verdictClass = 'yellow'; }
 
   // 화면이 "어느 출처·어느 기준 환율인지" 보여줄 수 있게 함께 돌려준다
-  const fxInfo = c => c ? { basis: c.basis, basisLabel: c.basisLabel, date: c.date, source: c.source } : null;
+  const fxInfo = c => c ? { basis: c.basis, basisLabel: c.basisLabel, wanted: c.wanted || null, date: c.date, source: c.source } : null;
   return {
     verdict, verdictClass, analysis,
     trends: { usd: usdTrend, eur: eurTrend, lh: lhTrend },
     forecasts: { usd: usdForecast, eur: eurForecast },
     importCost, current: { usd, eur, lh }, signals,
+    criteria: {
+      basisLabel: '매매기준율', setOn: cfg.setOn, reviewOn: cfg.reviewOn, expired,
+      usd: { ...cfg.usd }, eur: { ...cfg.eur }, lh: { cheap: cfg.lh.cheap, low: cfg.lh.low, high: cfg.lh.high, checked: cfg.lh.checked },
+      scale: { usd: +usdK.toFixed(4), eur: +eurK.toFixed(4) },
+      tilt: { usdWait: expired ? 0 : cfg.tilt.usdWait, active: !expired },
+      rationale: cfg.rationale.slice(), disclaimer: cfg.disclaimer,
+    },
     fx: {
       usd: fxInfo(current?.USDKRW), eur: fxInfo(current?.EURKRW), errors: current?.fxErrors || null,
       history: { usd: histCache.USDKRW?.meta || null, eur: histCache.EURKRW?.meta || null },
@@ -1328,6 +1387,12 @@ function buildTimingPrompt(timing, current) {
 - 예상 차이: ${importCost.diff!=null?(importCost.diff>0?'+'+importCost.diff:importCost.diff)+'원/kg':'N/A'}
 
 수안푸드 조건: 계약 후 2~3개월 뒤 선적·결제. 주요 수입국: 미국(USD), EU(EUR/USD).
+
+【판정 기준 (매매기준율, ${timing.criteria ? timing.criteria.setOn : '?'} 설정)】
+${timing.criteria ? `- USD/KRW 유리 ${timing.criteria.usd.favor} 미만 · 중심 ${timing.criteria.usd.center} · 부담 ${timing.criteria.usd.burden} 초과
+- EUR/KRW 유리 ${timing.criteria.eur.favor} 미만 · 중심 ${timing.criteria.eur.center} · 부담 ${timing.criteria.eur.burden} 초과
+${timing.criteria.rationale.map(r => '- ' + r).join('\n')}` : '- 없음'}
+(참고용 시나리오 기준이며 투자 자문이 아님을 답변에 명시)
 
 분석 (한국어 Markdown, 700~900자):
 ### 1. 현재 수입 타이밍 판단
@@ -1375,7 +1440,7 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.3.1' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.4.0' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -1396,17 +1461,18 @@ app.get('/api/history', async (req, res) => {
     const isReal = histCache[sym]?.isReal !== false;
     const meta = histCache[sym]?.meta || null;      // 환율: 어느 출처·어느 기준 값인지
     res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length, isReal,
-               source: meta?.source || null, basis: meta?.basis || null, basisLabel: meta ? FX_BASIS_LABEL[meta.basis] : null });
+               source: meta?.source || null, basis: meta?.basis || null, basisLabel: meta ? fxBasisLabel(meta.basis) : null,
+               wanted: (sym === 'USDKRW' || sym === 'EURKRW') ? FX_CFG.want : null });
   } catch (e) { res.status(500).json({ ok:false, error:e.message }); }
 });
 
 
 // 진단용 — 네이버 환율 주소를 실제로 불러서 어떻게 읽었는지(HTTP 상태·응답 모양·첫 줄)를 브라우저에서 바로 확인
 //   /api/fx-debug         : 주소별 첫 페이지
-//   /api/fx-debug?deep=1  : 1년 6개월 치를 끝까지 받아 '사실 때' 값이 며칠 있는지까지 (요청이 50번쯤 나가므로 한 번에 하나, 1분에 한 번만)
+//   /api/fx-debug?deep=1  : 1년 6개월 치를 끝까지 받아 '사실 때' 값이 며칠 있는지(coverage — 사실 때로 바꿀 수 있는지 판단용)까지 (요청이 50번쯤 나가므로 한 번에 하나, 1분에 한 번만)
 const FX_DEBUG = { busy: false, deepAt: 0, cooldownMs: 60000 };
 app.get('/api/fx-debug', async (req, res) => {
-  const out = { ok: true, at: kstNow(), wanted: FX_BASIS_LABEL.buy };
+  const out = { ok: true, at: kstNow(), wanted: FX_BASIS_LABEL[FX_CFG.want], wantedBasis: FX_CFG.want };
   const pairs = Object.keys(FX_CODES);
   await Promise.all(pairs.map(async (pair) => {
     const code = FX_CODES[pair];
@@ -1427,7 +1493,7 @@ app.get('/api/fx-debug', async (req, res) => {
           const p = parseNaverFxItems(json);
           d.found = p.found; d.items = p.items; d.skipped = p.skipped; d.keys = p.keys; d.sample = p.sample;
           d.parsedFirstRows = p.rows.slice(0, 3);
-          d.basisUsed = p.rows.length && p.rows.every(x => x.buy != null) ? 'buy' : 'std';
+          d.basisUsed = p.rows.length ? fxPickBasis(p.rows).basis : null;
           d.ok = p.rows.length > 0;
           if (!d.ok) d.error = p.found ? '읽을 수 있는 줄이 없음' : '응답에서 환율 목록을 찾지 못함';
         }
@@ -1453,7 +1519,7 @@ app.get('/api/fx-debug', async (req, res) => {
               source: g.src, pages: g.pages, stopped: g.stopped,
               from: rows.length ? rows[0].ymd : null, to: rows.length ? rows[rows.length - 1].ymd : null,
               days: rows.length, withBuy: rows.length - noBuy.length, withoutBuy: noBuy.length,
-              withoutBuyFirst: noBuy.slice(0, 10), basisWouldBe: fxPickBasis(rows).basis,
+              withoutBuyFirst: noBuy.slice(0, 10), basisWouldBe: fxPickBasis(rows).basis, buyBasisWouldBe: fxPickBasis(rows, 'buy').basis,
             };
           } catch (e) { out[pair].coverage = { error: e.message }; }
         }));
@@ -1530,7 +1596,7 @@ app.get('/api/analysis/market', async (_, res) => {
 
 // ════════════════════════════════════════════════════
 // 품목 전략 (v3.2)
-//  1) GET  /api/fx-monthly        : 네이버 증권 일별 환율('현찰 사실 때') → 월평균 (수입 실적의 환율효과 분리용)
+//  1) GET  /api/fx-monthly        : 네이버 증권 일별 환율(FX_CFG.want 기준, 기본 매매기준율) → 월평균 (수입 실적의 환율효과 분리용)
 //  2) POST /api/analysis/items    : 우리 회사 수입 실적 집계표 + 주간회의 내용 → AI 품목 판단
 // ※ 원칙: 수집에 실패하면 가짜(시드) 값으로 채우지 않는다. 못 가져왔으면 못 가져왔다고 알린다.
 // ════════════════════════════════════════════════════
@@ -1567,7 +1633,7 @@ async function naverFxDailySince(code, startYmd, fetcher = fetchNaverJson, opt =
   catch (e) { return { rows: [], problems: [e.message], complete: false, basis: 'std', excluded: 0, src: null }; }
 
   const raw = got.rows.filter(r => r.ymd >= startYmd).sort((a, b) => (a.ymd < b.ymd ? -1 : 1));
-  const { basis, rows, excluded } = fxPickBasis(raw);   // 전체가 '사실 때' 값을 갖췄을 때만 사실 때 기준, 아니면 전부 매매기준율
+  const { basis, rows, excluded } = fxPickBasis(raw);   // 기본(매매기준율)은 전 구간 closePrice. 사실 때 기준이면 전체가 값을 갖췄을 때만 사실 때, 아니면 전부 매매기준율
   const problems = fxDailyProblems(rows, startYmd, today);
   if (got.stopped) problems.push('수집 중단: ' + got.stopped);
   return { rows, problems, complete: problems.length === 0, basis, excluded, src: got.src };
@@ -1644,7 +1710,7 @@ async function getFxMonthly(startYm, deps = {}) {
           }
         }
         out[slot] = {
-          source, basis: res.basis, basisLabel: FX_BASIS_LABEL[res.basis], days: res.rows.length,
+          source, basis: res.basis, basisLabel: fxBasisLabel(res.basis), wanted: FX_CFG.want, days: res.rows.length,
           lastDate: res.rows[res.rows.length - 1].ymd,
           months: fxMonthlyFromDaily(res.rows, todayYm),
         };
@@ -1759,9 +1825,9 @@ function sanitizeItemsPayload(body) {
   return { ok: true, meeting, perf, force: !!body.force };
 }
 
-// 환율 출처·기준 설명 (예: "USD 네이버 증권 현찰 사실 때 / EUR 네이버 증권 현찰 사실 때")
+// 환율 출처·기준 설명 (예: "USD 네이버 증권 매매기준율 / EUR 네이버 증권 매매기준율")
 function fxBasisText(fx) {
-  const part = (x, nm) => x ? `${nm} ${x.source === 'naver' ? '네이버 증권' : 'Yahoo Finance'} ${x.basisLabel || FX_BASIS_LABEL[x.basis] || ''}`.trim() : null;
+  const part = (x, nm) => x ? `${nm} ${x.source === 'naver' ? '네이버 증권' : 'Yahoo Finance'} ${x.basisLabel || (x.basis ? fxBasisLabel(x.basis) : '')}`.trim() : null;
   return [part(fx?.usd, 'USD'), part(fx?.eur, 'EUR')].filter(Boolean).join(' / ');
 }
 
@@ -1968,7 +2034,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.3.1', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.4.0', buildId:BUILD_ID, time:kstNow() }));
 
 // KAMIS 설정값 브라우저에 안전하게 전달 (키만 노출, WAF 우회용)
 app.get('/api/kamis-config', (_, res) => {
@@ -2190,7 +2256,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, fetchFxHistory,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2198,7 +2264,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.3.1 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.4.0 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
