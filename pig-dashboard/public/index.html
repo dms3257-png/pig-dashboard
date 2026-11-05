@@ -82,6 +82,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .alist li:last-child{border-bottom:none}
 /* 테이블 */
 .dt{width:100%;border-collapse:collapse;font-size:.76rem}
+.g2>.card,.g3>.card{min-width:0}
+.cutsw .dt th,.cutsw .dt td{padding:6px 7px;white-space:nowrap}
 .dt th{background:#0f172a;color:#64748b;padding:7px 10px;text-align:center;font-weight:600;border-bottom:1px solid #334155;white-space:nowrap}
 .dt td{padding:6px 10px;border-bottom:1px solid #1e293b;color:#cbd5e1;text-align:center}
 .dt tr:last-child td{border-bottom:none}
@@ -218,7 +220,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   </div>
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 30일</span><span class="tag to">Yahoo Finance</span></div><div class="cw"><canvas id="c-lh"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 30일</span><span class="tag tb">KAMIS</span></div><div class="cw"><canvas id="c-kamis"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 부위별 가격</span><span class="tag tz" id="tag-cuts-timing">확인 중</span></div><div id="cuts-timing"><div class="lding"><span class="spin">⏳</span></div></div></div>
   </div>
 
   <!-- EU 공식 지육가 -->
@@ -282,9 +284,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <div id="page-weekly" class="page">
   <div class="ph"><div><div class="pt">주간 보고서</div><div class="ps" id="rng-weekly">—</div></div><span class="bdg">Weekly Report</span></div>
   <div class="g4" id="kpi-weekly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
-  <div class="g3">
+  <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 주간</span><span class="tag to">7일</span></div><div class="cw"><canvas id="wc-lh"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 주간</span><span class="tag tb">7일</span></div><div class="cw"><canvas id="wc-kamis"></canvas></div></div>
     <div class="card"><div class="ch"><span class="ct">🌾 사료 원료가 주간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="wc-feed"></canvas></div></div>
   </div>
   <div class="g2">
@@ -293,11 +294,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
       <div id="tbl-wlh"><div class="lding"><span class="spin">⏳</span></div></div>
       <button class="mbtn" onclick="window.open('https://www.pig333.com/markets_and_prices/','_blank')">pig333.com →</button>
     </div>
-    <div class="card">
-      <div class="ch"><span class="ct">국내 지육 도매가 일별</span><span class="tag tz" id="rng-wk">—</span></div>
-      <div id="tbl-wk"><div class="lding"><span class="spin">⏳</span></div></div>
-      <button class="mbtn" onclick="window.open('https://www.kamis.or.kr','_blank')">KAMIS →</button>
-    </div>
+    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 부위별 가격</span><span class="tag tz" id="tag-cuts-weekly">확인 중</span></div><div id="cuts-weekly"><div class="lding"><span class="spin">⏳</span></div></div></div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct" style="font-size:.9rem">주간 AI 분석</span><span class="amdl" id="m-weekly">—</span></div>
@@ -310,14 +307,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <div id="page-monthly" class="page">
   <div class="ph"><div><div class="pt">월간 보고서</div><div class="ps" id="rng-monthly">—</div></div><span class="bdg">Monthly Report</span></div>
   <div class="g4" id="kpi-monthly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
-  <div class="g3">
+  <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 월간</span><span class="tag to">30일</span></div><div class="cw"><canvas id="mc-lh"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 월간</span><span class="tag tb">30일</span></div><div class="cw"><canvas id="mc-kamis"></canvas></div></div>
     <div class="card"><div class="ch"><span class="ct">🌾 사료 원료가 월간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="mc-feed"></canvas></div></div>
   </div>
-  <div class="g2">
+  <div class="g2" style="grid-template-columns:1fr">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 월간 시세표</span><span class="tag tz" id="rng-mlh">—</span></div><div id="tbl-mlh"><div class="lding"><span class="spin">⏳</span></div></div></div>
-    <div class="card"><div class="ch"><span class="ct">국내 도매가 월간 시세표</span><span class="tag tz" id="rng-mk">—</span></div><div id="tbl-mk"><div class="lding"><span class="spin">⏳</span></div></div></div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct" style="font-size:.9rem">월간 AI 분석</span><span class="amdl" id="m-monthly">—</span></div>
@@ -330,9 +325,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <div id="page-yearly" class="page">
   <div class="ph"><div><div class="pt">연간 보고서</div><div class="ps" id="rng-yearly">—</div></div><span class="bdg">Yearly Report</span></div>
   <div class="g4" id="kpi-yearly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
-  <div class="g2">
+  <div class="g2" style="grid-template-columns:1fr">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 1년</span><span class="tag to">365일</span></div><div class="cwl"><canvas id="yc-lh"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 지육 도매가 1년</span><span class="tag tb">365일</span></div><div class="cwl"><canvas id="yc-kamis"></canvas></div></div>
   </div>
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">💱 USD/KRW 1년 추이</span><span class="tag tz" id="tag-yc-usd">환율 이력 확인 중</span></div><div class="cw"><canvas id="yc-usd"></canvas></div></div>
@@ -519,27 +513,6 @@ function switchTab(name, btn) {
 
 // ─── Chart.js 헬퍼 ───────────────────────────────────
 function mkChart(id, rows, sym, unit, isReal) {
-  // KAMIS isReal=false여도 브라우저 직접 호출 캐시가 있으면 그걸 사용
-  if (sym === 'KAMIS' && isReal === false) {
-    // hcache에 직접 호출 결과가 있는지 확인
-    const cached = hcache['KAMIS_monthly'] || hcache['KAMIS_weekly'] || hcache['KAMIS_yearly'];
-    if (cached && cached.isReal === true && cached.rows.length > 0) {
-      // 직접 호출 성공 데이터로 재시도
-      rows = cached.rows;
-      isReal = true;
-    } else {
-      // 진짜 수집 불가
-      const canvas = document.getElementById(id);
-      if (canvas) {
-        canvas.parentElement.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center">
-          <div style="font-size:1.5rem;margin-bottom:8px">⏳</div>
-          <div style="font-size:.8rem;font-weight:700;color:#fbbf24;margin-bottom:6px">국내 도매가 로딩 중</div>
-          <div style="font-size:.72rem;color:#64748b;line-height:1.6">브라우저에서 KAMIS 직접 연결 시도 중입니다</div>
-        </div>`;
-      }
-      return;
-    }
-  }
   if (!rows || rows.length === 0) {
     const el = document.getElementById(id);
     if (el) {
@@ -652,7 +625,7 @@ function renderKpi(id, data, keys) {
   const el = document.getElementById(id);
   if (!el) return;
   const items = keys || [
-    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
+    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},
     {k:'ZC',i:'🌽',l:'옥수수 선물'},{k:'ZS',i:'🫘',l:'대두 선물'}
   ];
   el.innerHTML = items.map(item => {
@@ -665,10 +638,6 @@ function renderKpi(id, data, keys) {
     }
     if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
     const chgHtml = d.change != null ? `<div class="kc ${d.change>0?'up':'dn'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}${d.changePct?' ('+d.changePct+'%)':''}</div>` : '';
-    // KAMIS는 해외IP 차단 - fallback이면 수집불가 표시
-    if (item.k === 'KAMIS' && (d.source === 'fallback' || !d.price)) {
-      return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.8rem;color:#f87171">수집 중...</div><div class="ku">KAMIS 직접 연결 시도</div></div>`;
-    }
     if (isFx) {
       const buy = d.basis === fxWant(d);
       return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku" style="color:${buy?'#86efac':'#fb923c'};font-weight:700">원 · ${fxEsc(d.basisLabel||'기준 미상')}${buy?'':' (' + FXN[fxWant(d)] + ' 아님)'}</div><div class="ku">${d.source==='naver'?'네이버 증권':fxEsc(d.source||'')}${d.date?' · '+fxEsc(d.date)+' 기준':''}</div></div>`;
@@ -790,34 +759,6 @@ async function getHist(sym, period) {
   const key = sym + '_' + period;
   if (hcache[key]) return hcache[key];
 
-  // KAMIS는 브라우저에서 직접 호출 (한국 IP → 서버 IP 차단 우회)
-  if (sym === 'KAMIS') {
-    // 1) localStorage 캐시 확인 (24시간 유효)
-    const lsKey = `kamis_${period}`;
-    const cached = lsGet(lsKey);
-    if (cached && cached.rows.length > 0) {
-      console.log(`✅ KAMIS ${period} localStorage 캐시: ${cached.rows.length}건`);
-      hcache[key] = cached;
-      return cached;
-    }
-    // 2) 직접 호출
-    const days = period === 'weekly' ? 7 : period === 'monthly' ? 30 : 365;
-    const startYmd = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
-    const direct = await fetchKamisDirect(startYmd);
-    if (direct && direct.rows.length > 0) {
-      const rows = direct.rows.sort((a,b)=>a.time-b.time);
-      const first = new Date(rows[0].time*1000).toLocaleDateString('ko-KR');
-      const last  = new Date(rows[rows.length-1].time*1000).toLocaleDateString('ko-KR');
-      const labels = {weekly:'주간',monthly:'월간',yearly:'연간'};
-      const result = { rows, rangeLabel: `${first} ~ ${last} · ${labels[period]||''}`, isReal: true };
-      hcache[key] = result;
-      lsSet(lsKey, result); // localStorage에 저장
-      console.log(`✅ KAMIS ${period} 직접 호출: ${rows.length}건 → 캐시 저장`);
-      return result;
-    }
-    console.warn(`KAMIS ${period} 직접 호출 실패 → 서버 API 시도`);
-  }
-
   const j = await fetch(`/api/history?sym=${sym}&period=${period}`).then(r => r.json()).catch(() => ({ ok: false, rows: [] }));
   const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '', isReal: j.isReal !== false, source: j.source || null, basis: j.basis || null, basisLabel: j.basisLabel || null, wanted: j.wanted || null };
   if (result.rows.length > 0) hcache[key] = result;
@@ -827,17 +768,14 @@ async function getHist(sym, period) {
 // ─── 탭별 로드 함수 ──────────────────────────────────
 async function loadTiming() {
   // ── 1단계: 즉시 표시 가능한 것들 병렬로 동시 시작 ──
-  const [curResult, tjResult, uH, eH, lH, kH] = await Promise.all([
+  const [curResult, tjResult, uH, eH, lH] = await Promise.all([
     ensureCurrent(),
     fetch('/api/timing').then(r=>r.json()).catch(()=>({ok:false,error:'API 오류'})),
     getHist('USDKRW','monthly'),
     getHist('EURKRW','monthly'),
     getHist('LH','monthly'),
-    getHist('KAMIS','monthly'), // localStorage 캐시 있으면 즉시
   ]);
-
-  // ── 2단계: 서버 데이터 + KAMIS 현재가 병렬 처리 ──
-  const kamisCurrentPromise = fetchKamisCurrentDirect();
+  loadCuts('cuts-timing');   // KAMIS 부위별 가격 (서버가 대신 받아 옴 — 화면에는 키가 오지 않음)
 
   const cur = curResult || {};
 
@@ -848,7 +786,7 @@ async function loadTiming() {
   // KPI 먼저 표시 (KAMIS 현재가는 나중에 업데이트)
   renderKpi('kpi-timing', cur, [
     {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
-    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
+    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},
     {k:'ZC',i:'🌽',l:'옥수수 선물'}
   ]);
 
@@ -857,21 +795,10 @@ async function loadTiming() {
   mkChart('c-eur',   eH.rows, 'EURKRW', '원',       eH.isReal);
   fxTag('tag-c-usd', uH); fxTag('tag-c-eur', eH);
   mkChart('c-lh',    lH.rows, 'LH',     'cents/lb', lH.isReal);
-  mkChart('c-kamis', kH.rows, 'KAMIS',  '원/kg',    kH.isReal);
 
   // EU 지육가 백그라운드 로드
   loadEuPig();
 
-  // ── 3단계: KAMIS 현재가 완료되면 KPI 업데이트 ──
-  const kamisDirect = await kamisCurrentPromise;
-  if (kamisDirect) {
-    cur.KAMIS = { ...kamisDirect, name: '국내 지육 도매가' };
-    renderKpi('kpi-timing', cur, [
-      {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
-      {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'},
-      {k:'ZC',i:'🌽',l:'옥수수 선물'}
-    ]);
-  }
 }
 
 async function loadMarket() {
@@ -879,7 +806,7 @@ async function loadMarket() {
   document.getElementById('mkt-date').textContent = new Date().toLocaleDateString('ko-KR') + ' 기준';
   renderKpi('kpi-market', cur, [
     {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
-    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},{k:'KAMIS',i:'🇰🇷',l:'국내 도매가'}
+    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'}
   ]);
   const usdKrw = cur?.USDKRW?.price || null;   // 환율을 못 받았으면 원화 환산을 하지 않는다 (고정값 사용 금지)
   // 수입량 바
@@ -915,37 +842,31 @@ async function loadMarket() {
 async function loadPeriod(period) {
   const cur = await ensureCurrent();
   renderKpi(`kpi-${period}`, cur);
-  const [lhH, kH, zcH, zsH] = await Promise.all([
-    getHist('LH', period), getHist('KAMIS', period),
+  const [lhH, zcH, zsH] = await Promise.all([
+    getHist('LH', period),
     getHist('ZC', period), getHist('ZS', period)
   ]);
-  const rl = lhH.rangeLabel || kH.rangeLabel || '';
+  const rl = lhH.rangeLabel || '';
+  if (period === 'weekly') loadCuts('cuts-weekly');
 
   if (period === 'weekly') {
     const el = document.getElementById('rng-weekly'); if(el) el.textContent = rl;
     mkChart('wc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
-    mkChart('wc-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
     mkFeedChart('wc-feed', zcH.rows, zsH.rows);
     renderTable('tbl-wlh', lhH.rows, 'cents/lb', 7);
-    renderTable('tbl-wk',  kH.rows,  '원/kg', 7);
     const wr = document.getElementById('rng-wlh'); if(wr) wr.textContent = rl;
-    const wk = document.getElementById('rng-wk');  if(wk) wk.textContent = rl;
 
   } else if (period === 'monthly') {
     const el = document.getElementById('rng-monthly'); if(el) el.textContent = rl;
     mkChart('mc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
-    mkChart('mc-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
     mkFeedChart('mc-feed', zcH.rows, zsH.rows);
     renderTable('tbl-mlh', lhH.rows, 'cents/lb', 10);
-    renderTable('tbl-mk',  kH.rows,  '원/kg', 10);
     const mr = document.getElementById('rng-mlh'); if(mr) mr.textContent = rl;
-    const mk = document.getElementById('rng-mk');  if(mk) mk.textContent = rl;
 
   } else { // yearly
     const el = document.getElementById('rng-yearly'); if(el) el.textContent = rl;
     const [uH, eH] = await Promise.all([getHist('USDKRW','yearly'), getHist('EURKRW','yearly')]);
     mkChart('yc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
-    mkChart('yc-kamis', kH.rows, 'KAMIS', '원/kg', kH.isReal);
     mkChart('yc-usd', uH.rows, 'USDKRW', '원', uH.isReal);
     mkChart('yc-eur', eH.rows, 'EURKRW', '원', eH.isReal);
     fxTag('tag-yc-usd', uH); fxTag('tag-yc-eur', eH);
@@ -1083,129 +1004,36 @@ async function loadEuPig() {
 }
 
 
-// ── KAMIS 브라우저 직접 호출 (한국 IP → 차단 없음) ──
-// KAMIS 키는 서버에서 안전하게 받아옴
-let KAMIS_KEY = null;
-let KAMIS_ID  = null;
-async function loadKamisConfig() {
-  if (KAMIS_KEY) return true;
-  try {
-    const j = await fetch('/api/kamis-config').then(r=>r.json());
-    if (j.key) { KAMIS_KEY = j.key; KAMIS_ID = j.id; return true; }
-  } catch(e) {}
-  return false;
+// ── KAMIS 부위별 가격 (서버가 KAMIS 를 호출 — 브라우저는 키를 받지 않는다) ──
+let cutsCache = null;   // { at, json }
+async function fetchCuts() {
+  if (cutsCache && Date.now() - cutsCache.at < 10 * 60000) return cutsCache.json;
+  const json = await fetch('/api/kamis-cuts').then(r => r.json()).catch(() => ({ ok: false, error: '서버에 연결하지 못함' }));
+  if (json && json.ok) cutsCache = { at: Date.now(), json };
+  return json;
 }
-
-async function fetchKamisDirect(startYmd) {
-  if (!await loadKamisConfig()) return null;
-  const rows = [];
-
-  // 방법1: periodProductList 기간 조회
-  try {
-    const endYmd = new Date().toISOString().slice(0,10);
-    const url = `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=${startYmd}&p_endday=${endYmd}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`;
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (res.ok) {
-      const json = await res.json();
-      let items = json?.data?.item || [];
-      if (!Array.isArray(items)) items = [items];
-      for (const item of items) {
-        const ymd = (item.regday||'').replace(/\./g,'-');
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
-        const price = parseFloat((item.dpr1||item.price||'0').replace(/,/g,''));
-        if (price < 1000) continue;
-        rows.push({ time: Math.floor(new Date(ymd+'T00:00:00Z').getTime()/1000), open:price, high:price, low:price, close:price });
-      }
-      if (rows.length > 0) {
-        console.log(`✅ KAMIS 직접 periodProductList: ${rows.length}건`);
-        return { rows, isReal: true };
-      }
-    }
-  } catch(e) {}
-
-  // 방법2: dailyPriceByCategoryList 날짜 루프 (현재가와 동일 API, 성공 확인됨)
-  try {
-    const today = new Date();
-    const start = new Date(startYmd + 'T00:00:00Z');
-    const daysDiff = Math.min(400, Math.ceil((today - start) / 86400000));
-    // 평일만 수집할 날짜 목록 생성
-    const dates = [];
-    for (let d = 0; d <= daysDiff; d++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - d);
-      if ([0,6].includes(date.getDay())) continue; // 주말 제외
-      const ymd = date.toISOString().slice(0,10);
-      if (ymd < startYmd) break;
-      dates.push(ymd);
-    }
-    console.log(`KAMIS 날짜루프 대상: ${dates.length}일`);
-    const promises = dates.map(ymd =>
-      fetch(`https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${ymd}&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`)
-        .then(r => r.ok ? r.json() : null)
-        .then(json => {
-          if (!json) return;
-          let items = json?.data?.item || [];
-          if (!Array.isArray(items)) items = [items];
-          // 돼지 지육 도매가: 3000~8000원/kg 범위 필터
-          if (items.length > 0) console.log(`KAMIS ${ymd}:`, items.map(it=>`${it.item_name||it.itemname}=${it.dpr1}`).slice(0,3).join(', '));
-          const pig = items.find(it => {
-            const p = parseFloat((it.dpr1||'0').replace(/,/g,''));
-            return p >= 3000 && p <= 8000;
-          }) || items.find(it => (it.item_name||it.itemname||'').includes('돼지') && parseFloat((it.dpr1||'0').replace(/,/g,'')) > 1000);
-          if (pig) {
-            const price = parseFloat((pig.dpr1||'0').replace(/,/g,''));
-            if (price > 1000) rows.push({ time: Math.floor(new Date(ymd+'T00:00:00Z').getTime()/1000), open:price, high:price, low:price, close:price });
-          }
-        }).catch(()=>{})
-    );
-    // 30개씩 병렬 처리
-    for (let i = 0; i < promises.length; i += 30) {
-      await Promise.allSettled(promises.slice(i, i+30));
-    }
-    if (rows.length > 0) {
-      const map = new Map(); rows.forEach(r => map.set(r.time, r));
-      const deduped = Array.from(map.values()).sort((a,b) => a.time-b.time);
-      console.log(`✅ KAMIS 직접 날짜루프: ${deduped.length}건`);
-      return { rows: deduped, isReal: true };
-    }
-  } catch(e) { console.warn('KAMIS 날짜루프:', e.message); }
-
-  console.warn('KAMIS 직접 호출 실패: 데이터 없음');
-  return null;
+const cutsPct = v => v == null ? '<span style="color:#475569">—</span>' : `<span class="${v > 0 ? 'cu' : v < 0 ? 'cd' : ''}">${v > 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+function renderCuts(id, json) {
+  const box = document.getElementById(id), tag = document.getElementById('tag-' + id);
+  if (!box) return;
+  if (!json || !json.ok || !json.data || !json.data.items || !json.data.items.length) {
+    // 못 받으면 값을 만들지 않고 이유를 보여준다
+    if (tag) { tag.className = 'tag tz'; tag.textContent = '수집 실패'; }
+    box.innerHTML = `<div style="padding:14px;text-align:center"><div style="color:#f87171;font-weight:700;font-size:.82rem;margin-bottom:6px">부위별 가격 수집 실패</div><div style="color:#fca5a5;font-size:.74rem;line-height:1.5">${fxEsc((json && json.error) || '알 수 없는 오류')}</div><div style="color:#64748b;font-size:.7rem;margin-top:6px">고정값·추정값으로 대신하지 않았습니다</div></div>`;
+    return;
+  }
+  const d = json.data;
+  if (tag) { tag.className = 'tag tg'; tag.textContent = 'KAMIS · ' + fxEsc(d.date); }
+  let h = '<div class="cutsw" style="overflow-x:auto"><table class="dt"><thead><tr><th>구분</th><th>부위</th><th>현재 (원/kg)</th><th>전일비</th><th>1주 전</th><th>1개월 전</th><th>1년 전</th></tr></thead><tbody>';
+  d.items.forEach(i => {
+    h += `<tr><td class="dd">${fxEsc(i.group)}</td><td style="font-weight:700">${fxEsc(i.name)}</td><td style="font-weight:700">${Number(i.price).toLocaleString('ko-KR')}</td><td>${cutsPct(i.chg && i.chg.d1)}</td><td>${cutsPct(i.chg && i.chg.w1)}</td><td>${cutsPct(i.chg && i.chg.m1)}</td><td>${cutsPct(i.chg && i.chg.y1)}</td></tr>`;
+  });
+  h += '</tbody></table></div>';
+  h += `<p class="fn">※ KAMIS 부위별 가격 · 기준일 ${fxEsc(d.date)} · ${fxEsc(d.note || '')} · 변동률은 현재가를 그 시점 가격과 비교한 값 (+ 상승)</p>`;
+  if (d.skipped && d.skipped.length) h += `<p class="fn" style="color:#fbbf24">일부 항목은 표시하지 못했습니다: ${d.skipped.map(fxEsc).join(', ')}</p>`;
+  box.innerHTML = h;
 }
-
-
-async function fetchKamisCurrentDirect() {
-  if (!await loadKamisConfig()) return null;
-  const today = new Date().toISOString().slice(0,10);
-  const url = `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${today}&p_convert_kg_yn=N&p_cert_key=${KAMIS_KEY}&p_cert_id=${KAMIS_ID}&p_returntype=json`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    let items = json?.data?.item || [];
-    if (!Array.isArray(items)) items = [items];
-    // 전체 항목 로그로 어떤 데이터가 오는지 확인
-    console.log('KAMIS items:', items.map(it => `${it.item_name||it.itemname}=${it.dpr1}`).join(', '));
-    // 지육 도매가 범위: 3000~8000원/kg
-    const pig = items.find(it => {
-      const p = parseFloat((it.dpr1||'0').replace(/,/g,''));
-      return p >= 3000 && p <= 8000;
-    });
-    if (pig) {
-      const price = parseFloat((pig.dpr1||'0').replace(/,/g,''));
-      console.log(`✅ KAMIS 현재가 직접: ${pig.item_name||pig.itemname} = ${price}원/kg`);
-      return { price, unit: '원/kg', date: pig.regday, source: 'kamis-direct' };
-    }
-    // 3000~8000 범위 없으면 돼지 포함 첫 항목
-    const anyPig = items.find(it => (it.item_name||it.itemname||'').includes('돼지'));
-    if (anyPig) {
-      const price = parseFloat((anyPig.dpr1||'0').replace(/,/g,''));
-      console.log(`KAMIS 돼지 항목(범위외): ${anyPig.item_name||anyPig.itemname} = ${price}`);
-    }
-  } catch(e) { console.warn('KAMIS 현재가 직접 실패:', e.message); }
-  return null;
-}
+async function loadCuts(id) { renderCuts(id, await fetchCuts()); }
 
 window.addEventListener('DOMContentLoaded', () => {
   loaded.add('timing');
@@ -1217,15 +1045,11 @@ window.addEventListener('DOMContentLoaded', () => {
   // 10분마다 서버 캐시 초기화 (localStorage는 유지)
   setInterval(() => {
     curData = null;
-    // hcache에서 KAMIS만 제외하고 초기화 (localStorage 있으면 빠름)
-    Object.keys(hcache).filter(k => !k.startsWith('KAMIS')).forEach(k => delete hcache[k]);
+    Object.keys(hcache).forEach(k => delete hcache[k]);
+    cutsCache = null;
   }, 10 * 60 * 1000);
-  // 자정에 localStorage KAMIS 캐시 갱신
-  const msToMidnight = new Date().setHours(24,0,0,0) - Date.now();
-  setTimeout(() => {
-    ['kamis_weekly','kamis_monthly','kamis_yearly'].forEach(k => localStorage.removeItem(k));
-    console.log('KAMIS 캐시 자정 갱신');
-  }, msToMidnight);
+  // 예전 버전이 저장해 둔 지육 도매가 캐시(가짜일 수 있음)는 지운다
+  try { ['kamis_weekly','kamis_monthly','kamis_yearly'].forEach(k => localStorage.removeItem(k)); } catch (e) {}
 });
 </script>
 <script>
