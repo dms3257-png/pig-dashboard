@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.5.1
+// server.js - 수안푸드 지육가 대시보드 v3.5.2
+// v3.5.2: EU 응답을 읽지 못할 때 응답 모양(필드·등급 값·첫 항목)을 오류에 표시 — 진단용
 // v3.5.1: EU 국가별 지육가 수집 수리 — 새 공식 주소 우선, 최신 주 날짜 비교 수정, 고정 참고값 제거
 // v3.5.0: 국내 가격을 KAMIS 부위별 가격(삼겹살·앞다리·목심·갈비·수입 삼겹살)으로 교체 — 가짜 시드·고정값 제거, KAMIS 키는 서버만 사용
 // v3.4.0: 수입 타이밍 판정 기준(달러 1,400원·유로 1,500원 고정)을 거시 지표 기준으로 재설정 — 기준·근거·설정일·검토일은 TIMING_CFG 한 곳
@@ -879,7 +880,14 @@ function parseEuPig(items) {
     if (!byCountry[c] || ymd > byCountry[c].week) byCountry[c] = { price, week: ymd, unit: item.unit || 'EUR/100kg', cls: 'S' };   // 연-월-일 문자열은 사전순 = 날짜순
     (hist[c] = hist[c] || []).push({ time: dateToUnix(ymd), close: price, open: price, high: price, low: price });
   }
-  if (!used) throw new Error('Class S 가격을 읽을 수 없음 (응답 ' + items.length + '건)');
+  if (!used) {
+    // 응답이 우리가 기대한 모양이 아닐 때: 실제로 어떤 필드·등급 값이 오는지 보여준다 (원인 파악용 — 값을 지어내지 않는다)
+    const first = items.find(x => x && typeof x === 'object') || items[0];
+    const keys = first && typeof first === 'object' ? Object.keys(first).join(',') : typeof first;
+    const classes = [...new Set(items.map(x => x && x.pigClass).filter(v => v != null))].slice(0, 8).join(',');
+    const sample = JSON.stringify(first).slice(0, 300);
+    throw new Error(`Class S 가격을 읽을 수 없음 (응답 ${items.length}건; 필드: ${keys}; pigClass 값: [${classes}]; 첫 항목: ${sample})`);
+  }
   for (const c of Object.keys(hist)) hist[c] = dedupeByTime(hist[c]);
   return { byCountry, histByCountry: hist };
 }
@@ -1512,7 +1520,7 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.1' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.2' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2112,7 +2120,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.1', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.2', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2337,7 +2345,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.5.1 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.5.2 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
