@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.4.0
+// server.js - 수안푸드 지육가 대시보드 v3.5.0
+// v3.5.0: 국내 가격을 KAMIS 부위별 가격(삼겹살·앞다리·목심·갈비·수입 삼겹살)으로 교체 — 가짜 시드·고정값 제거, KAMIS 키는 서버만 사용
 // v3.4.0: 수입 타이밍 판정 기준(달러 1,400원·유로 1,500원 고정)을 거시 지표 기준으로 재설정 — 기준·근거·설정일·검토일은 TIMING_CFG 한 곳
 // 안정화: 빠른 무료 API + 5초 타임아웃 + 즉시 폴백
 // v3.2: 품목 전략 탭 (환율 월평균 /api/fx-monthly + AI 품목 판단 POST /api/analysis/items)
@@ -717,7 +718,7 @@ async function fetchKamisCurrent() {
   const certId  = process.env.KAMIS_API_ID;
   if (!certKey || !certId) {
     console.warn('KAMIS 키 미설정');
-    return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가' };
+    return null;   // 고정값으로 채우지 않는다
   }
 
   const today = new Date().toISOString().slice(0,10);
@@ -751,7 +752,7 @@ async function fetchKamisCurrent() {
     } catch (e) { console.warn(`KAMIS URL${i+1} 예외:`, e.message); }
   }
 
-  return { price: 4750, unit: '원/kg', source: 'fallback', name: '국내 지육 도매가', note: 'API 실패' };
+  return null;   // 고정값(4,750원)으로 채우지 않는다
 }
 
 // KAMIS 품목코드 탐색용 캐시 (최초 1회 찾으면 재사용)
@@ -948,7 +949,7 @@ async function getHistory(sym) {
   // 캐시 유효하면 바로 반환
   if (c.d.length > 5 && Date.now() - c.at < HIST_TTL) return c.d;
   // 환율은 수집에 실패하면 5분 동안은 다시 시도하지 않고 빈 값을 돌려준다 (요청마다 네이버를 수십 번 두드리지 않도록)
-  if (isFx && c.failUntil && Date.now() < c.failUntil) return [];
+  if ((isFx || sym === 'KAMIS') && c.failUntil && Date.now() < c.failUntil) return [];
 
   let rows = [], meta = null;
   try {
@@ -966,9 +967,9 @@ async function getHistory(sym) {
   }
 
   // 환율은 가짜(시드) 값을 만들지 않는다 — 못 가져왔으면 빈 값 (화면이 '수집 실패'로 표시)
-  if (isFx) {
+  if (isFx || sym === 'KAMIS') {
     c.d = []; c.isReal = false; c.meta = null; c.failUntil = Date.now() + 5 * 60000;
-    console.warn(`⚠️ ${sym} 환율 이력 수집 실패 — 가짜 값으로 채우지 않음`);
+    console.warn(`⚠️ ${sym} ${isFx ? '환율 ' : ''}이력 수집 실패 — 가짜 값으로 채우지 않음`);
     return [];
   }
 
@@ -1058,6 +1059,84 @@ function rangeLabel(rows, period) {
 // ════════════════════════════════════════════════════
 // 현재 시세 통합 (병렬 + 타임아웃 독립)
 // ════════════════════════════════════════════════════
+// ── KAMIS 부위별 가격 ─────────────────────────────────────────────────────────
+// dailyPriceByCategoryList(축산물 500) 응답에서 돼지(4304) 앞다리·삼겹살·목심·갈비, 수입 돼지고기(4402) 삼겹살을 읽는다.
+// KAMIS 는 100g 가격을 주므로 kg 으로 환산(x10)한다. 못 받으면 값을 만들지 않고 이유를 돌려준다. 키는 서버 안에서만 쓰고 응답·로그에 넣지 않는다.
+const KAMIS_CUTS = [
+  { code: '4304', kind: '27', name: '삼겹살', group: '국내산' },
+  { code: '4304', kind: '25', name: '앞다리', group: '국내산' },
+  { code: '4304', kind: '68', name: '목심', group: '국내산' },
+  { code: '4304', kind: '28', name: '갈비', group: '국내산' },
+  { code: '4402', kind: '27', name: '삼겹살', group: '수입산' },
+];
+const KAMIS_CUTS_TTL = 30 * 60000, KAMIS_CUTS_FAIL_TTL = 2 * 60000;
+const kamisCutsState = { data: null, at: 0, err: null, errAt: 0, inflight: null };
+const kamisNum = v => { const n = parseFloat(String(v == null ? '' : v).replace(/,/g, '')); return Number.isFinite(n) && n > 0 ? n : null; };
+function kamisYmd(offsetDays = 0) { return new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000).toISOString().slice(0, 10); }
+
+// 응답 JSON → 부위별 값 (과거 값이 없으면 null, 단위가 100g 이 아니면 그 항목은 건너뜀)
+function parseKamisCuts(json, ymd) {
+  const d = json && json.data;
+  if (!d || typeof d !== 'object' || Array.isArray(d)) {
+    const code = Array.isArray(d) ? d[0] : '';
+    throw new Error(`KAMIS 응답에 가격표가 없음${code ? ' (상태코드 ' + code + ')' : ''}`);
+  }
+  if (String(d.error_code) !== '000') throw new Error(`KAMIS 오류 응답 (error_code=${d.error_code})`);
+  const list = Array.isArray(d.item) ? d.item : (d.item ? [d.item] : []);
+  const items = [], skipped = [];
+  for (const c of KAMIS_CUTS) {
+    const it = list.find(x => String(x.item_code) === c.code && String(x.kind_code) === c.kind && String(x.rank_code) === '00');
+    if (!it) { skipped.push(`${c.group} ${c.name}: 응답에 없음`); continue; }
+    if (String(it.unit).trim() !== '100g') { skipped.push(`${c.group} ${c.name}: 단위 ${it.unit} (100g 아님)`); continue; }
+    const kg = v => { const n = kamisNum(v); return n == null ? null : Math.round(n * 10); };   // 100g → kg
+    const now = kg(it.dpr1);
+    if (now == null) { skipped.push(`${c.group} ${c.name}: 당일 가격 없음`); continue; }
+    const pct = past => (past ? +((now - past) / past * 100).toFixed(1) : null);
+    const prev = kg(it.dpr2), w1 = kg(it.dpr3), w2 = kg(it.dpr4), m1 = kg(it.dpr5), y1 = kg(it.dpr6);
+    items.push({ group: c.group, name: c.name, unit: '원/kg', price: now, prev, w1, w2, m1, y1,
+                 chg: { d1: pct(prev), w1: pct(w1), w2: pct(w2), m1: pct(m1), y1: pct(y1) } });
+  }
+  if (!items.length) throw new Error('KAMIS 부위별 당일 가격이 아직 없음' + (skipped.length ? ' — ' + skipped.join(', ') : ''));
+  return { source: 'kamis', date: ymd, fetchedAt: kstNow(), note: '100g 가격을 kg 으로 환산', items, skipped };
+}
+
+async function fetchKamisCuts() {
+  const certKey = process.env.KAMIS_API_KEY, certId = process.env.KAMIS_API_ID;
+  if (!certKey || !certId) throw new Error('KAMIS 인증 정보(KAMIS_API_KEY / KAMIS_API_ID)가 서버에 설정돼 있지 않음');
+  const hide = t => String(t == null ? '' : t).split(certKey).join('***').split(encodeURIComponent(certKey)).join('***');
+  let lastErr = null;
+  for (const off of [0, 1]) {        // 당일 값이 아직 없으면 전날 기준으로 한 번 더
+    const ymd = kamisYmd(off);
+    const url = `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${ymd}&p_convert_kg_yn=N&p_cert_key=${encodeURIComponent(certKey)}&p_cert_id=${encodeURIComponent(certId)}&p_returntype=json`;
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json,*/*' }, signal: AbortSignal.timeout(15000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let json; try { json = JSON.parse(await res.text()); } catch (e) { throw new Error('KAMIS 응답이 JSON 이 아님'); }
+      return parseKamisCuts(json, ymd);
+    } catch (e) { lastErr = new Error(hide(e.message)); }
+  }
+  throw lastErr;
+}
+
+async function getKamisCuts() {
+  const st = kamisCutsState, now = Date.now();
+  if (st.data && now - st.at < KAMIS_CUTS_TTL) return st.data;
+  if (st.err && now - st.errAt < KAMIS_CUTS_FAIL_TTL) throw new Error(st.err);
+  if (st.inflight) return st.inflight;
+  st.inflight = fetchKamisCuts().then(d => { st.data = d; st.at = Date.now(); st.err = null; console.log(`✅ KAMIS 부위별 가격 ${d.items.length}건 (${d.date})`); return d; })
+    .catch(e => { st.data = null; st.err = e.message; st.errAt = Date.now(); console.warn('⚠️ KAMIS 부위별 가격 수집 실패:', e.message); throw e; })
+    .finally(() => { st.inflight = null; });
+  return st.inflight;
+}
+
+// AI 프롬프트용 한 줄 요약 (최근에 받은 값이 있을 때만)
+function kamisCutsText() {
+  const st = kamisCutsState;
+  if (!st.data || Date.now() - st.at > 6 * 3600000) return '';
+  const pc = v => (v == null ? '' : ` (전일비 ${v > 0 ? '+' : ''}${v}%)`);
+  return st.data.items.map(i => `${i.group} ${i.name} ${i.price.toLocaleString('ko-KR')}원/kg${pc(i.chg.d1)}`).join(', ') + ` — KAMIS ${st.data.date} 기준`;
+}
+
 async function getCurrentPrices() {
   const hit = aCache.get('current');
   if (hit && Date.now()-hit.ts < (hit.ttl || 8*60000)) return hit.data;
@@ -1105,9 +1184,7 @@ async function getCurrentPrices() {
   // 국내 도매가
   if (kamisRes.status === 'fulfilled' && kamisRes.value) {
     results.KAMIS = kamisRes.value;
-  } else {
-    results.KAMIS = { price: 4750, name: '국내 지육 도매가', unit: '원/kg', source: 'fallback' };
-  }
+  }   // 지육 도매가(ekapepia)를 못 받으면 항목 자체를 비워 둔다 — 고정값(4,750원)으로 채우지 않음
 
   // 환율 수집에 실패했으면 1분 뒤 다시 시도 (실패 결과를 8분 동안 붙들고 있지 않음)
   aCache.set('current', { data: results, ts: Date.now(), ttl: Object.keys(fxErrors).length ? 60 * 1000 : 8 * 60000 });
@@ -1415,7 +1492,7 @@ LH 이력: ${fmt(histData.LH)}
 옥수수: ${fmt(histData.ZC)}
 대두: ${fmt(histData.ZS)}
 국내도매가: ${fmt(histData.KAMIS)}
-
+${kamisCutsText() ? '국내 부위별 가격: ' + kamisCutsText() + '\n' : ''}
 분석 (한국어 Markdown, 600~800자):
 ### 1. ${label} 지육가 동향
 ### 2. 사료 원료가 영향
@@ -1440,13 +1517,18 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.4.0' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.0' }));
 
 app.get('/api/current', async (_, res) => {
   try {
     const data = await getCurrentPrices();
     res.json({ ok: true, data, fetchedAt: kstNow() });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get('/api/kamis-cuts', async (_, res) => {
+  try { res.json({ ok: true, data: await getKamisCuts() }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 app.get('/api/history', async (req, res) => {
@@ -1898,6 +1980,7 @@ ${yms.map(ym => `| ${ym} | ${cell(um.get(ym))} | ${cell(em.get(ym))} |`).join('\
   if (real(cur?.EURKRW)) snap.push(`- EUR/KRW 현재 ${fxTxt(cur.EURKRW)}`);
   if (real(cur?.LH))     snap.push(`- CME Lean Hog 선물 ${cur.LH.price}¢/lb`);
   if (real(cur?.KAMIS))  snap.push(`- 국내 지육 도매가(축산물품질평가원) ${cur.KAMIS.price}원/kg`);
+  if (kamisCutsText())   snap.push(`- 국내 부위별 가격: ${kamisCutsText()}`);
   if (timing && histCache.USDKRW?.isReal === true && timing.trends?.usd) {
     const f = timing.forecasts?.usd;
     snap.push(`- USD/KRW 최근 30일 추세: ${timing.trends.usd.dir} (${timing.trends.usd.pct}%)${f?.base ? ` / 단순 추세 연장 시 2~3개월 뒤 ${f.low}~${f.high}원 (예측이 아니라 참고용 외삽)` : ''}`);
@@ -2034,17 +2117,10 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.4.0', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.0', buildId:BUILD_ID, time:kstNow() }));
 
-// KAMIS 설정값 브라우저에 안전하게 전달 (키만 노출, WAF 우회용)
-app.get('/api/kamis-config', (_, res) => {
-  const key = process.env.KAMIS_API_KEY;
-  const id  = process.env.KAMIS_API_ID;
-  if (!key || !id) return res.json({ ok: false });
-  // CORS 허용 (같은 도메인에서만)
-  res.setHeader('Access-Control-Allow-Origin', 'https://pig-dashboard.onrender.com');
-  res.json({ ok: true, key, id });
-});
+// 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
+app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
 
 // KAMIS 진단 엔드포인트 (브라우저에서 직접 확인용)
 app.get('/api/kamis-test', async (_, res) => {
@@ -2055,7 +2131,7 @@ app.get('/api/kamis-test', async (_, res) => {
 
   const urls = [
     // KAMIS (WAF 차단 확인용)
-    { name: 'kamis-periodProductList', url: `https://www.kamis.or.kr/service/price/xml.do?action=periodProductList&p_productclscode=02&p_startday=2026-01-01&p_endday=${today}&p_itemcategorycode=500&p_itemcode=515&p_kindcode=00&p_productrankcode=04&p_countrycode=1101&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json` },
+    { name: 'kamis-dailyPriceByCategoryList', url: `https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList&p_product_cls_code=02&p_item_category_code=500&p_country_code=1101&p_regday=${today}&p_convert_kg_yn=N&p_cert_key=${certKey}&p_cert_id=${certId}&p_returntype=json` },
     // ekapepia (여기고기) - 돼지 지육 경락가격
     { name: 'ekapepia-pigNew', url: `https://www.ekapepia.com/supPrice/auction/price/pigNew.do?searchStartDate=2026-07-01&searchEndDate=${today}&searchCondition=1&menuSn=65` },
     { name: 'ekapepia-carcass', url: `https://www.ekapepia.com/v3/price/livestock/pig/wholesale/carcassPrice.do` },
@@ -2238,7 +2314,9 @@ app.get('/api/kamis-test', async (_, res) => {
     results.push({ name: 'ekapepia-table-dump', error: e.message });
   }
 
-  res.json({ certKey: certKey ? certKey.slice(0,8)+'...' : '없음', certId, results });
+  // 응답(미리보기·JSON 샘플 등 중첩된 값 포함)에 인증키가 그대로 되돌아오는 경우가 있어 모두 가린다
+  const payload = { certKey: certKey ? '설정됨 (값은 가림)' : '없음', certId: certId ? '설정됨' : '없음', results };
+  res.json(certKey ? JSON.parse(JSON.stringify(payload).split(certKey).join('***')) : payload);
 });
 
 // API 요청 처리 중 생긴 오류(본문이 너무 큼, JSON 형식 오류 등)를 HTML 이 아니라 JSON 으로 응답
@@ -2256,7 +2334,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2264,14 +2342,14 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.4.0 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.5.0 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
       Promise.allSettled([
         getCurrentPrices(),
         getHistory('LH'), getHistory('ZC'), getHistory('ZS'),
-        getHistory('KAMIS'), getHistory('USDKRW'), getHistory('EURKRW'),
+        getKamisCuts(), getHistory('USDKRW'), getHistory('EURKRW'),
       ]).then(rs => console.log(`✅ 프리로드: ${rs.filter(r=>r.status==='fulfilled').length}/${rs.length} 성공`));
     }, 2000);
   });
