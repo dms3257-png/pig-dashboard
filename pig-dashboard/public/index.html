@@ -999,7 +999,9 @@ async function loadEuPig() {
   } catch(e) {
     console.warn('EU pig:', e.message);
     const el = document.getElementById('eu-pig-wrap');
-    if (el) el.innerHTML = `<p style="color:#f87171;font-size:.78rem">EU 지육가 로드 실패: ${e.message}</p>`;
+    if (el) el.innerHTML = `<p style="color:#f87171;font-size:.78rem">EU 지육가 수집 실패: ${fxEsc(e.message)}<br><span style="color:#64748b">고정값·추정값으로 대신하지 않았습니다</span></p>`;
+    const tw = document.getElementById('eu-table-wrap'); if (tw) tw.innerHTML = '';
+    const cv = document.getElementById('c-eu'); if (cv && cv.parentElement) cv.parentElement.innerHTML = '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem">수집 실패 — 추이를 그리지 않았습니다</p>';
   }
 }
 
