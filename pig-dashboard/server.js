@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.5.0
+// server.js - 수안푸드 지육가 대시보드 v3.5.1
+// v3.5.1: EU 국가별 지육가 수집 수리 — 새 공식 주소 우선, 최신 주 날짜 비교 수정, 고정 참고값 제거
 // v3.5.0: 국내 가격을 KAMIS 부위별 가격(삼겹살·앞다리·목심·갈비·수입 삼겹살)으로 교체 — 가짜 시드·고정값 제거, KAMIS 키는 서버만 사용
 // v3.4.0: 수입 타이밍 판정 기준(달러 1,400원·유로 1,500원 고정)을 거시 지표 기준으로 재설정 — 기준·근거·설정일·검토일은 TIMING_CFG 한 곳
 // 안정화: 빠른 무료 API + 5초 타임아웃 + 즉시 폴백
@@ -851,70 +852,64 @@ const EU_COUNTRIES = [
   { code: 'PL', name: '🇵🇱 폴란드'  },
 ];
 
+// EU 집행위 농업총국 주간 지육가 (Class S, EUR/100kg).
+// 공식 안내(GeneralInfo): 2026-05-20 부터 API 주소가 https://api.tech.ec.europa.eu/agrifood 로 바뀜. 옛 주소(agridata.ec.europa.eu/api)는 "당분간만" 동작.
+// → 새 주소를 먼저, 안 되면 옛 주소를 시도한다. 둘 다 안 되면 고정 참고값으로 채우지 않고 이유와 함께 실패한다.
+const EU_PIG_ENDPOINTS = [
+  { name: '새 공식 주소', base: 'https://api.tech.ec.europa.eu/agrifood/api/pigmeat/prices' },
+  { name: '옛 주소', base: 'https://agridata.ec.europa.eu/api/pigmeat/prices' },
+];
+// 응답의 날짜(일/월/년 또는 ISO)를 연-월-일 문자열로. 읽을 수 없으면 null
+function euYmd(v) {
+  const t = String(v == null ? '' : v).trim();
+  let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+}
+function parseEuPig(items) {
+  if (!Array.isArray(items) || items.length === 0) throw new Error('응답이 비어 있음');
+  const byCountry = {}, hist = {};
+  let used = 0;
+  for (const item of items) {
+    if (!item || String(item.pigClass).toUpperCase() !== 'S') continue;       // 화면은 Class S 기준
+    const c = item.memberStateCode, price = parseFloat(item.price), ymd = euYmd(item.beginDate);
+    if (!c || !Number.isFinite(price) || price <= 0 || !ymd) continue;
+    used++;
+    if (!byCountry[c] || ymd > byCountry[c].week) byCountry[c] = { price, week: ymd, unit: item.unit || 'EUR/100kg', cls: 'S' };   // 연-월-일 문자열은 사전순 = 날짜순
+    (hist[c] = hist[c] || []).push({ time: dateToUnix(ymd), close: price, open: price, high: price, low: price });
+  }
+  if (!used) throw new Error('Class S 가격을 읽을 수 없음 (응답 ' + items.length + '건)');
+  for (const c of Object.keys(hist)) hist[c] = dedupeByTime(hist[c]);
+  return { byCountry, histByCountry: hist };
+}
+
 async function fetchEuPigPrices() {
   const hit = aCache.get('eu_pig');
   if (hit && Date.now() - hit.ts < 6 * 3600000) return hit.data;
+  const bad = aCache.get('eu_pig_err');
+  if (bad && Date.now() - bad.ts < 5 * 60000) throw new Error(bad.msg);       // 실패 직후에는 다시 두드리지 않음
 
-  const endDate   = new Date().toISOString().slice(0,10).split('-').reverse().join('/');
-  const startDate = new Date(Date.now()-90*86400000).toISOString().slice(0,10).split('-').reverse().join('/');
+  const dmy = d => d.toISOString().slice(0, 10).split('-').reverse().join('/');
+  const endDate = dmy(new Date()), startDate = dmy(new Date(Date.now() - 90 * 86400000));
   const codes = EU_COUNTRIES.map(c => c.code).join(',');
-
-  try {
-    const url = `https://agridata.ec.europa.eu/api/pigmeat/prices?memberStateCodes=${codes}&pigClasses=S,E&beginDate=${startDate}&endDate=${endDate}`;
-    const text = await httpGet(url, { Accept: 'application/json' });
-    const items = JSON.parse(text);
-    if (!Array.isArray(items) || items.length === 0) throw new Error('EU API 빈 응답');
-
-    // 국가별 최신값
-    const byCountry = {};
-    for (const item of items) {
-      const c = item.memberStateCode;
-      const price = parseFloat(item.price);
-      if (!Number.isFinite(price) || price <= 0) continue;
-      const week = item.beginDate;
-      if (!byCountry[c] || week > byCountry[c].week) {
-        byCountry[c] = { price, week, unit: item.unit||'EUR/100kg', cls: item.pigClass };
-      }
-    }
-
-    // 국가별 히스토리 (Class S)
-    const histByCountry = {};
-    for (const item of items) {
-      const c = item.memberStateCode;
-      const price = parseFloat(item.price);
-      if (!Number.isFinite(price) || price <= 0 || item.pigClass !== 'S') continue;
-      const parts = item.beginDate.split('/');
-      const ymd = `${parts[2]}-${parts[1]}-${parts[0]}`;
-      if (!histByCountry[c]) histByCountry[c] = [];
-      histByCountry[c].push({ time: dateToUnix(ymd), close: price, open: price, high: price, low: price });
-    }
-    for (const c of Object.keys(histByCountry)) {
-      histByCountry[c] = dedupeByTime(histByCountry[c]);
-    }
-
-    const result = { byCountry, histByCountry, fetchedAt: kstNow(), source: 'agridata.ec.europa.eu' };
-    aCache.set('eu_pig', { data: result, ts: Date.now() });
-    console.log(`EU 지육가: ${Object.keys(byCountry).length}개국`);
-    return result;
-
-  } catch (e) {
-    console.warn('EU pig API:', e.message);
-    const fallback = {
-      byCountry: {
-        ES: { price: 172.5, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
-        DE: { price: 175.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
-        NL: { price: 173.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
-        FR: { price: 176.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
-        DK: { price: 178.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
-        PL: { price: 163.0, week: 'fallback', unit: 'EUR/100kg', cls: 'S' },
-      },
-      histByCountry: {},
-      fetchedAt: kstNow(),
-      source: 'fallback',
-    };
-    aCache.set('eu_pig', { data: fallback, ts: Date.now() - 5*3600000 });
-    return fallback;
+  const reasons = [];
+  for (const ep of EU_PIG_ENDPOINTS) {
+    try {
+      const url = `${ep.base}?memberStateCodes=${codes}&pigClasses=S&beginDate=${startDate}&endDate=${endDate}`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: AbortSignal.timeout(15000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let items; try { items = JSON.parse(await res.text()); } catch (e) { throw new Error('JSON 이 아님'); }
+      const { byCountry, histByCountry } = parseEuPig(items);
+      const result = { byCountry, histByCountry, fetchedAt: kstNow(), source: 'agridata.ec.europa.eu', endpoint: ep.name };
+      aCache.set('eu_pig', { data: result, ts: Date.now() });
+      console.log(`✅ EU 지육가: ${Object.keys(byCountry).length}개국 (${ep.name})`);
+      return result;
+    } catch (e) { reasons.push(`${ep.name}: ${e.message}`); console.warn(`EU 지육가 ${ep.name} 실패:`, e.message); }
   }
+  const msg = 'EU 공식 데이터를 받지 못했습니다 (' + reasons.join(' / ') + ')';
+  aCache.set('eu_pig_err', { msg, ts: Date.now() });
+  throw new Error(msg);                                                        // 고정 참고값으로 대신하지 않는다
 }
 
 const histCache = { LH:{d:[],at:0}, ZC:{d:[],at:0}, ZS:{d:[],at:0}, KAMIS:{d:[],at:0}, USDKRW:{d:[],at:0}, EURKRW:{d:[],at:0} };
@@ -1517,7 +1512,7 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.0' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.1' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2117,7 +2112,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.0', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.1', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2334,7 +2329,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, EU_PIG_ENDPOINTS,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2342,7 +2337,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.5.0 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.5.1 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
