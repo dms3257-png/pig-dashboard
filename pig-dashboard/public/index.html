@@ -243,7 +243,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   <div class="card" style="margin-bottom:14px">
     <div class="ch">
       <span class="ct">🇪🇺 EU 국가별 지육가 (공식)</span>
-      <span class="tag tg">agridata.ec.europa.eu · Class S EUR/100kg</span>
+      <span class="tag tg">EU 집행위(api.tech.ec.europa.eu) · Class S EUR/100kg</span>
     </div>
     <div id="eu-pig-wrap"><div class="lding"><span class="spin">⏳</span> EU 공식 데이터 로딩 중...</div></div>
     <div class="g2" style="margin-top:12px;margin-bottom:0">
@@ -968,8 +968,9 @@ async function loadEuPig() {
         <span style="font-size:.68rem;color:#86efac;font-weight:600;width:90px;text-align:right;flex-shrink:0">${krwPer100 != null ? krwPer100.toLocaleString() + '원/kg' : '환율 없음'}</span>
       </div>`;
     });
-    document.getElementById('eu-pig-wrap').innerHTML = bars ||
-      '<p style="color:#475569;font-size:.78rem;text-align:center;padding:12px">데이터 없음</p>';
+    const staleNote = j.stale ? '<p style="color:#fbbf24;font-size:.85rem;line-height:1.6;margin:0 0 10px">⚠ EU 서버 오류로 새 값을 받지 못해 <b>' + fxEsc(j.staleSince || '이전') + '</b>에 받은 값을 보여줍니다 (' + fxEsc(String(j.staleReason || '').slice(0, 160)) + ')</p>' : '';
+    document.getElementById('eu-pig-wrap').innerHTML = staleNote + (bars ||
+      '<p style="color:#475569;font-size:.78rem;text-align:center;padding:12px">데이터 없음</p>');
 
     // 테이블
     let tbl = `<table class="dt"><thead><tr><th>국가</th><th>EUR/100kg</th><th>원화(원/kg)</th><th>기준주</th></tr></thead><tbody>`;
