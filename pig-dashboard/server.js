@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.5.3
+// server.js - 수안푸드 지육가 대시보드 v3.5.4
+// v3.5.4: EU API 가 HTTP 5xx 를 주면 나라별로 나눠 재요청 + 실패 시 마지막 성공값(stale, 기준주 표시) 사용
 // v3.5.3: EU 응답 가격("€179.00", 단위 "100 KG")을 읽도록 수정 — 유로가 아닌 통화·100kg 이 아닌 단위는 값을 쓰지 않고 건너뜀
 // v3.5.2: EU 응답을 읽지 못할 때 응답 모양(필드·등급 값·첫 항목)을 오류에 표시 — 진단용
 // v3.5.1: EU 국가별 지육가 수집 수리 — 새 공식 주소 우선, 최신 주 날짜 비교 수정, 고정 참고값 제거
@@ -919,19 +920,35 @@ async function fetchEuPigPrices() {
   const reasons = [];
   for (const ep of EU_PIG_ENDPOINTS) {
     try {
-      const url = `${ep.base}?memberStateCodes=${codes}&pigClasses=S&beginDate=${startDate}&endDate=${endDate}`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: AbortSignal.timeout(15000) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      let items; try { items = JSON.parse(await res.text()); } catch (e) { throw new Error('JSON 이 아님'); }
+      const get = async list => {
+        const url = `${ep.base}?memberStateCodes=${list}&pigClasses=S&beginDate=${startDate}&endDate=${endDate}`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: AbortSignal.timeout(15000) });
+        if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; try { e.body = (await res.text()).replace(/\s+/g, ' ').slice(0, 120); } catch (_) {} throw e; }
+        try { return JSON.parse(await res.text()); } catch (e) { throw new Error('JSON 이 아님'); }
+      };
+      let items;
+      try { items = await get(codes); }
+      catch (e) {
+        if (!(e.status >= 500)) throw e;
+        // 서버 오류(5xx): 한꺼번에 묻는 게 원인일 수 있어 나라별로 나눠 다시 묻는다 (받은 나라만 사용)
+        const parts = await Promise.allSettled(EU_COUNTRIES.map(c => get(c.code)));
+        items = [].concat(...parts.filter(p => p.status === 'fulfilled' && Array.isArray(p.value)).map(p => p.value));
+        if (!items.length) throw new Error(`${e.message}${e.body ? ' "' + e.body + '"' : ''} (나라별 재요청도 실패)`);
+        console.warn(`EU 지육가 ${ep.name}: 일괄 요청 ${e.message} → 나라별 재요청 성공 (${items.length}건)`);
+      }
       const { byCountry, histByCountry, skipped } = parseEuPig(items);
       const result = { byCountry, histByCountry, fetchedAt: kstNow(), source: 'agridata.ec.europa.eu', endpoint: ep.name, skipped };
       aCache.set('eu_pig', { data: result, ts: Date.now() });
+      aCache.set('eu_pig_last', { data: result, ts: Date.now() });
       console.log(`✅ EU 지육가: ${Object.keys(byCountry).length}개국 (${ep.name})`);
       return result;
     } catch (e) { reasons.push(`${ep.name}: ${e.message}`); console.warn(`EU 지육가 ${ep.name} 실패:`, e.message); }
   }
   const msg = 'EU 공식 데이터를 받지 못했습니다 (' + reasons.join(' / ') + ')';
   aCache.set('eu_pig_err', { msg, ts: Date.now() });
+  // 이전에 공식 서버에서 실제로 받은 값이 있으면(14일 이내) 그 값을 '지난 값'으로 표시해서 보여준다 — 새로 지어낸 값이 아님
+  const last = aCache.get('eu_pig_last');
+  if (last && Date.now() - last.ts < 14 * 86400000) return { ...last.data, stale: true, staleReason: msg, staleSince: last.data.fetchedAt };
   throw new Error(msg);                                                        // 고정 참고값으로 대신하지 않는다
 }
 
@@ -1535,7 +1552,7 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.3' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.4' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2135,7 +2152,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.3', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.4', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2360,7 +2377,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.5.3 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.5.4 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
