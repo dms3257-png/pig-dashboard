@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.5.4
+// server.js - 수안푸드 지육가 대시보드 v3.5.5
+// v3.5.5: EU API 장애 시 EU 집행위 주간 PDF 보고서(나라별 Class S 표)를 직접 읽어 사용 (좌표로 열을 맞추고, 못 읽으면 이유와 함께 실패)
 // v3.5.4: EU API 가 HTTP 5xx 를 주면 나라별로 나눠 재요청 + 실패 시 마지막 성공값(stale, 기준주 표시) 사용
 // v3.5.3: EU 응답 가격("€179.00", 단위 "100 KG")을 읽도록 수정 — 유로가 아닌 통화·100kg 이 아닌 단위는 값을 쓰지 않고 건너뜀
 // v3.5.2: EU 응답을 읽지 못할 때 응답 모양(필드·등급 값·첫 항목)을 오류에 표시 — 진단용
@@ -908,6 +909,88 @@ function parseEuPig(items) {
   return { byCountry, histByCountry: hist, skipped: [...new Set(skipped)].slice(0, 10) };
 }
 
+// ── EU 집행위 주간 PDF 보고서 (Meat Market Observatory - Pig) ─────────────────────────────
+// API(api.tech.ec.europa.eu)가 죽어 있을 때의 대체 경로. 같은 공식 자료이며 매주 같은 주소에서 갱신된다.
+const EU_PDF_URL = 'https://agriculture.ec.europa.eu/document/download/09a72b71-62cc-432c-b191-3f02eadee5fe_en?filename=pig-weekly-prices-eu_en.pdf';
+const EU_PDF_CODES = ['BE','BG','CZ','DK','DE','EE','IE','EL','ES','FR','HR','IT','CY','LV','LT','LU','HU','MT','NL','AT','PL','PT','RO','SI','SK','FI','SE'];
+// PDF 안의 압축 스트림(FlateDecode)을 모두 풀어 글자(BT…ET) 위치와 내용을 꺼낸다. 이 보고서는 글꼴이 WinAnsi 단순 글꼴이라 글자가 그대로 들어 있다.
+function pdfTextItems(buf) {
+  const zlib = require('zlib');
+  const raw = buf.toString('latin1');
+  const pages = [];
+  const re = /(?<!end)stream\r?\n/g; let m;
+  while ((m = re.exec(raw))) {
+    const start = m.index + m[0].length, end = raw.indexOf('endstream', start);
+    if (end < 0) break;
+    const dictStart = raw.lastIndexOf('obj', m.index);
+    const dict = raw.slice(dictStart < 0 ? 0 : dictStart, m.index);
+    re.lastIndex = end + 9;
+    if (!/FlateDecode/.test(dict) || /\/Image/.test(dict)) continue;
+    let txt; try { txt = zlib.inflateSync(buf.subarray(start, end)).toString('latin1'); } catch (_) { continue; }
+    if (!/\bBT\b/.test(txt) || !/\bTm\b/.test(txt)) continue;
+    const items = [];
+    const bt = /\bBT\b([\s\S]*?)\bET\b/g; let b;
+    while ((b = bt.exec(txt))) {
+      const body = b[1];
+      const tm = body.match(/([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+Tm/);
+      if (!tm) continue;
+      let text = '';
+      const arr = /\[((?:[^\]\\]|\\.)*)\]\s*TJ|\(((?:[^()\\]|\\.)*)\)\s*Tj/g; let a;
+      while ((a = arr.exec(body))) {
+        const part = a[1] != null ? a[1] : '(' + a[2] + ')';
+        const str = /\(((?:[^()\\]|\\.)*)\)/g; let q;
+        while ((q = str.exec(part))) text += q[1].replace(/\\([()\\])/g, '$1').replace(/\\(\d{1,3})/g, (_, o) => String.fromCharCode(parseInt(o, 8)));
+      }
+      if (text.trim()) items.push({ x: parseFloat(tm[5]), y: parseFloat(tm[6]), text: text.trim() });
+    }
+    if (items.length) pages.push(items);
+  }
+  return pages;
+}
+// "EU PRICES of CLASS S" 표가 있는 쪽을 찾아 나라별(열 위치) · 주별(행) 가격을 읽는다.
+function parseEuPdfPages(pages) {
+  const page = pages.find(p => /EU PRICES of CLASS S/i.test(p.map(i => i.text).join(' ')));
+  if (!page) throw new Error('보고서에서 "EU PRICES of CLASS S" 표를 찾지 못함 (보고서 모양이 바뀐 듯)');
+  // 머리글 줄: 나라 코드가 같은 높이에 20개 이상 모여 있는 줄
+  const byY = {};
+  for (const it of page) if (EU_PDF_CODES.includes(it.text)) (byY[Math.round(it.y)] = byY[Math.round(it.y)] || []).push(it);
+  const hdrRow = Object.values(byY).sort((a, b) => b.length - a.length)[0];
+  if (!hdrRow || hdrRow.length < 20) throw new Error('표 머리글(나라 코드 줄)을 찾지 못함');
+  const hx = {}; for (const h of hdrRow) hx[h.text] = h.x;
+  const minX = Math.min(...Object.values(hx)), maxX = Math.max(...Object.values(hx));
+  const rows = page.filter(i => /^\d{2}\/\d{2}\/\d{4}$/.test(i.text) && i.x < minX - 20);
+  if (rows.length < 4) throw new Error('주별 행(날짜)을 찾지 못함');
+  const byCountry = {}, hist = {}; let cells = 0;
+  for (const r of rows) {
+    const ymd = euYmd(r.text);
+    for (const it of page) {
+      if (Math.abs(it.y - r.y) > 2 || it.x < minX - 5 || it.x > maxX + 5 || !/^\d{2,3}\.\d{2}$/.test(it.text)) continue;
+      const c = EU_PDF_CODES.filter(k => hx[k] != null).sort((a, b) => Math.abs(hx[a] - it.x) - Math.abs(hx[b] - it.x))[0];
+      if (Math.abs(hx[c] - it.x) > 4) continue;                       // 열 위치와 맞지 않는 값은 쓰지 않는다 (엉뚱한 나라에 넣지 않음)
+      const price = parseFloat(it.text);
+      if (!(price > 50 && price < 400)) continue;
+      cells++;
+      (hist[c] = hist[c] || []).push({ time: dateToUnix(ymd), close: price, open: price, high: price, low: price });
+      if (!byCountry[c] || ymd > byCountry[c].week) byCountry[c] = { price, week: ymd, unit: 'EUR/100kg', cls: 'S' };
+    }
+  }
+  if (cells < 20) throw new Error('표에서 읽은 가격이 너무 적음 (' + cells + '개)');
+  for (const c of Object.keys(hist)) hist[c] = dedupeByTime(hist[c]);
+  const lu = page.concat(...pages).find(i => /^Last update/i.test(i.text));
+  let reportUpdated = null;
+  for (const p of pages) { const i = p.findIndex(x => /Last update/i.test(x.text)); if (i >= 0) { const d = p.slice(i, i + 4).find(x => /^\d{2}\/\d{2}\/\d{4}$/.test(x.text)); if (d) { reportUpdated = euYmd(d.text); break; } } }
+  void lu;
+  return { byCountry, histByCountry: hist, reportUpdated, weeks: rows.length };
+}
+async function fetchEuPigFromPdf() {
+  const res = await fetch(EU_PDF_URL, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/pdf' }, signal: AbortSignal.timeout(25000) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  let buf; try { buf = Buffer.from(await res.arrayBuffer()); } catch (e) { throw new Error('PDF 내용을 읽을 수 없음'); }
+  if (buf.length < 1000 || buf.length > 8e6 || buf.subarray(0, 5).toString('latin1') !== '%PDF-') throw new Error('PDF 가 아님 (' + buf.length + '바이트)');
+  const { byCountry, histByCountry, reportUpdated, weeks } = parseEuPdfPages(pdfTextItems(buf));
+  return { byCountry, histByCountry, fetchedAt: kstNow(), source: 'agriculture.ec.europa.eu', endpoint: 'PDF 주간 보고서', reportUpdated, weeks, skipped: [] };
+}
+
 async function fetchEuPigPrices() {
   const hit = aCache.get('eu_pig');
   if (hit && Date.now() - hit.ts < 6 * 3600000) return hit.data;
@@ -944,6 +1027,13 @@ async function fetchEuPigPrices() {
       return result;
     } catch (e) { reasons.push(`${ep.name}: ${e.message}`); console.warn(`EU 지육가 ${ep.name} 실패:`, e.message); }
   }
+  try {                                                                          // API 가 안 되면 같은 공식 자료의 주간 PDF 보고서에서 읽는다
+    const r = await fetchEuPigFromPdf();
+    aCache.set('eu_pig', { data: r, ts: Date.now() - 5 * 3600000 });             // 1시간 뒤에는 API 를 다시 시도
+    aCache.set('eu_pig_last', { data: r, ts: Date.now() });
+    console.log(`✅ EU 지육가: ${Object.keys(r.byCountry).length}개국 (PDF 주간 보고서, 갱신 ${r.reportUpdated || '?'}) — API 실패: ${reasons.join(' / ')}`);
+    return r;
+  } catch (e) { reasons.push('PDF 주간 보고서: ' + e.message); console.warn('EU 지육가 PDF 실패:', e.message); }
   const msg = 'EU 공식 데이터를 받지 못했습니다 (' + reasons.join(' / ') + ')';
   aCache.set('eu_pig_err', { msg, ts: Date.now() });
   // 이전에 공식 서버에서 실제로 받은 값이 있으면(14일 이내) 그 값을 '지난 값'으로 표시해서 보여준다 — 새로 지어낸 값이 아님
@@ -1552,7 +1642,7 @@ function buildMarketPrompt(current) {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.4' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.5' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2152,7 +2242,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.4', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.5', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2369,7 +2459,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2377,7 +2467,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.5.4 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.5.5 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
