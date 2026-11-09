@@ -969,7 +969,8 @@ async function loadEuPig() {
       </div>`;
     });
     const staleNote = j.stale ? '<p style="color:#fbbf24;font-size:.85rem;line-height:1.6;margin:0 0 10px">⚠ EU 서버 오류로 새 값을 받지 못해 <b>' + fxEsc(j.staleSince || '이전') + '</b>에 받은 값을 보여줍니다 (' + fxEsc(String(j.staleReason || '').slice(0, 160)) + ')</p>' : '';
-    document.getElementById('eu-pig-wrap').innerHTML = staleNote + (bars ||
+    const pdfNote = j.endpoint === 'PDF 주간 보고서' ? '<p style="color:#94a3b8;font-size:.85rem;line-height:1.6;margin:0 0 10px">EU 데이터 서버(API)가 응답하지 않아 EU 집행위 <b>주간 PDF 보고서</b>(갱신 ' + fxEsc(j.reportUpdated || '?') + ')에서 읽었습니다. 나라별 기준주는 아래 표에 표시됩니다.</p>' : '';
+    document.getElementById('eu-pig-wrap').innerHTML = staleNote + pdfNote + (bars ||
       '<p style="color:#475569;font-size:.78rem;text-align:center;padding:12px">데이터 없음</p>');
 
     // 테이블
