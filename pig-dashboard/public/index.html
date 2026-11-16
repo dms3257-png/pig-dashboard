@@ -380,15 +380,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
       <div id="it-m-prev"></div>
     </div>
     <div class="card">
-      <div class="ch"><span class="ct">② 우리 회사 수입 실적 엑셀</span><span class="tag tz" id="it-p-stat">미등록</span></div>
-      <div class="dz" id="dz-perf" tabindex="0" role="button" aria-label="수입 실적 엑셀 올리기">
+      <div class="ch"><span class="ct">② 우리 회사 수입 실적 엑셀·사진</span><span class="tag tz" id="it-p-stat">미등록</span></div>
+      <div class="dz" id="dz-perf" tabindex="0" role="button" aria-label="수입 실적 엑셀 또는 사진 올리기">
         <div class="dzi">📊</div>
         <div class="dzt">작년·올해 수입 실적 엑셀을 여기로 끌어다 놓으세요</div>
-        <div class="dzs">또는 눌러서 파일 선택 · 여러 개 가능 (.xlsx .xls .csv)<br>필요한 열: 품목 · 수량 · 날짜(입항·선적·신고일) · 단가 또는 금액 (선택: 원산지·통화·적용환율)</div>
-        <input type="file" accept=".xlsx,.xlsm,.xls,.csv" multiple hidden>
+        <div class="dzs">또는 눌러서 파일 선택 · 여러 개 가능 (.xlsx .xls .csv)<br>필요한 열: 품목 · 수량 · 날짜(입항·선적·신고일) · 단가 또는 금액 (선택: 원산지·통화·적용환율)<br>사진(.jpg .png .webp)도 올릴 수 있지만 <b>참고용</b>입니다 — AI가 글자를 읽어 판단 근거로만 쓰고 합계·평균 계산에는 넣지 않습니다 (사진은 서버로 전송됩니다)</div>
+        <input type="file" accept=".xlsx,.xlsm,.xls,.csv,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple hidden>
       </div>
       <div id="it-p-msg"></div>
       <div id="it-p-files"></div>
+      <div id="it-p-prev"></div>
     </div>
   </div>
 
@@ -2026,11 +2027,12 @@ async function itReadImageText(file) {
   if (!r.ok || !j || !j.ok) throw new Error((j && j.error) || ('사진 읽기 실패 (HTTP ' + r.status + ')'));
   return j;
 }
-function itAddImage(j, file) {
+function itAddImage(j, file, kind) {
   const body = String(j.text || '').trim();
-  const text = '[사진에서 AI가 읽은 글자 — 오독 가능, 확인 필요]\n' + body;
+  const perf = kind === 'perf';
+  const text = (perf ? '[우리 회사 수입 실적 사진에서 AI가 읽은 글자 — 참고용(수량·단가 계산에는 쓰지 않음), 오독 가능, 확인 필요]\n' : '[사진에서 AI가 읽은 글자 — 오독 가능, 확인 필요]\n') + body;
   const cut = text.length > IT_MEETING_FILE_CAP;
-  IT.meeting.push({ id: IT.seq++, name: file.name, text: cut ? text.slice(0, IT_MEETING_FILE_CAP) + '\n…(이하 생략)' : text, chars: text.length, truncated: cut || !!j.truncated, include: true, hidden: 0, kind: 'image', note: '사진에서 AI가 글자를 읽음 · 틀릴 수 있으니 확인하세요 · ' + text.length.toLocaleString('ko-KR') + '자' + (cut || j.truncated ? ' · 앞부분만' : '') });
+  IT.meeting.push({ id: IT.seq++, name: file.name, text: cut ? text.slice(0, IT_MEETING_FILE_CAP) + '\n…(이하 생략)' : text, chars: text.length, truncated: cut || !!j.truncated, include: true, hidden: 0, kind: 'image', src: perf ? 'perf' : 'meeting', note: (perf ? '수입 실적 사진 · 참고용(계산 제외) · AI가 글자를 읽음 · 틀릴 수 있으니 확인하세요 · ' : '사진에서 AI가 글자를 읽음 · 틀릴 수 있으니 확인하세요 · ') + text.length.toLocaleString('ko-KR') + '자' + (cut || j.truncated ? ' · 앞부분만' : '') });
 }
 
 async function itHandleFiles(kind, fileList) {
@@ -2038,9 +2040,9 @@ async function itHandleFiles(kind, fileList) {
   if (!files.length) return;
   const isXl = f => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name);
   const isImg = f => /\.(jpe?g|png|webp)$/i.test(f.name) || /^image\/(jpeg|png|webp)$/.test(f.type || '');
-  const imgs = kind === 'meeting' ? files.filter(f => !isXl(f) && isImg(f)) : [];       // 사진은 주간회의에만
+  const imgs = files.filter(f => !isXl(f) && isImg(f));       // 사진: 주간회의 + 수입 실적(참고용)
   const bad = files.filter(f => !isXl(f) && imgs.indexOf(f) < 0), good = files.filter(isXl);
-  if (!good.length && !imgs.length) { itSetMsg(kind, (kind === 'meeting' ? '엑셀(.xlsx .xls .csv)이나 사진(.jpg .png .webp)만 올릴 수 있습니다: ' : '엑셀(.xlsx .xls .csv) 파일만 올릴 수 있습니다: ') + bad.map(f => f.name).join(', '), 'warn'); return; }
+  if (!good.length && !imgs.length) { itSetMsg(kind, '엑셀(.xlsx .xls .csv)이나 사진(.jpg .png .webp)만 올릴 수 있습니다: ' + bad.map(f => f.name).join(', '), 'warn'); return; }
   let XLSX;
   if (good.length) {
     itSetMsg(kind, '⏳ 엑셀을 읽는 중입니다…', 'info');
@@ -2050,7 +2052,7 @@ async function itHandleFiles(kind, fileList) {
   const before = { m: IT.meeting.length, t: IT.tables.length };
   for (let i = 0; i < imgs.length; i++) {
     itSetMsg(kind, '⏳ 사진 글자를 읽는 중입니다 (' + (i + 1) + '/' + imgs.length + ') — 한 장에 10~30초 걸릴 수 있습니다…', 'info');
-    try { itAddImage(await itReadImageText(imgs[i]), imgs[i]); } catch (e) { errs.push(imgs[i].name + ': ' + (e && e.message || e)); }
+    try { itAddImage(await itReadImageText(imgs[i]), imgs[i], kind); } catch (e) { errs.push(imgs[i].name + ': ' + (e && e.message || e)); }
   }
   for (const f of good) {
     try {
@@ -2059,9 +2061,10 @@ async function itHandleFiles(kind, fileList) {
       else { const cut = itAddPerf(XLSX, f, wb); if (cut.length) infos.push(f.name + ': ' + cut.join(', ') + ' 시트는 ' + IT_MAX_ROWS.toLocaleString('ko-KR') + '행까지만 읽었습니다'); }
     } catch (e) { errs.push(f.name + ': ' + itReadErr(e)); }
   }
-  const added = kind === 'meeting' ? IT.meeting.length - before.m : IT.tables.length - before.t;
+  const added = (IT.meeting.length - before.m) + (kind === 'meeting' ? 0 : IT.tables.length - before.t);
   const notes = [];
-  if (bad.length) notes.push((kind === 'meeting' ? '엑셀·사진이 아닌 파일은 제외했습니다: ' : '엑셀이 아닌 파일은 제외했습니다: ') + bad.map(f => f.name).join(', '));
+  if (bad.length) notes.push('엑셀·사진이 아닌 파일은 제외했습니다: ' + bad.map(f => f.name).join(', '));
+  if (kind === 'perf' && imgs.length && !errs.length) notes.push('수입 실적 사진은 AI 근거 자료(참고용)로만 쓰이며 합계·평균 같은 계산에는 들어가지 않습니다.');
   if (imgs.length && imgs.length - errs.filter(x => imgs.some(f => x.indexOf(f.name + ':') === 0)).length > 0) notes.push('사진은 AI가 글자를 읽은 것이라 틀릴 수 있습니다. 아래 미리보기에서 숫자와 품목명을 꼭 확인하세요.');
   if (errs.length) notes.push(errs.join(' / '));
   if (infos.length) notes.push(infos.join(' / '));
@@ -2104,29 +2107,38 @@ function itRenderAll() {
 }
 
 // ── 파일 목록 ──
+function itFileChip(f, icon) {
+  return '<div class="fchip"><input type="checkbox" data-mi="' + f.id + '"' + (f.include ? ' checked' : '') + ' title="AI 분석에 포함"><span class="fn1">' + icon + ' ' + itEsc(f.name) + '</span>' +
+    '<span class="fm">' + (f.note ? itEsc(f.note) : f.chars.toLocaleString('ko-KR') + '자' + (f.truncated ? ' · 앞부분만' : '') + (f.chars ? '' : ' · 내용 없음')) + '</span>' +
+    '<button data-act="rm-meeting" data-id="' + f.id + '" title="삭제">✕</button></div>';
+}
 function itRenderFiles() {
   const m = itEl('it-m-files');
-  m.innerHTML = IT.meeting.map(f =>
+  const perfPhotos = IT.meeting.filter(f => f.src === 'perf'), meetingFiles = IT.meeting.filter(f => f.src !== 'perf');
+  m.innerHTML = meetingFiles.map(f =>
     '<div class="fchip"><input type="checkbox" data-mi="' + f.id + '"' + (f.include ? ' checked' : '') + ' title="AI 분석에 포함"><span class="fn1">📋 ' + itEsc(f.name) + '</span>' +
     '<span class="fm">' + (f.note ? itEsc(f.note) : f.chars.toLocaleString('ko-KR') + '자' + (f.truncated ? ' · 앞부분만' : '') + (f.chars ? '' : ' · 내용 없음')) + '</span>' +
     '<button data-act="rm-meeting" data-id="' + f.id + '" title="삭제">✕</button></div>').join('');
-  const mi = IT.meeting.filter(f => f.include && f.text).length;
+  const mi = meetingFiles.filter(f => f.include && f.text).length;
   const st = itEl('it-m-stat');
-  st.textContent = IT.meeting.length ? ('파일 ' + IT.meeting.length + '개 · AI 포함 ' + mi + '개') : '미등록';
-  st.className = 'tag ' + (IT.meeting.length ? 'tg' : 'tz');
+  st.textContent = meetingFiles.length ? ('파일 ' + meetingFiles.length + '개 · AI 포함 ' + mi + '개') : '미등록';
+  st.className = 'tag ' + (meetingFiles.length ? 'tg' : 'tz');
 
   const byFile = new Map();
   IT.tables.forEach(t => { const a = byFile.get(t.file) || { tables: 0, rows: 0 }; a.tables++; a.rows += t.rows.length; byFile.set(t.file, a); });
   itEl('it-p-files').innerHTML = Array.from(byFile.entries()).map(e =>
     '<div class="fchip"><span class="fn1">📊 ' + itEsc(e[0]) + '</span><span class="fm">시트 ' + e[1].tables + '개 · ' + e[1].rows.toLocaleString('ko-KR') + '행 인식</span>' +
-    '<button data-act="rm-perf" data-file="' + itEsc(e[0]) + '" title="삭제">✕</button></div>').join('');
+    '<button data-act="rm-perf" data-file="' + itEsc(e[0]) + '" title="삭제">✕</button></div>').join('') + perfPhotos.map(f => itFileChip(f, '📷')).join('');
   const ps = itEl('it-p-stat'), total = itAllRows().length;
-  ps.textContent = IT.tables.length ? (total.toLocaleString('ko-KR') + '행 인식') : '미등록';
-  ps.className = 'tag ' + (total ? 'tg' : (IT.tables.length ? 'to' : 'tz'));
+  ps.textContent = IT.tables.length ? (total.toLocaleString('ko-KR') + '행 인식' + (perfPhotos.length ? ' · 사진 ' + perfPhotos.length + '장(참고용)' : '')) : (perfPhotos.length ? '사진 ' + perfPhotos.length + '장 · 참고용' : '미등록');
+  ps.className = 'tag ' + (total ? 'tg' : (IT.tables.length || perfPhotos.length ? 'to' : 'tz'));
 
   const prev = itEl('it-m-prev');
-  prev.innerHTML = IT.meeting.filter(f => f.text).map(f =>
+  prev.innerHTML = IT.meeting.filter(f => f.text && f.src !== 'perf').map(f =>
     '<details class="itprev"><summary>' + itEsc(f.name) + ' — 읽은 내용 미리보기</summary><pre>' + itEsc(f.text.slice(0, f.kind === 'price' ? 6000 : 1500)) + (f.text.length > (f.kind === 'price' ? 6000 : 1500) ? '\n…' : '') + '</pre></details>').join('');
+  const pprev = itEl('it-p-prev');
+  if (pprev) pprev.innerHTML = perfPhotos.filter(f => f.text).map(f =>
+    '<details class="itprev"><summary>' + itEsc(f.name) + ' — AI가 읽은 글자 미리보기 (확인하세요)</summary><pre>' + itEsc(f.text.slice(0, 3000)) + (f.text.length > 3000 ? '\n…' : '') + '</pre></details>').join('');
   ['meeting', 'perf'].forEach(k => itSetMsg(k, IT.msg[k] ? IT.msg[k].text : '', IT.msg[k] ? IT.msg[k].level : ''));
 }
 
