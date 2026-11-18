@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.5.8
+// server.js - 수안푸드 지육가 대시보드 v3.5.9
+// v3.5.9: 관세청 품목별 수출입실적(GW) 연결 — 돼지고기(HS 0203) 국가별 월별 수입 중량·금액 GET /api/customs-pork (키: CUSTOMS_API_KEY, 서버에서만 사용)
 // v3.5.8: 수출국 위험 알림 GET /api/risk-news (Google 뉴스 RSS — 국가×질병·수입금지 키워드, 원문 링크) · 시장 AI 분석은 실제로 받은 자료만 사용(통계 숫자 생성 금지)
 // v3.5.7: 품목 전략 AI 근거 글자 한도 20,000 → 42,000자 (사진 여러 장)
 // v3.5.6: 주간회의 사진(JPG/PNG/WEBP) 글자 읽기 POST /api/items/ocr (Gemini 이미지 입력, 옮겨 적기만 — 추측·보완 금지)
@@ -1643,17 +1644,18 @@ B. 국내 부위별 가격(KAMIS): ${kamisCutsText() || '자료 없음'}
 C. EU 국가별 지육가(Class S): ${eu}
 D. 수출국 위험 뉴스 제목 (최근 30일, Google 뉴스 검색 — 제목만이며 본문은 확인 안 됨):
 ${risk}
-E. 국가별 수입량·수입 단가 통계: 자료 없음 (관세청 통계 미연결)
+E. 국가별 수입량·수입 단가 통계 (관세청): ${ex.customs ? customsText(ex.customs) : '자료 없음' + (ex.customsError ? ' (' + ex.customsError + ')' : '')}
 
 【규칙】
-1. 숫자는 A~D에 적힌 값만 인용하세요. 수입량·점유율·국가별 단가·전년 대비 증감 같은 통계를 만들어내지 마세요. 자료가 없으면 "자료 없음"이라고 쓰세요.
+1. 숫자는 A~E에 적힌 값만 인용하세요. 수입량·점유율·국가별 단가·전년 대비 증감 같은 통계를 만들어내지 마세요. 자료가 없으면 "자료 없음"이라고 쓰세요.
 2. 뉴스는 제목만 받았으므로 "~라는 보도가 있음"처럼 전하고, 날짜와 출처를 붙이세요. 확인되지 않은 내용을 사실로 단정하지 마세요.
 3. 투자·매매 권유가 아니라 수입 실무 참고용 시나리오로 쓰세요.
 
-분석 (한국어 Markdown, 800~1100자):
+분석 (한국어 Markdown, 900~1300자):
 ### 1. 수출국 위험 점검 (질병·수입 금지·관세 보도, 국가별)
-### 2. 환율·EU 지육가·국내 가격으로 본 수입 여건
-### 3. 수안푸드가 확인할 점 (공급처 분산·검역 확인 등)
+### 2. 국가별 수입 동향 (E의 관세청 통계: 물량·단가·전년 대비 — 자료 없으면 생략)
+### 3. 환율·EU 지육가·국내 가격으로 본 수입 여건
+### 4. 수안푸드가 확인할 점 (공급처 분산·검역 확인 등)
 `;
 }
 
@@ -1750,6 +1752,108 @@ async function fetchRiskNews() {
   aCache.set('risk_news', { data, ts: Date.now() });
   return data;
 }
+// ── 관세청 품목별 수출입실적(GW): 돼지고기 HS 0203 국가별 월별 수입 ─────────────────
+const CUSTOMS_URL = 'https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList';
+const CUSTOMS_COUNTRIES = [['US', '미국'], ['ES', '스페인'], ['DE', '독일'], ['CA', '캐나다'], ['CL', '칠레'], ['NL', '네덜란드'], ['DK', '덴마크'], ['FR', '프랑스'], ['AT', '오스트리아'], ['BE', '벨기에'], ['MX', '멕시코'], ['BR', '브라질']];
+function xmlVal(block, tag) {
+  const m = block.match(new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>'));
+  return m ? m[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : null;
+}
+function ymOf(v) { const m = String(v || '').match(/(20\d{2})\D?(0[1-9]|1[0-2])/); return m ? m[1] + m[2] : null; }
+// 응답 XML → 월별 { ym: { frozenKg, frozenUsd, allKg, allUsd } } (총계 줄 제외, HS 코드 앞자리로 냉동(0203.2x) 구분)
+function parseCustomsXml(xml) {
+  const x = String(xml || '');
+  const auth = xmlVal(x, 'returnAuthMsg') || xmlVal(x, 'errMsg');
+  if (auth && !/NORMAL/i.test(auth)) throw new Error('공공데이터포털 오류: ' + auth);
+  const code = xmlVal(x, 'resultCode');
+  if (code != null && !/^0+$/.test(code)) throw new Error('관세청 오류 ' + code + ': ' + (xmlVal(x, 'resultMsg') || ''));
+  const items = x.match(/<item>[\s\S]*?<\/item>/g) || [];
+  const months = {}, tags = new Set();
+  let skipped = 0, hsSeen = false;
+  for (const it of items) {
+    (it.match(/<([A-Za-z0-9]+)>/g) || []).forEach(t => { const n = t.slice(1, -1); if (n !== 'item') tags.add(n); });
+    const ym = ymOf(xmlVal(it, 'year'));
+    if (!ym) { skipped++; continue; }                    // '총계' 줄 등
+    const hs = String(xmlVal(it, 'hsCd') || xmlVal(it, 'hsSgn') || '').replace(/\D/g, '');
+    if (hs) hsSeen = true;
+    if (hs && !hs.startsWith('0203')) { skipped++; continue; }
+    const kg = parseFloat(String(xmlVal(it, 'impWgt') || '').replace(/,/g, '')), usd = parseFloat(String(xmlVal(it, 'impDlr') || '').replace(/,/g, ''));
+    if (!isFinite(kg) || !isFinite(usd)) { skipped++; continue; }
+    const e = months[ym] = months[ym] || { frozenKg: 0, frozenUsd: 0, allKg: 0, allUsd: 0 };
+    e.allKg += kg; e.allUsd += usd;
+    if (hs.startsWith('02032')) { e.frozenKg += kg; e.frozenUsd += usd; }
+  }
+  if (items.length && !Object.keys(months).length) throw new Error('응답 ' + items.length + '건에서 월·수입중량·수입금액을 읽지 못함 (필드: ' + Array.from(tags).slice(0, 20).join(',') + ')');
+  return { months, items: items.length, skipped, hsSeen, fields: Array.from(tags) };
+}
+function ymShift(ym, n) { let y = +ym.slice(0, 4), m = +ym.slice(4) + n; while (m < 1) { m += 12; y--; } while (m > 12) { m -= 12; y++; } return y + String(m).padStart(2, '0'); }
+async function fetchCustomsPork() {
+  const key = process.env.CUSTOMS_API_KEY;
+  if (!key) throw new Error('관세청 API 키(CUSTOMS_API_KEY)가 Render 환경변수에 없습니다');
+  const c = aCache.get('customs_pork');
+  if (c && Date.now() - c.ts < 12 * 3600000) return c.data;
+  const ce = aCache.get('customs_pork_err');
+  if (ce && Date.now() - ce.ts < 15 * 60000) throw new Error(ce.msg);
+  // 기준: 지난달까지 24개월 (최근 12개월 + 그 전 12개월). 조회 기간은 1년 이내라 두 번 나눠 묻는다.
+  const now = new Date(Date.now() + 9 * 3600000);
+  const lastYm = ymShift(now.getUTCFullYear() + String(now.getUTCMonth() + 1).padStart(2, '0'), -1);
+  const windows = [[ymShift(lastYm, -11), lastYm], [ymShift(lastYm, -23), ymShift(lastYm, -12)]];
+  const errors = [], byCountry = {};
+  let hsSeen = false;
+  const mask = m => String(m).split(key).join('***').split(encodeURIComponent(key)).join('***');
+  const one = async (cc, [a, b]) => {
+    const url = CUSTOMS_URL + '?serviceKey=' + encodeURIComponent(key) + '&strtYymm=' + a + '&endYymm=' + b + '&hsSgn=0203&cntyCd=' + cc;
+    const r = await fetch(url, { headers: { 'Accept': 'application/xml' }, signal: AbortSignal.timeout(15000) });
+    const t = await r.text();
+    if (!r.ok) throw new Error('HTTP ' + r.status + (t ? ' "' + t.replace(/\s+/g, ' ').slice(0, 100) + '"' : ''));
+    return parseCustomsXml(t);
+  };
+  for (const [cc, name] of CUSTOMS_COUNTRIES) {          // 한 나라씩 (공공데이터포털 동시 호출 제한 회피)
+    try {
+      const parts = await Promise.all(windows.map(w => one(cc, w)));
+      const months = Object.assign({}, parts[1].months, parts[0].months);
+      if (parts.some(p => p.hsSeen)) hsSeen = true;
+      byCountry[cc] = { name, months };
+    } catch (e) { errors.push(name + ': ' + mask(e.message)); }
+  }
+  if (!Object.keys(byCountry).length) {
+    const msg = '관세청 수입 통계를 받지 못했습니다 (' + errors.slice(0, 3).join(' / ') + (errors.length > 3 ? ' 외 ' + (errors.length - 3) + '개국' : '') + ')';
+    aCache.set('customs_pork_err', { msg, ts: Date.now() });
+    throw new Error(msg);
+  }
+  // 집계: 냉동(0203.2x)이 구분되면 냉동만, 아니면 HS 0203 전체(냉장 포함)로 표시
+  const useFrozen = hsSeen;
+  const kgOf = m => useFrozen ? m.frozenKg : m.allKg, usdOf = m => useFrozen ? m.frozenUsd : m.allUsd;
+  const sumRange = (months, a, b) => Object.entries(months).filter(([ym]) => ym >= a && ym <= b).reduce((o, [, m]) => ({ kg: o.kg + kgOf(m), usd: o.usd + usdOf(m) }), { kg: 0, usd: 0 });
+  let latest = null;
+  for (const v of Object.values(byCountry)) for (const [ym, m] of Object.entries(v.months)) if (kgOf(m) > 0 && (!latest || ym > latest)) latest = ym;
+  const rows = Object.entries(byCountry).map(([cc, v]) => {
+    const cur12 = sumRange(v.months, windows[0][0], windows[0][1]), prev12 = sumRange(v.months, windows[1][0], windows[1][1]);
+    const lm = latest && v.months[latest];
+    const series = Object.keys(v.months).sort().filter(ym => ym >= windows[0][0]).map(ym => ({ ym, t: +(kgOf(v.months[ym]) / 1000).toFixed(1), usdKg: kgOf(v.months[ym]) > 0 ? +(usdOf(v.months[ym]) / kgOf(v.months[ym])).toFixed(3) : null }));
+    return { code: cc, name: v.name,
+      lastT: lm ? +(kgOf(lm) / 1000).toFixed(1) : 0, lastUsdKg: lm && kgOf(lm) > 0 ? +(usdOf(lm) / kgOf(lm)).toFixed(3) : null,
+      t12: +(cur12.kg / 1000).toFixed(1), usdKg12: cur12.kg > 0 ? +(cur12.usd / cur12.kg).toFixed(3) : null,
+      yoy12: prev12.kg > 0 ? +((cur12.kg / prev12.kg - 1) * 100).toFixed(1) : null, series };
+  }).sort((a, b) => b.t12 - a.t12);
+  const tot12 = rows.reduce((a, r) => a + r.t12, 0);
+  rows.forEach(r => { r.share12 = tot12 > 0 ? +(r.t12 / tot12 * 100).toFixed(1) : null; });
+  const data = { rows, latest, period: { cur: windows[0], prev: windows[1] }, scope: useFrozen ? '냉동 (HS 0203.21·22·29)' : 'HS 0203 전체 (냉장·냉동 구분 안 됨)',
+    countries: CUSTOMS_COUNTRIES.length, errors, fetchedAt: kstNow(), source: '관세청 품목별 수출입실적(GW) · 공공데이터포털',
+    note: '수입 금액은 과세가격(CIF) 미화 기준 · 점유율은 위 ' + rows.length + '개국 합계 대비 (전체 수입 대비 아님)' };
+  aCache.set('customs_pork', { data, ts: Date.now() });
+  console.log(`✅ 관세청 수입 통계: ${rows.length}개국, 최근 ${latest}, ${data.scope}${errors.length ? ' (실패 ' + errors.length + '개국)' : ''}`);
+  return data;
+}
+function customsText(d) {
+  if (!d || !d.rows) return null;
+  return d.scope + ', 최근월 ' + d.latest + ' · 최근 12개월(' + d.period.cur.join('~') + '): ' + d.rows.map(r => `${r.name} ${r.t12.toLocaleString('en-US')}톤(점유 ${r.share12}%, 단가 ${r.usdKg12 ?? '-'}$/kg, 전년비 ${r.yoy12 == null ? '-' : (r.yoy12 >= 0 ? '+' : '') + r.yoy12 + '%'})`).join(', ') + ' — ' + d.note;
+}
+app.get('/api/customs-pork', async (_, res) => {
+  try { res.json({ ok: true, data: await fetchCustomsPork() }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 app.get('/api/risk-news', async (_, res) => {
   try { res.json({ ok: true, data: await fetchRiskNews() }); }
   catch (e) { res.json({ ok: false, error: e.message }); }
@@ -1758,7 +1862,7 @@ app.get('/api/risk-news', async (_, res) => {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.8' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.9' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -1915,6 +2019,7 @@ app.get('/api/analysis/market', async (_, res) => {
     const cur = await getCurrentPrices();
     const extra = {};
     try { extra.risk = await fetchRiskNews(); } catch (e) { extra.riskError = e.message; }
+    try { extra.customs = await fetchCustomsPork(); } catch (e) { extra.customsError = e.message; }
     const eu = aCache.get('eu_pig'); if (eu && eu.data) extra.eu = eu.data;
     return buildMarketPrompt(cur, extra);
   }, res);
@@ -2406,7 +2511,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.8', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.9', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2623,7 +2728,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2631,7 +2736,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.5.8 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.5.9 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
