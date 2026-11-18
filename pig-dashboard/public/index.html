@@ -28,6 +28,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .live{background:#16a34a;color:#fff;font-size:.63rem;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:8px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .asof{font-size:.76rem;color:#94a3b8}
+.lc-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.lc-g label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:#94a3b8}
+.lc-g input,.lc-g select{background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:8px 9px;font-size:.92rem;width:100%;min-width:0}
+.lc-g input:focus,.lc-g select:focus{outline:none;border-color:#3b82f6}
+.lc-sec{font-size:.8rem;font-weight:700;color:#93c5fd;margin:14px 0 8px}
+.lc-out{background:#0f172a;border-radius:10px;padding:14px 16px;margin-top:14px}
+.lc-out table{width:100%;border-collapse:collapse;font-size:.92rem}
+.lc-out td{padding:6px 4px;border-bottom:1px solid #1e293b;color:#e2e8f0}
+.lc-out td:last-child{text-align:right;font-weight:700;white-space:nowrap}
+.lc-out tr.lc-tot td{font-size:1.1rem;color:#fff;border-top:2px solid #334155}
+.lc-cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.lc-cmp>div{background:#111c33;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;font-size:.85rem;color:#cbd5e1;line-height:1.6}
+.lc-cmp b{font-size:1.05rem}
 .fsz{display:inline-flex;gap:4px;align-items:center}
 .fsz button{background:#0f172a;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:4px 10px;font-size:.82rem;font-weight:700;cursor:pointer;min-width:38px}
 .fsz button:hover{background:#334155}.fsz button:disabled{opacity:.4;cursor:default}
@@ -239,6 +252,39 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
     <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 부위별 가격</span><span class="tag tz" id="tag-cuts-timing">확인 중</span></div><div id="cuts-timing"><div class="lding"><span class="spin">⏳</span></div></div></div>
   </div>
 
+  <!-- 도착 원가 계산기 -->
+  <div class="card" style="margin-bottom:14px" id="lc-card">
+    <div class="ch"><span class="ct">도착 원가 계산기 (원/kg)</span><span class="tag tz" id="lc-tag">입력 대기</span></div>
+    <div class="lc-sec">① 오퍼</div>
+    <div class="lc-g">
+      <label>품목<select id="lc-item"><option value="삼겹살">삼겹살</option><option value="앞다리">앞다리</option><option value="목심">목심</option><option value="갈비">갈비</option><option value="기타">기타</option></select></label>
+      <label>원산지 (메모)<input id="lc-origin" placeholder="예: 스페인"></label>
+      <label>오퍼가<input id="lc-offer" type="number" step="0.01" min="0" inputmode="decimal" placeholder="예: 3.15"></label>
+      <label>통화<select id="lc-cur"><option value="USD">USD</option><option value="EUR">EUR</option></select></label>
+      <label>단위<select id="lc-unit"><option value="kg">/kg</option><option value="ton">/톤</option></select></label>
+      <label>가격 조건<select id="lc-term"><option value="CIF">CIF (운임·보험 포함)</option><option value="CFR">CFR (운임 포함, 보험 별도)</option><option value="FOB">FOB (운임·보험 별도)</option></select></label>
+      <label id="lc-freight-l">해상운임 (외화/kg)<input id="lc-freight" type="number" step="0.001" min="0" inputmode="decimal" placeholder="FOB일 때"></label>
+      <label id="lc-ins-l">보험료율 (%)<input id="lc-ins" type="number" step="0.01" min="0" inputmode="decimal" placeholder="예: 0.2"></label>
+    </div>
+    <div class="lc-sec">② 환율 · 관세</div>
+    <div class="lc-g">
+      <label>환율 (원/외화)<input id="lc-fx" type="number" step="0.01" min="0" inputmode="decimal"></label>
+      <label>&nbsp;<button type="button" class="mbtn" id="lc-fx-btn" style="padding:9px;margin-top:0;color:#cbd5e1;font-size:.84rem">현재 매매기준율 넣기</button></label>
+      <label>관세율 (%)<input id="lc-tariff" type="number" step="0.1" min="0" max="100" inputmode="decimal" placeholder="통관 서류·FTA 포털 확인"></label>
+    </div>
+    <div class="fn" id="lc-fx-src" style="margin-top:6px"></div>
+    <div class="lc-sec">③ 부대비용 (원/kg)</div>
+    <div class="lc-g">
+      <label>통관·검역<input id="lc-c1" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
+      <label>내륙 운송<input id="lc-c2" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
+      <label>냉동 창고<input id="lc-c3" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
+      <label>기타 (금융·수수료)<input id="lc-c4" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
+      <label>우리 판매가 (선택)<input id="lc-sell" type="number" step="1" min="0" inputmode="numeric" placeholder="원/kg"></label>
+    </div>
+    <div id="lc-out"></div>
+    <p class="fn" style="margin-top:10px">※ 관세율은 원산지·FTA 연차·부위(HS 코드)마다 다르고 해마다 바뀌어 미리 넣지 않았습니다 — 통관 서류나 <a href="https://www.customs.go.kr" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">관세청</a>·<a href="https://www.yesfta.go.kr" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">FTA 포털</a>에서 확인해 넣으세요. 실제 관세는 관세청 고시 과세환율(주 단위)로 계산돼 약간 다를 수 있습니다. 부가가치세(10%)는 매입세액 공제 대상이라 원가에 넣지 않았습니다. 입력값은 이 브라우저에만 저장됩니다.</p>
+  </div>
+
   <!-- EU 공식 지육가 -->
   <div class="card" style="margin-bottom:14px">
     <div class="ch">
@@ -366,6 +412,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
     <span class="bdg">엑셀 끌어놓기</span>
   </div>
 
+  <div class="itnote" id="it-paste" style="margin:0 0 12px;font-size:.82rem">
+    <b>화면 캡처 바로 올리기</b> — 캡처(윈도우 <b>Win+Shift+S</b> · 맥 <b>⌘+Ctrl+Shift+4</b>) 후 이 화면에서 <b>Ctrl+V</b>(맥 ⌘+V)를 누르세요.
+    붙여넣을 곳:
+    <label style="margin-left:6px;cursor:pointer"><input type="radio" name="itpt" value="meeting" checked> ① 주간회의</label>
+    <label style="margin-left:8px;cursor:pointer"><input type="radio" name="itpt" value="perf"> ② 수입 실적(참고용)</label>
+  </div>
   <div class="g2" id="it-drops">
     <div class="card">
       <div class="ch"><span class="ct">① 주간회의 엑셀·사진</span><span class="tag tz" id="it-m-stat">미등록</span></div>
@@ -1075,8 +1127,98 @@ function renderCuts(id, json) {
 }
 async function loadCuts(id) { renderCuts(id, await fetchCuts()); }
 
+// ── 도착 원가 계산기 ────────────────────────────────────
+// 계산식: 1kg 외화가 → (FOB면 운임 더함) → (CIF가 아니면 보험료 더함) = CIF 외화 → ×환율 = CIF 원화
+//          관세 = CIF 원화 × 관세율 → 도착 원가 = CIF 원화 + 관세 + 부대비용 (부가세 제외)
+function landedCalc(i) {
+  const n = v => (v === '' || v == null || !isFinite(+v)) ? null : +v;
+  const offer = n(i.offer), fx = n(i.fx), tariff = n(i.tariff);
+  const need = [];
+  if (!(offer > 0)) need.push('오퍼가');
+  if (!(fx > 0)) need.push('환율');
+  if (tariff == null || tariff < 0 || tariff > 100) need.push('관세율(0~100%)');
+  const freight = n(i.freight) || 0, insPct = n(i.ins) || 0;
+  if (i.term === 'FOB' && !(n(i.freight) >= 0 && i.freight !== '' && i.freight != null)) need.push('해상운임');
+  if (need.length) return { ok: false, need };
+  const perKg = i.unit === 'ton' ? offer / 1000 : offer;
+  const base = perKg + (i.term === 'FOB' ? freight : 0);
+  const insFx = i.term === 'CIF' ? 0 : base * insPct / 100;
+  const cifFx = base + insFx;
+  const cifKrw = cifFx * fx;
+  const duty = cifKrw * tariff / 100;
+  const costs = ['c1', 'c2', 'c3', 'c4'].reduce((a, k) => a + Math.max(0, n(i[k]) || 0), 0);
+  const landed = cifKrw + duty + costs;
+  return { ok: true, perKg, freight: i.term === 'FOB' ? freight : 0, insFx, cifFx, cifKrw, duty, costs, landed };
+}
+const LC_KEYS = ['item', 'origin', 'offer', 'cur', 'unit', 'term', 'freight', 'ins', 'fx', 'tariff', 'c1', 'c2', 'c3', 'c4', 'sell'];
+function lcRead() { const o = {}; LC_KEYS.forEach(k => { const el = document.getElementById('lc-' + k); if (el) o[k] = el.value; }); return o; }
+let lcFxSrc = '';
+async function lcFillFx(force) {
+  const el = document.getElementById('lc-fx'), cur = document.getElementById('lc-cur').value;
+  if (!force && el.value) return;
+  const d = await ensureCurrent().catch(() => ({}));
+  const q = d && d[cur + 'KRW'];
+  const v = q && (q.std || q.price);
+  const src = document.getElementById('lc-fx-src');
+  if (v) { el.value = (+v).toFixed(2); lcFxSrc = cur + '/KRW ' + (q.std ? '매매기준율' : (q.basisLabel || '')) + ' · ' + (q.date || '') + ' · 네이버'; }
+  else lcFxSrc = cur + '/KRW 현재 환율을 받지 못했습니다 — 직접 입력하세요';
+  if (src) src.textContent = '환율 출처: ' + lcFxSrc;
+  lcRender();
+}
+function lcRender() {
+  const i = lcRead();
+  try { localStorage.setItem('suan_landed_v1', JSON.stringify(i)); } catch (e) {}
+  const fob = i.term === 'FOB', cif = i.term === 'CIF';
+  document.getElementById('lc-freight-l').style.display = fob ? '' : 'none';
+  document.getElementById('lc-ins-l').style.display = cif ? 'none' : '';
+  const out = document.getElementById('lc-out'), tag = document.getElementById('lc-tag');
+  const r = landedCalc(i);
+  if (!r.ok) { tag.className = 'tag tz'; tag.textContent = '입력 대기'; out.innerHTML = '<div class="lc-out" style="color:#94a3b8;font-size:.88rem">입력이 필요합니다: ' + r.need.map(fxEsc).join(', ') + '</div>'; return; }
+  const w = v => Math.round(v).toLocaleString('ko-KR') + '원';
+  const f = v => v.toFixed(3) + ' ' + fxEsc(i.cur);
+  let h = '<div class="lc-out"><table>';
+  h += '<tr><td>오퍼가 (1kg)</td><td>' + f(r.perKg) + '</td></tr>';
+  if (r.freight) h += '<tr><td>+ 해상운임</td><td>' + f(r.freight) + '</td></tr>';
+  if (r.insFx) h += '<tr><td>+ 보험료 (' + fxEsc(i.ins || 0) + '%)</td><td>' + f(r.insFx) + '</td></tr>';
+  h += '<tr><td>= CIF (외화)</td><td>' + f(r.cifFx) + '</td></tr>';
+  h += '<tr><td>CIF 원화 (× ' + (+i.fx).toLocaleString('ko-KR') + ')</td><td>' + w(r.cifKrw) + '</td></tr>';
+  h += '<tr><td>+ 관세 (' + fxEsc(i.tariff) + '%)</td><td>' + w(r.duty) + '</td></tr>';
+  h += '<tr><td>+ 부대비용</td><td>' + w(r.costs) + '</td></tr>';
+  h += '<tr class="lc-tot"><td>도착 원가 (부가세 제외)</td><td>' + w(r.landed) + '/kg</td></tr></table>';
+  const cmp = [];
+  const kamis = cutsCache && cutsCache.json && cutsCache.json.ok ? cutsCache.json.data : null;
+  const pick = (grp, nm) => kamis && (kamis.items || []).find(x => x.group.indexOf(grp) === 0 && x.name === nm);
+  const box = (title, ref, note) => {
+    const m = ref - r.landed, p = m / ref * 100;
+    return '<div>' + title + '<br><b>' + Math.round(ref).toLocaleString('ko-KR') + '원/kg</b><br>차이 <b class="' + (m >= 0 ? 'cu' : 'cd') + '">' + (m >= 0 ? '+' : '') + Math.round(m).toLocaleString('ko-KR') + '원 (' + (p >= 0 ? '+' : '') + p.toFixed(1) + '%)</b>' + (note ? '<br><span class="fn">' + note + '</span>' : '') + '</div>';
+  };
+  const sell = +i.sell;
+  if (sell > 0) cmp.push(box('우리 판매가', sell, '판매가 − 도착 원가'));
+  const imp = pick('수입', i.item);
+  if (imp) cmp.push(box('KAMIS 수입 ' + fxEsc(i.item), imp.price, 'KAMIS · ' + fxEsc(kamis.date) + ' · 시장 가격 참고'));
+  const dom = pick('국내', i.item);
+  if (dom) cmp.push(box('KAMIS 국내산 ' + fxEsc(i.item), dom.price, 'KAMIS · ' + fxEsc(kamis.date) + ' · 국산과의 가격 차이'));
+  if (!kamis) cmp.push('<div>KAMIS 부위별 가격을 받지 못해 시장 가격과 비교하지 않았습니다.</div>');
+  else if (!imp && !dom) cmp.push('<div>' + fxEsc(i.item) + '은(는) KAMIS 비교 항목이 없습니다.</div>');
+  h += '<div class="lc-cmp">' + cmp.join('') + '</div></div>';
+  out.innerHTML = h;
+  tag.className = 'tag tg'; tag.textContent = Math.round(r.landed).toLocaleString('ko-KR') + '원/kg';
+}
+function lcInit() {
+  const card = document.getElementById('lc-card'); if (!card || card.dataset.ready) return;
+  card.dataset.ready = '1';
+  try { const sv = JSON.parse(localStorage.getItem('suan_landed_v1') || 'null'); if (sv) LC_KEYS.forEach(k => { const el = document.getElementById('lc-' + k); if (el && sv[k] != null) el.value = sv[k]; }); } catch (e) {}
+  card.addEventListener('input', lcRender);
+  card.addEventListener('change', e => { if (e.target && e.target.id === 'lc-cur') { document.getElementById('lc-fx').value = ''; lcFillFx(true); } else lcRender(); });
+  document.getElementById('lc-fx-btn').addEventListener('click', () => lcFillFx(true));
+  lcRender();
+  lcFillFx(false);
+  fetchCuts().then(() => lcRender()).catch(() => {});
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   loaded.add('timing');
+  try { lcInit(); } catch (e) { console.warn('계산기 초기화 실패', e); }
   loadTiming().catch(e => {
     console.error('loadTiming failed:', e);
     const el = document.getElementById('timing-main');
@@ -1534,18 +1676,18 @@ function itSheetToText(aoa, maxLines) {
 }
 
 const IT_MEETING_FILE_CAP = 10000;
-const IT_MEETING_TOTAL_CAP = 18000;
+const IT_MEETING_TOTAL_CAP = 40000;   // 사진 여러 장(장당 1~2천 자)도 담기도록 (서버 한도 42,000자)
 // AI 에 보낼 회의 텍스트: 체크된 파일만, 길이 제한을 넘으면 오래된 파일부터 제외
 function itMeetingForAI(files) {
   const inc = files.filter(f => f.include && f.text);
   let total = 0;
-  const used = [], dropped = [];
+  const used = [], dropped = [], usedFiles = [], droppedFiles = [];
   for (let i = inc.length - 1; i >= 0; i--) {
     const block = '### 파일: ' + inc[i].name + '\n' + inc[i].text;
-    if (total + block.length > IT_MEETING_TOTAL_CAP && used.length) { dropped.push(inc[i].name); continue; }
-    used.unshift(block); total += block.length;
+    if (total + block.length > IT_MEETING_TOTAL_CAP && used.length) { dropped.push(inc[i].name); droppedFiles.unshift(inc[i]); continue; }
+    used.unshift(block); usedFiles.unshift(inc[i]); total += block.length;
   }
-  return { text: used.join('\n\n'), used: used.length, dropped: dropped };
+  return { text: used.join('\n\n'), used: used.length, dropped: dropped, usedFiles: usedFiles, droppedFiles: droppedFiles };
 }
 
 // 단위·통화를 잘못 골랐을 때 눈에 띄게 경고 (냉동 돼지고기 수입단가는 대략 1~6 USD/kg 수준)
@@ -2032,7 +2174,7 @@ function itAddImage(j, file, kind) {
   const perf = kind === 'perf';
   const text = (perf ? '[우리 회사 수입 실적 사진에서 AI가 읽은 글자 — 참고용(수량·단가 계산에는 쓰지 않음), 오독 가능, 확인 필요]\n' : '[사진에서 AI가 읽은 글자 — 오독 가능, 확인 필요]\n') + body;
   const cut = text.length > IT_MEETING_FILE_CAP;
-  IT.meeting.push({ id: IT.seq++, name: file.name, text: cut ? text.slice(0, IT_MEETING_FILE_CAP) + '\n…(이하 생략)' : text, chars: text.length, truncated: cut || !!j.truncated, include: true, hidden: 0, kind: 'image', src: perf ? 'perf' : 'meeting', note: (perf ? '수입 실적 사진 · 참고용(계산 제외) · AI가 글자를 읽음 · 틀릴 수 있으니 확인하세요 · ' : '사진에서 AI가 글자를 읽음 · 틀릴 수 있으니 확인하세요 · ') + text.length.toLocaleString('ko-KR') + '자' + (cut || j.truncated ? ' · 앞부분만' : '') });
+  IT.meeting.push({ id: IT.seq++, name: file.name, text: cut ? text.slice(0, IT_MEETING_FILE_CAP) + '\n…(이하 생략)' : text, chars: text.length, truncated: cut || !!j.truncated, include: true, hidden: 0, kind: 'image', sig: file.name + '|' + file.size, src: perf ? 'perf' : 'meeting', note: (perf ? '수입 실적 사진 · 참고용(계산 제외) · AI가 글자를 읽음 · 틀릴 수 있으니 확인하세요 · ' : '사진에서 AI가 글자를 읽음 · 틀릴 수 있으니 확인하세요 · ') + text.length.toLocaleString('ko-KR') + '자' + (cut || j.truncated ? ' · 앞부분만' : '') });
 }
 
 async function itHandleFiles(kind, fileList) {
@@ -2048,6 +2190,15 @@ async function itHandleFiles(kind, fileList) {
     itSetMsg(kind, '⏳ 엑셀을 읽는 중입니다…', 'info');
     try { XLSX = await itLoadXlsx(); } catch (e) { itSetMsg(kind, e.message, 'bad'); if (!imgs.length) return; good.length = 0; }
   }
+  const dups = [], seen = new Set();
+  const sigOf = f => f.name + '|' + f.size;
+  for (let i = imgs.length - 1; i >= 0; i--) {
+    const f = imgs[i];
+    const d = IT.meeting.find(m => m.kind === 'image' && (m.sig ? m.sig === sigOf(f) : m.name === f.name));
+    if (d || seen.has(sigOf(f))) { dups.unshift(f.name + (d ? ' (이미 ' + (d.src === 'perf' ? '② 수입 실적' : '① 주간회의') + '에 있음)' : ' (같이 올린 파일 중복)')); imgs.splice(i, 1); }
+    else seen.add(sigOf(f));
+  }
+  if (dups.length && !imgs.length && !good.length) { itSetMsg(kind, '이미 올린 사진이라 건너뛰었습니다 (AI를 다시 부르지 않음): ' + dups.join(', '), 'warn'); return; }
   const errs = [], infos = [];
   const before = { m: IT.meeting.length, t: IT.tables.length };
   for (let i = 0; i < imgs.length; i++) {
@@ -2064,6 +2215,7 @@ async function itHandleFiles(kind, fileList) {
   const added = (IT.meeting.length - before.m) + (kind === 'meeting' ? 0 : IT.tables.length - before.t);
   const notes = [];
   if (bad.length) notes.push('엑셀·사진이 아닌 파일은 제외했습니다: ' + bad.map(f => f.name).join(', '));
+  if (dups.length) notes.push('이미 올린 사진이라 건너뛰었습니다: ' + dups.join(', '));
   if (kind === 'perf' && imgs.length && !errs.length) notes.push('수입 실적 사진은 AI 근거 자료(참고용)로만 쓰이며 합계·평균 같은 계산에는 들어가지 않습니다.');
   if (imgs.length && imgs.length - errs.filter(x => imgs.some(f => x.indexOf(f.name + ':') === 0)).length > 0) notes.push('사진은 AI가 글자를 읽은 것이라 틀릴 수 있습니다. 아래 미리보기에서 숫자와 품목명을 꼭 확인하세요.');
   if (errs.length) notes.push(errs.join(' / '));
@@ -2073,6 +2225,31 @@ async function itHandleFiles(kind, fileList) {
   if (kind === 'perf' && added && IT.fxState === 'err') { IT.fxState = 'idle'; IT.fxFrom = null; }   // 새로 올리면 환율을 한 번 다시 시도
   itAfterChange();
 }
+// ── 화면 캡처 붙여넣기 (Ctrl+V) → 사진으로 올리기 ──
+function itClipImages(cd) {
+  if (!cd) return [];
+  const out = [];
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  const stamp = d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  const add = (blob, type) => {
+    const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
+    out.push(new File([blob], '캡처_' + stamp + (out.length ? '_' + (out.length + 1) : '') + '.' + ext, { type: type }));
+  };
+  Array.from(cd.items || []).forEach(it => { if (it.kind === 'file' && /^image\/(png|jpeg|webp)$/.test(it.type)) { const b = it.getAsFile(); if (b) add(b, it.type); } });
+  if (!out.length) Array.from(cd.files || []).forEach(f => { if (/^image\/(png|jpeg|webp)$/.test(f.type)) add(f, f.type); });
+  return out;
+}
+function itOnPaste(e) {
+  if (!itActive()) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !/^(radio|checkbox|file|button)$/.test(t.type)))) return;   // 글 입력 칸에서는 평소대로
+  const files = itClipImages(e.clipboardData);
+  if (!files.length) return;
+  e.preventDefault();
+  const r = document.querySelector('input[name=itpt]:checked');
+  itHandleFiles(r && r.value === 'perf' ? 'perf' : 'meeting', files);
+}
+
 function itSetupDrop(zoneId, kind) {
   const z = itEl(zoneId), input = z.querySelector('input[type=file]');
   ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
@@ -2347,9 +2524,13 @@ function itRenderAi() {
   btn.textContent = IT.aiBusy ? '⏳ AI가 분석 중입니다 (보통 30~90초)…' : (IT.ai ? 'AI 품목 판단 다시 실행' : 'AI 품목 판단 실행');
   const parts = [];
   if (nGroups) parts.push('품목 ' + nGroups + '개 집계표(품목명·수량·단가·환율)');
-  if (pk.meeting.used) parts.push('주간회의 파일 ' + pk.meeting.used + '개(' + pk.meeting.text.length.toLocaleString('ko-KR') + '자)');
+  const uf = pk.meeting.usedFiles || [];
+  const uM = uf.filter(f => f.src !== 'perf').length, uP = uf.filter(f => f.src === 'perf').length;
+  if (uM) parts.push('주간회의 자료 ' + uM + '개');
+  if (uP) parts.push('수입 실적 사진 ' + uP + '장(참고용)');
+  if (pk.meeting.used) parts.push('글자 합계 ' + pk.meeting.text.length.toLocaleString('ko-KR') + '자');
   note.innerHTML =
-    '<div class="itnote">' + (can ? '<b>AI에 전달되는 내용:</b> ' + parts.map(itEsc).join(' + ') + (pk.meeting.dropped.length ? ' <span style="color:#fbbf24">※ 길이 제한으로 오래된 회의 파일 ' + pk.meeting.dropped.length + '개는 제외됨</span>' : '') :
+    '<div class="itnote">' + (can ? '<b>AI에 전달되는 내용:</b> ' + parts.map(itEsc).join(' + ') + ((pk.meeting.droppedFiles || []).length ? '<br><span style="color:#fbbf24">※ 글자 길이 제한(약 4만 자)으로 AI에 보내지 못한 파일 ' + pk.meeting.droppedFiles.length + '개: ' + pk.meeting.droppedFiles.map(f => itEsc(f.name) + '(' + (f.src === 'perf' ? '수입 실적' : '주간회의') + ')').join(', ') + ' — 필요 없는 파일의 체크를 해제하면 들어갑니다</span>' : '') :
       '엑셀(수입 실적 또는 주간회의)을 올리면 실행할 수 있습니다.') +
     '<br>전송은 서버를 거쳐 Google Gemini 로 이뤄집니다. <b>회사 수입 실적과 회의 내용이 외부로 나갑니다.</b> 무료(결제 미연결) Gemini 키는 구글 약관상 입력 내용이 서비스 개선에 쓰이고 사람이 검토할 수 있어 <b>민감한 자료에는 유료 키를 권장</b>합니다 (<a href="https://ai.google.dev/gemini/terms" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">구글 약관</a>). 보내고 싶지 않은 회의 파일은 위 목록의 체크를 해제하세요. 서버는 자료를 파일·DB에 저장하지 않습니다 (같은 자료로 다시 실행할 때를 위해 AI 결과만 메모리에 6시간 보관).</div>';
   if (IT.ai && IT.ai.sig && can && IT.ai.sig !== itSig(pk.payload)) {
@@ -2503,6 +2684,7 @@ function initItems() {
   const isFileDrag = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;
   window.addEventListener('dragover', e => { if (itActive() && isFileDrag(e)) e.preventDefault(); });
   window.addEventListener('drop', e => { if (itActive() && isFileDrag(e)) e.preventDefault(); });
+  window.addEventListener('paste', itOnPaste);
   itRecompute();
   if (!IT.fx && IT.fxState === 'idle') itEnsureFx((new Date().getFullYear() - 1) + '-01');   // 파일을 올리기 전에 미리 환율 월평균을 받아 둔다
   itRenderAll();
