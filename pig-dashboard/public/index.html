@@ -139,6 +139,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .cbc{width:55px;font-size:.68rem;text-align:right;flex-shrink:0;font-weight:600}
 /* 이슈 */
 .iss{padding:9px 0;border-bottom:1px solid #1e293b}
+.cxw{overflow-x:auto}
+.cxw table{width:100%;border-collapse:collapse;font-size:.84rem}
+.cxw th{color:#94a3b8;font-weight:600;text-align:right;padding:6px 6px;border-bottom:1px solid #334155;white-space:nowrap}
+.cxw th:first-child,.cxw td:first-child{text-align:left}
+.cxw td{padding:7px 6px;border-bottom:1px solid #1e293b;text-align:right;white-space:nowrap;color:#e2e8f0}
+.cxw td .s{display:block;font-size:.72rem;color:#94a3b8}
 .rk-f{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .rk-f button{background:#0f172a;border:1px solid #334155;color:#cbd5e1;border-radius:999px;padding:4px 11px;font-size:.8rem;cursor:pointer}
 .rk-f button.on{background:#1d4ed8;border-color:#3b82f6;color:#fff}
@@ -330,8 +336,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   <div class="g4" id="kpi-market"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
   <div class="g2">
     <div class="card">
-      <div class="ch"><span class="ct">국가별 냉동 돼지고기 수입 통계</span><span class="tag tz">미연결</span></div>
-      <div style="padding:14px 4px;color:#94a3b8;font-size:.86rem;line-height:1.7">관세청 수입 통계를 아직 연결하지 않아 표시하지 않습니다.<br>예전에 이 자리에 보이던 국가별 점유율·단가·전년 대비 수치와 수급 전망은 실시간 자료가 아니라 고정값이어서 내렸습니다.<br><span class="fn">관세청 수출입 통계 API 키를 연결하면 실제 월별·국가별 값으로 채웁니다.</span></div>
+      <div class="ch"><span class="ct">국가별 돼지고기 수입 통계 (관세청)</span><span class="tag tz" id="tag-cx">확인 중</span></div>
+      <div id="cx-wrap"><div class="lding"><span class="spin">⏳</span> 관세청 통계 확인 중...</div></div>
     </div>
     <div class="card">
       <div class="ch"><span class="ct">수출국별 위험 보도 (최근 30일)</span><span class="tag tz" id="tag-risk-cnt">확인 중</span></div>
@@ -845,6 +851,33 @@ async function loadMarket() {
     {k:'LH',i:'🇺🇸',l:'CME Lean Hog'}
   ]);
   loadRisk();
+  loadCustoms(cur);
+}
+
+// ── 관세청 국가별 돼지고기 수입 통계 ──
+async function loadCustoms(cur) {
+  const wrap = document.getElementById('cx-wrap'), tag = document.getElementById('tag-cx');
+  if (!wrap) return;
+  const j = await fetch('/api/customs-pork').then(r => r.json()).catch(() => ({ ok: false, error: '서버에 연결하지 못함' }));
+  if (!j || !j.ok || !j.data) {
+    tag.className = 'tag tz'; tag.textContent = '수집 실패';
+    wrap.innerHTML = '<div style="padding:12px 0"><div style="color:#f87171;font-weight:700;font-size:.86rem">관세청 수입 통계 수집 실패</div><div style="color:#fca5a5;font-size:.8rem;margin-top:4px">' + fxEsc((j && j.error) || '알 수 없는 오류') + '</div><div style="color:#64748b;font-size:.76rem;margin-top:4px">고정값·추정값으로 대신하지 않았습니다</div></div>';
+    return;
+  }
+  const d = j.data;
+  const fx = cur && cur.USDKRW && (cur.USDKRW.std || cur.USDKRW.price);
+  const ymTxt = ym => ym ? ym.slice(0, 4) + '.' + ym.slice(4) : '-';
+  const n1 = v => (v == null ? '-' : Number(v).toLocaleString('ko-KR', { maximumFractionDigits: 1 }));
+  tag.className = 'tag tg'; tag.textContent = '최근 ' + ymTxt(d.latest) + ' · ' + d.rows.length + '개국';
+  let h = '<div class="cxw"><table><thead><tr><th>국가</th><th>최근 12개월</th><th>점유율*</th><th>단가 (CIF)</th><th>전년 대비</th><th>' + fxEsc(ymTxt(d.latest)) + '</th></tr></thead><tbody>';
+  h += d.rows.map(r => '<tr><td>' + fxEsc(r.name) + '</td><td>' + n1(r.t12) + '톤</td><td>' + (r.share12 == null ? '-' : r.share12.toFixed(1) + '%') + '</td>' +
+    '<td>' + (r.usdKg12 == null ? '-' : '$' + r.usdKg12.toFixed(2) + '/kg' + (fx ? '<span class="s">≈ ' + Math.round(r.usdKg12 * fx).toLocaleString('ko-KR') + '원/kg</span>' : '')) + '</td>' +
+    '<td class="' + (r.yoy12 == null ? '' : r.yoy12 >= 0 ? 'cu' : 'cd') + '">' + (r.yoy12 == null ? '-' : (r.yoy12 >= 0 ? '+' : '') + r.yoy12.toFixed(1) + '%') + '</td><td>' + n1(r.lastT) + '톤</td></tr>').join('');
+  h += '</tbody></table></div>';
+  h += '<p class="fn" style="margin-top:8px">' + fxEsc(d.scope) + ' · 최근 12개월 ' + fxEsc(ymTxt(d.period.cur[0])) + '~' + fxEsc(ymTxt(d.period.cur[1])) + ', 전년 대비는 그 전 12개월과 비교 · ' + fxEsc(d.source) + ' · ' + fxEsc(d.fetchedAt || '') + '<br>* ' + fxEsc(d.note) +
+    (fx ? ' · 원화는 현재 USD/KRW ' + Number(fx).toLocaleString('ko-KR') + '원으로 단순 환산(관세·부대비용 제외 — 도착 원가는 수입 타이밍 탭 계산기에서)' : ' · 환율을 받지 못해 원화 환산을 하지 않았습니다') +
+    (d.errors && d.errors.length ? '<br><span style="color:#fbbf24">일부 국가 실패: ' + d.errors.map(fxEsc).join(' / ') + '</span>' : '') + '</p>';
+  wrap.innerHTML = h;
 }
 
 // ── 수출국 위험 알림 (서버 /api/risk-news — Google 뉴스 RSS, 제목·링크만) ──
