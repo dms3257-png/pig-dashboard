@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.5.7
+// server.js - 수안푸드 지육가 대시보드 v3.5.8
+// v3.5.8: 수출국 위험 알림 GET /api/risk-news (Google 뉴스 RSS — 국가×질병·수입금지 키워드, 원문 링크) · 시장 AI 분석은 실제로 받은 자료만 사용(통계 숫자 생성 금지)
 // v3.5.7: 품목 전략 AI 근거 글자 한도 20,000 → 42,000자 (사진 여러 장)
 // v3.5.6: 주간회의 사진(JPG/PNG/WEBP) 글자 읽기 POST /api/items/ocr (Gemini 이미지 입력, 옮겨 적기만 — 추측·보완 금지)
 // v3.5.5: EU API 장애 시 EU 집행위 주간 PDF 보고서(나라별 Class S 표)를 직접 읽어 사용 (좌표로 열을 맞추고, 못 읽으면 이유와 함께 실패)
@@ -1628,23 +1629,136 @@ ${kamisCutsText() ? '국내 부위별 가격: ' + kamisCutsText() + '\n' : ''}
 `;
 }
 
-function buildMarketPrompt(current) {
-  return `한국 냉동 수입 돼지고기 시장 전문 분석 (${kstNow()})
-환율: USD/KRW ${fxTxt(current?.USDKRW)}, EUR/KRW ${fxTxt(current?.EURKRW)}
+function buildMarketPrompt(current, extra) {
+  const ex = extra || {};
+  const risk = ex.risk && ex.risk.items && ex.risk.items.length
+    ? ex.risk.items.slice(0, 20).map(i => `- ${i.date} [${(i.countries || []).map(c => c.name).join('·')} / ${(i.topics || []).join('·')}] ${i.title} (${i.source || '출처 미상'})`).join('\n')
+    : '자료 없음' + (ex.riskError ? ' (' + ex.riskError + ')' : '');
+  const eu = ex.eu && ex.eu.byCountry ? Object.entries(ex.eu.byCountry).map(([c, v]) => `${c} ${v.price}€/100kg(${v.week} 주)`).join(', ') : '자료 없음';
+  return `한국 냉동 수입 돼지고기 시장 분석 (${kstNow()})
 
-분석 (한국어 Markdown, 1000~1300자):
-### 1. 2025~2026 냉동 돼지고기 수입 현황 (총량 및 전년 대비)
-### 2. 국가별 수입 단가 비교 (USD/kg, 원화 환산)
-### 3. 2025 vs 2026 수급 전망
-### 4. 시장 주요 이슈 (ASF·관세·환율·소비트렌드)
-### 5. 수안푸드 전략적 시사점
+【받은 자료 — 이것만 근거로 쓰세요】
+A. 환율: USD/KRW ${fxTxt(current?.USDKRW)}, EUR/KRW ${fxTxt(current?.EURKRW)}
+B. 국내 부위별 가격(KAMIS): ${kamisCutsText() || '자료 없음'}
+C. EU 국가별 지육가(Class S): ${eu}
+D. 수출국 위험 뉴스 제목 (최근 30일, Google 뉴스 검색 — 제목만이며 본문은 확인 안 됨):
+${risk}
+E. 국가별 수입량·수입 단가 통계: 자료 없음 (관세청 통계 미연결)
+
+【규칙】
+1. 숫자는 A~D에 적힌 값만 인용하세요. 수입량·점유율·국가별 단가·전년 대비 증감 같은 통계를 만들어내지 마세요. 자료가 없으면 "자료 없음"이라고 쓰세요.
+2. 뉴스는 제목만 받았으므로 "~라는 보도가 있음"처럼 전하고, 날짜와 출처를 붙이세요. 확인되지 않은 내용을 사실로 단정하지 마세요.
+3. 투자·매매 권유가 아니라 수입 실무 참고용 시나리오로 쓰세요.
+
+분석 (한국어 Markdown, 800~1100자):
+### 1. 수출국 위험 점검 (질병·수입 금지·관세 보도, 국가별)
+### 2. 환율·EU 지육가·국내 가격으로 본 수입 여건
+### 3. 수안푸드가 확인할 점 (공급처 분산·검역 확인 등)
 `;
 }
+
+// ── 수출국 위험 알림: Google 뉴스 RSS 검색 (키 불필요) ─────────────────────
+// 국가 × (아프리카돼지열병·구제역·수입금지·관세) 키워드가 함께 나오는 제목만 모은다. 제목·링크·날짜·언론사만 전달하고, 내용을 지어내거나 요약하지 않는다.
+const RISK_COUNTRIES = [
+  { code: 'ES', name: '스페인', ko: ['스페인'], en: ['Spain', 'Spanish'] },
+  { code: 'US', name: '미국', ko: ['미국'], en: ['United States', 'U.S.', 'USA', 'American'] },
+  { code: 'DE', name: '독일', ko: ['독일'], en: ['Germany', 'German'] },
+  { code: 'NL', name: '네덜란드', ko: ['네덜란드'], en: ['Netherlands', 'Dutch'] },
+  { code: 'DK', name: '덴마크', ko: ['덴마크'], en: ['Denmark', 'Danish'] },
+  { code: 'FR', name: '프랑스', ko: ['프랑스'], en: ['France', 'French'] },
+  { code: 'AT', name: '오스트리아', ko: ['오스트리아'], en: ['Austria'] },
+  { code: 'BE', name: '벨기에', ko: ['벨기에'], en: ['Belgium'] },
+  { code: 'CA', name: '캐나다', ko: ['캐나다'], en: ['Canada', 'Canadian'] },
+  { code: 'CL', name: '칠레', ko: ['칠레'], en: ['Chile', 'Chilean'] },
+  { code: 'MX', name: '멕시코', ko: ['멕시코'], en: ['Mexico', 'Mexican'] },
+  { code: 'BR', name: '브라질', ko: ['브라질'], en: ['Brazil', 'Brazilian'] },
+];
+const RISK_TOPICS = [
+  { key: 'ASF', name: '아프리카돼지열병', re: /아프리카\s*돼지\s*열병|\bASF\b|African swine fever/i },
+  { key: 'FMD', name: '구제역', re: /구제역|foot[- ]and[- ]mouth|\bFMD\b/i },
+  { key: 'BAN', name: '수입 금지·중단', re: /(수입|수출)[^.,·…\n]{0,8}(금지|중단|제한)|\bban(s|ned)?\b|suspend|halt/i },
+  { key: 'TARIFF', name: '관세', re: /관세|tariff/i },
+];
+const RISK_FEEDS = [
+  { lang: 'ko', url: 'https://news.google.com/rss/search?q=' + encodeURIComponent('(아프리카돼지열병 OR 구제역 OR 돼지고기 수입금지 OR 돼지고기 관세) (' + RISK_COUNTRIES.map(c => c.ko[0]).join(' OR ') + ') when:30d') + '&hl=ko&gl=KR&ceid=KR:ko' },
+  { lang: 'en', url: 'https://news.google.com/rss/search?q=' + encodeURIComponent('("African swine fever" OR "foot-and-mouth" OR "pork ban" OR "pork tariff") (' + RISK_COUNTRIES.map(c => c.en[0].includes(' ') ? '"' + c.en[0] + '"' : c.en[0]).join(' OR ') + ') pork when:30d') + '&hl=en-US&gl=US&ceid=US:en' },
+];
+function riskTag(title) {
+  const t = String(title || '');
+  const countries = RISK_COUNTRIES.filter(c => c.ko.some(k => t.includes(k)) || c.en.some(k => new RegExp('(^|[^A-Za-z])' + k.replace(/\./g, '\\.') + '([^A-Za-z]|$)').test(t)));
+  const topics = RISK_TOPICS.filter(x => x.re.test(t));
+  return { countries, topics };
+}
+function rssText(block, tag) {
+  const m = block.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tag + '>', 'i'));
+  if (!m) return '';
+  let v = m[1].trim();
+  const cd = v.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/); if (cd) v = cd[1];
+  return v.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&amp;/g, '&').replace(/<[^>]+>/g, '').trim();
+}
+// RSS 는 모양이 단순해서 정규식으로 읽는다 (라이브러리 버전 차이에 흔들리지 않게)
+function parseRiskRss(xml, lang, nowMs) {
+  const out = [];
+  const re = /<item[\s>][\s\S]*?<\/item>/gi; let m;
+  while ((m = re.exec(String(xml || '')))) {
+    const block = m[0];
+    const rawTitle = rssText(block, 'title'), link = rssText(block, 'link'), src = rssText(block, 'source');
+    const pub = Date.parse(rssText(block, 'pubDate'));
+    if (!rawTitle || !/^https:\/\//.test(link) || !isFinite(pub)) continue;
+    if (nowMs - pub > 31 * 86400000 || pub - nowMs > 86400000) continue;
+    const title = src && rawTitle.endsWith(' - ' + src) ? rawTitle.slice(0, -(src.length + 3)) : rawTitle;
+    const { countries, topics } = riskTag(title);
+    if (!countries.length || !topics.length) continue;     // 수출국 + 위험 주제가 제목에 둘 다 있어야 함
+    const d = new Date(pub + 9 * 3600000);
+    out.push({ title, link, source: src, lang, ts: pub, date: d.toISOString().slice(0, 10),
+      countries: countries.map(c => ({ code: c.code, name: c.name })), topics: topics.map(x => x.name) });
+  }
+  return out;
+}
+async function fetchRiskNews() {
+  const c = aCache.get('risk_news');
+  if (c && Date.now() - c.ts < 3 * 3600000) return c.data;
+  const ce = aCache.get('risk_news_err');
+  if (ce && Date.now() - ce.ts < 10 * 60000) throw new Error(ce.msg);
+  const now = Date.now(), errors = [];
+  const lists = await Promise.all(RISK_FEEDS.map(async f => {
+    try {
+      const r = await fetch(f.url, { headers: { 'User-Agent': 'Mozilla/5.0 (suanfood-dashboard)', 'Accept': 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(12000) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const xml = await r.text();
+      if (!/<rss[\s>]/i.test(xml)) throw new Error('RSS 형식이 아님');
+      return parseRiskRss(xml, f.lang, now);
+    } catch (e) { errors.push((f.lang === 'ko' ? '한국어 뉴스' : '영문 뉴스') + ': ' + e.message); return null; }
+  }));
+  if (lists.every(l => l === null)) {
+    const msg = '뉴스 검색을 받지 못했습니다 (' + errors.join(' / ') + ')';
+    aCache.set('risk_news_err', { msg, ts: Date.now() });
+    throw new Error(msg);
+  }
+  const seen = new Set(), items = [];
+  [].concat(...lists.filter(Boolean)).sort((a, b) => b.ts - a.ts).forEach(i => {
+    const k = i.title.toLowerCase().replace(/[^0-9a-z가-힣]/g, '').slice(0, 60);
+    if (seen.has(k)) return; seen.add(k); items.push(i);
+  });
+  const counts = {};
+  for (const i of items) for (const c of i.countries) {
+    const e = counts[c.code] = counts[c.code] || { name: c.name, n: 0, recent14: 0, topics: {} };
+    e.n++; if (now - i.ts <= 14 * 86400000) e.recent14++;
+    i.topics.forEach(t => { e.topics[t] = (e.topics[t] || 0) + 1; });
+  }
+  const data = { items: items.slice(0, 40), total: items.length, counts, errors, fetchedAt: kstNow(), source: 'Google 뉴스 검색 (RSS)', windowDays: 30 };
+  aCache.set('risk_news', { data, ts: Date.now() });
+  return data;
+}
+app.get('/api/risk-news', async (_, res) => {
+  try { res.json({ ok: true, data: await fetchRiskNews() }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
 
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.7' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.5.8' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -1799,7 +1913,10 @@ app.get('/api/analysis/yearly', async (_, res) => {
 app.get('/api/analysis/market', async (_, res) => {
   await aiEndpoint('ai_mkt', 6*3600000, async () => {
     const cur = await getCurrentPrices();
-    return buildMarketPrompt(cur);
+    const extra = {};
+    try { extra.risk = await fetchRiskNews(); } catch (e) { extra.riskError = e.message; }
+    const eu = aCache.get('eu_pig'); if (eu && eu.data) extra.eu = eu.data;
+    return buildMarketPrompt(cur, extra);
   }, res);
 });
 
@@ -2289,7 +2406,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.7', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.5.8', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2506,7 +2623,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2514,7 +2631,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.5.7 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.5.8 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
