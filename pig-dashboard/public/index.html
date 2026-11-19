@@ -41,6 +41,20 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .lc-cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
 .lc-cmp>div{background:#111c33;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;font-size:.85rem;color:#cbd5e1;line-height:1.6}
 .lc-cmp b{font-size:1.05rem}
+.fxh-f{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.fxh-f select,.fxh-f input{background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:8px 9px;font-size:.9rem;min-width:0}
+.fxh-f input{flex:1;min-width:120px}
+.fxh-f button{background:#2563eb;border:none;color:#fff;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer}
+.fxh-t{width:100%;border-collapse:collapse;font-size:.86rem}
+.fxh-t th{color:#94a3b8;font-weight:600;text-align:right;padding:6px;border-bottom:1px solid #334155;white-space:nowrap}
+.fxh-t td{padding:7px 6px;border-bottom:1px solid #1e293b;text-align:right;color:#e2e8f0;white-space:nowrap}
+.fxh-t th:first-child,.fxh-t td:first-child{text-align:left}
+.fxh-t button{background:transparent;border:none;color:#64748b;cursor:pointer}
+.fxh-t button:hover{color:#f87171}
+.fxn-i{padding:9px 0;border-bottom:1px solid #1e293b}
+.fxn-i a{color:#e2e8f0;text-decoration:none;font-size:.9rem;line-height:1.5;font-weight:600}
+.fxn-i a:hover{color:#93c5fd;text-decoration:underline}
+.fxn-m{font-size:.74rem;color:#94a3b8;margin-top:3px}
 .fsz{display:inline-flex;gap:4px;align-items:center}
 .fsz button{background:#0f172a;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:4px 10px;font-size:.82rem;font-weight:700;cursor:pointer;min-width:38px}
 .fsz button:hover{background:#334155}.fsz button:disabled{opacity:.4;cursor:default}
@@ -266,6 +280,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   <button class="tab-btn" onclick="switchTab('weekly',this)">📊 주간 보고서</button>
   <button class="tab-btn" onclick="switchTab('monthly',this)">📅 월간 보고서</button>
   <button class="tab-btn" onclick="switchTab('yearly',this)">📈 연간 보고서</button>
+  <button class="tab-btn" onclick="switchTab('fx',this)">💱 환율·외환</button>
 </div>
 
 <!-- 수입 타이밍 -->
@@ -436,6 +451,36 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   </div>
 </div>
 
+<!-- ══════════════ 환율·외환 ══════════════ -->
+<div id="page-fx" class="page">
+  <div class="ph"><div><div class="pt">환율·외환</div><div class="ps">실시간 환율(30분봉) · 달러인덱스 · 국채 10년 금리 · 보유 외환 원화 평가 · 시장 뉴스</div></div><span class="bdg">실제 수신값만</span></div>
+  <div class="g3" id="fx-kpi"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span> 시세 확인 중...</div></div>
+  <div class="g3">
+    <div class="card"><div class="ch"><span class="ct">USD/KRW 30분봉</span><span class="tag tb" id="fx-tag-USDKRW">5일</span></div><div class="cw"><canvas id="fx-c-USDKRW"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">EUR/KRW 30분봉</span><span class="tag to" id="fx-tag-EURKRW">5일</span></div><div class="cw"><canvas id="fx-c-EURKRW"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">달러인덱스(DXY) 30분봉</span><span class="tag tg" id="fx-tag-DXY">5일</span></div><div class="cw"><canvas id="fx-c-DXY"></canvas></div></div>
+  </div>
+  <p class="fn" id="fx-src" style="margin:-6px 0 14px">출처: Yahoo Finance 30분봉 · 네이버 증권(매매기준율·국채 금리) — 받지 못한 값은 "수집 실패"로 표시하고 고정값으로 채우지 않습니다.</p>
+  <div class="g2">
+    <div class="card">
+      <div class="ch"><span class="ct">보유 외환 원화 평가</span><span class="tag tz" id="fx-h-tag">입력 대기</span></div>
+      <div class="fxh-f"><select id="fx-h-cur"><option>USD</option><option>EUR</option><option>JPY</option><option>CNY</option><option>GBP</option><option>AUD</option></select><input id="fx-h-amt" type="number" min="0" step="0.01" inputmode="decimal" placeholder="금액 (외화)"><button type="button" id="fx-h-add">추가</button></div>
+      <div id="fx-h-list"></div>
+      <div class="cw" style="height:200px;margin-top:10px" id="fx-h-cw"><canvas id="fx-h-pie"></canvas></div>
+      <p class="fn">네이버 매매기준율로 환산합니다 (엔화는 100엔당 환율). 입력값은 이 브라우저에만 저장됩니다.</p>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">시장 뉴스</span><span class="tag tz" id="fx-n-tag">확인 중</span></div>
+      <div id="fx-news"><div class="lding"><span class="spin">⏳</span></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ch"><span class="ct" style="font-size:.9rem">AI 환율 분석</span><span class="amdl" id="m-fx">—</span></div>
+    <button class="abtn" id="b-fx" onclick="runAI('fx')">환율·달러인덱스·금리·뉴스 종합 AI 분석</button>
+    <div class="abox" id="ai-fx"><p class="aph">실제로 받은 환율·달러인덱스·국채 금리·뉴스 제목만으로 분석합니다. 수입 결제 관점의 체크포인트를 정리합니다.</p></div>
+  </div>
+</div>
+
 <!-- 품목 전략 -->
 <div id="page-items" class="page">
   <div class="ph">
@@ -562,6 +607,7 @@ function switchTab(name, btn) {
   if (!loaded.has(name)) {
     loaded.add(name);
     if (name === 'timing')      loadTiming().catch(e => console.error('timing:', e));
+    else if (name === 'fx')     loadFx().catch(e => console.error('fx:', e));
     else if (name === 'market') loadMarket().catch(e => console.error('market:', e));
     else if (name === 'items')  { try { initItems(); } catch (e) { console.error('items:', e); } }
     else                        loadPeriod(name).catch(e => console.error(name + ':', e));
@@ -1128,6 +1174,101 @@ function renderCuts(id, json) {
   box.innerHTML = h;
 }
 async function loadCuts(id) { renderCuts(id, await fetchCuts()); }
+
+// ══════════════ 환율·외환 탭 ══════════════
+const FXT = { rates: null, hold: [] };
+const fxTJ = u => fetch(u).then(r => r.json()).catch(() => ({ ok: false, error: '서버에 연결하지 못함' }));
+const fxFail = (t, why) => '<div class="kpi" style="border:1px solid #7f1d1d"><div class="kl">' + t + '</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5"><span class="whyclip" title="' + fxEsc(why || '') + '">' + fxEsc(why || '') + '</span>고정값으로 대신하지 않음</div></div>';
+const fxKpi = (t, v, sub, chg) => '<div class="kpi"><div class="kl">' + t + '</div><div class="kv">' + v + '</div><div class="ku">' + sub + '</div>' + (chg || '') + '</div>';
+const fxChg = p => p == null ? '' : '<div class="ku ' + (p > 0 ? 'cu' : p < 0 ? 'cd' : '') + '" style="font-weight:700">전일 대비 ' + (p > 0 ? '+' : '') + p.toFixed(2) + '%</div>';
+async function loadFx() {
+  try { FXT.hold = JSON.parse(localStorage.getItem('suan_fx_hold') || '[]').filter(h => h && h.cur && h.amt > 0); } catch (e) { FXT.hold = []; }
+  const add = document.getElementById('fx-h-add');
+  if (add && !add.dataset.on) {
+    add.dataset.on = '1';
+    add.addEventListener('click', fxHoldAdd);
+    document.getElementById('fx-h-amt').addEventListener('keydown', e => { if (e.key === 'Enter') fxHoldAdd(); });
+    document.getElementById('fx-h-list').addEventListener('click', e => { const b = e.target.closest('[data-hdel]'); if (b) { FXT.hold.splice(+b.dataset.hdel, 1); fxHoldSave(); fxHoldRender(); } });
+  }
+  const [usd, eur, dxy, bonds, rates, news] = await Promise.all(['USDKRW', 'EURKRW', 'DXY'].map(s => fxTJ('/api/fx-intraday?sym=' + s)).concat([fxTJ('/api/fx-bonds'), fxTJ('/api/fx-rates'), fxTJ('/api/fx-news')]));
+  const cur = await ensureCurrent().catch(() => ({}));
+  // KPI
+  const k = [];
+  [['USDKRW', 'USD/KRW', usd], ['EURKRW', 'EUR/KRW', eur]].forEach(([p, t, j]) => {
+    const c = cur && cur[p];
+    if (c && c.price) k.push(fxKpi(t, Number(c.price).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '<span style="font-size:.7rem;color:#64748b"> 원</span>', '네이버 ' + fxEsc(c.basisLabel || '') + (c.date ? ' · ' + fxEsc(c.date) : ''), j.ok ? fxChg(j.data.chgPct) : ''));
+    else if (j.ok) k.push(fxKpi(t, Number(j.data.last).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '<span style="font-size:.7rem;color:#64748b"> 원</span>', 'Yahoo 실시간 (매매기준율 아님)', fxChg(j.data.chgPct)));
+    else k.push(fxFail(t, (c && c.error) || j.error));
+  });
+  k.push(dxy.ok ? fxKpi('달러인덱스 DXY', Number(dxy.data.last).toFixed(2), 'Yahoo · ' + new Date(dxy.data.lastAt * 1000 + 9 * 3600000).toISOString().slice(5, 16).replace('T', ' ') + ' KST', fxChg(dxy.data.chgPct)) : fxFail('달러인덱스 DXY', dxy.error));
+  const B = bonds && bonds.data ? bonds.data : { errors: {} };
+  const bk = (key, t) => B[key] ? fxKpi(t, B[key].value.toFixed(3) + '<span style="font-size:.7rem;color:#64748b"> %</span>', fxEsc(B[key].source) + (B[key].date ? ' · ' + fxEsc(B[key].date) : ''), B[key].prev != null ? '<div class="ku">전일 ' + B[key].prev.toFixed(3) + '%</div>' : '') : fxFail(t, (B.errors && B.errors[key]) || bonds.error);
+  k.push(bk('KR10Y', '한국 국채 10년'), bk('US10Y', '미국 국채 10년'));
+  k.push(B.spread != null ? fxKpi('한미 10년 금리차', (B.spread > 0 ? '+' : '') + B.spread.toFixed(3) + '<span style="font-size:.7rem;color:#64748b"> %p</span>', '한국 − 미국', '') : fxFail('한미 10년 금리차', '한국·미국 금리 중 받지 못한 값이 있음'));
+  document.getElementById('fx-kpi').innerHTML = k.join('');
+  // 30분봉
+  [['USDKRW', usd, '#38bdf8'], ['EURKRW', eur, '#fb923c'], ['DXY', dxy, '#4ade80']].forEach(([s, j, col]) => fxIntraChart(s, j, col));
+  // 보유 외환
+  FXT.rates = rates && rates.ok ? rates.data : null; FXT.ratesErr = rates && !rates.ok ? rates.error : '';
+  fxHoldRender();
+  // 뉴스
+  const nt = document.getElementById('fx-n-tag'), nb = document.getElementById('fx-news');
+  if (news && news.ok) {
+    nt.className = 'tag tg'; nt.textContent = news.data.items.length + '건 · ' + news.data.fetchedAt.slice(11, 16);
+    nb.innerHTML = news.data.items.map(n => '<div class="fxn-i"><a href="' + fxEsc(n.url) + '" target="_blank" rel="noopener noreferrer">' + fxEsc(n.title) + '</a><div class="fxn-m">' + fxEsc([n.press, n.when].filter(Boolean).join(' · ')) + '</div></div>').join('') + '<p class="fn">출처: ' + fxEsc(news.data.source) + ' (제목만 표시, 내용은 원문 확인)</p>';
+  } else { nt.className = 'tag tz'; nt.textContent = '수집 실패'; nb.innerHTML = '<div style="padding:12px 0;color:#f87171;font-size:.86rem">' + fxEsc((news && news.error) || '알 수 없는 오류') + '</div>'; }
+}
+function fxIntraChart(sym, j, col) {
+  const id = 'fx-c-' + sym, el = document.getElementById(id), tag = document.getElementById('fx-tag-' + sym);
+  if (!el) return;
+  if (!j || !j.ok) {
+    el.parentElement.innerHTML = '<div class="fxfail"><div style="font-size:.8rem;font-weight:700;color:#f87171;margin-bottom:6px">30분봉 수집 실패</div><div style="font-size:.72rem;color:#94a3b8;line-height:1.6">' + fxEsc((j && j.error) || '') + '<br>고정값·추정값으로 채우지 않았습니다.</div></div>';
+    if (tag) { tag.className = 'tag tz'; tag.textContent = '실패'; }
+    return;
+  }
+  if (typeof Chart === 'undefined') return;
+  const rows = j.data.rows;
+  const lab = rows.map(r => new Date(r.t * 1000 + 9 * 3600000).toISOString().slice(5, 16).replace('T', ' '));
+  try {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    charts[id] = new Chart(el.getContext('2d'), { type: 'line',
+      data: { labels: lab, datasets: [{ label: j.data.name, data: rows.map(r => r.c), borderColor: col, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: .15 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: { duration: 250 }, plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9' } },
+        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 6 } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } } } } } });
+  } catch (e) { console.error('fx chart', e); }
+  if (tag) tag.textContent = '최근 5일 · ' + lab[lab.length - 1] + ' KST';
+}
+function fxHoldSave() { try { localStorage.setItem('suan_fx_hold', JSON.stringify(FXT.hold)); } catch (e) {} }
+function fxHoldAdd() {
+  const c = document.getElementById('fx-h-cur').value, a = parseFloat(document.getElementById('fx-h-amt').value);
+  if (!(a > 0)) return;
+  const ex = FXT.hold.find(h => h.cur === c);
+  if (ex) ex.amt = +(ex.amt + a).toFixed(2); else FXT.hold.push({ cur: c, amt: a });
+  document.getElementById('fx-h-amt').value = '';
+  fxHoldSave(); fxHoldRender();
+}
+function fxHoldRender() {
+  const box = document.getElementById('fx-h-list'), tag = document.getElementById('fx-h-tag'), cw = document.getElementById('fx-h-cw');
+  if (!box) return;
+  if (!FXT.hold.length) { box.innerHTML = '<p class="fn" style="padding:6px 0">보유 외환을 입력하세요.</p>'; tag.className = 'tag tz'; tag.textContent = '입력 대기'; cw.style.display = 'none'; return; }
+  const R = FXT.rates ? FXT.rates.rates : {};
+  const rows = FXT.hold.map(h => { const r = R[h.cur]; return Object.assign({}, h, { r: r, krw: r ? h.amt * r.rate / r.per : null }); });
+  const tot = rows.reduce((a, x) => a + (x.krw || 0), 0), miss = rows.filter(x => x.krw == null);
+  box.innerHTML = '<div class="tscroll"><table class="fxh-t"><thead><tr><th>통화</th><th>보유액</th><th>환율 (기준일)</th><th>원화 평가</th><th>비중</th><th></th></tr></thead><tbody>' +
+    rows.map((x, i) => '<tr><td><b>' + fxEsc(x.cur) + '</b></td><td>' + x.amt.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '</td><td>' + (x.r ? x.r.rate.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + (x.r.per === 100 ? '/100' : '') + ' <span class="fn">' + fxEsc(x.r.date) + '</span>' : '<span style="color:#f87171">환율 수집 실패</span>') + '</td><td>' + (x.krw == null ? '-' : Math.round(x.krw).toLocaleString('ko-KR') + '원') + '</td><td>' + (x.krw == null || !tot ? '-' : (x.krw / tot * 100).toFixed(1) + '%') + '</td><td><button data-hdel="' + i + '" title="삭제">✕</button></td></tr>').join('') +
+    '<tr style="font-weight:700"><td>합계</td><td></td><td></td><td>' + Math.round(tot).toLocaleString('ko-KR') + '원</td><td>' + (miss.length ? '' : '100%') + '</td><td></td></tr></tbody></table></div>' +
+    (miss.length ? '<p class="fn" style="color:#fbbf24">환율을 받지 못한 통화(' + miss.map(x => x.cur).join(', ') + ')는 합계에서 뺐습니다' + (FXT.ratesErr ? ' — ' + fxEsc(FXT.ratesErr) : '') + '</p>' : '');
+  tag.className = 'tag tg'; tag.textContent = '합계 ' + Math.round(tot / 1e4).toLocaleString('ko-KR') + '만원';
+  const ok = rows.filter(x => x.krw > 0);
+  cw.style.display = ok.length ? '' : 'none';
+  if (typeof Chart === 'undefined' || !ok.length) return;
+  try {
+    if (charts['fx-h-pie']) { charts['fx-h-pie'].destroy(); delete charts['fx-h-pie']; }
+    charts['fx-h-pie'] = new Chart(document.getElementById('fx-h-pie').getContext('2d'), { type: 'doughnut',
+      data: { labels: ok.map(x => x.cur), datasets: [{ data: ok.map(x => Math.round(x.krw)), backgroundColor: ['#38bdf8', '#fb923c', '#a78bfa', '#4ade80', '#f472b6', '#facc15'], borderColor: '#1e293b' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#cbd5e1' } } } } });
+  } catch (e) { console.error('fx pie', e); }
+}
 
 // ── 도착 원가 계산기 ────────────────────────────────────
 // 계산식: 1kg 외화가 → (FOB면 운임 더함) → (CIF가 아니면 보험료 더함) = CIF 외화 → ×환율 = CIF 원화
