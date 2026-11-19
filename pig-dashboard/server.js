@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.6.1
+// server.js - 수안푸드 지육가 대시보드 v3.6.2
+// v3.6.2: 시장 뉴스 출처를 네이버 증권 뉴스(stock.naver.com/news)로 변경 — 못 읽으면 m.stock → 네이버 금융 주요뉴스 순으로, 대신 쓴 이유를 함께 표시
 // v3.6.1: '환율·외환' 탭 API — /api/fx-intraday · /api/fx-rates · /api/fx-bonds · /api/fx-news · /api/analysis/fx (모두 실제 수신값만, 실패는 이유와 함께)
 // v3.6.0: 품목 전략 — 회사 수입 실적 대신 '주간 시세표 계산표'(브라우저에서 계산) + 주간회의 자료 + 시장 맥락(관세청 수입 통계·수출국 위험 보도·EU 지육가·KAMIS·환율)으로 판단
 // v3.5.9: 관세청 품목별 수출입실적(GW) 연결 — 돼지고기(HS 0203) 국가별 월별 수입 중량·금액 GET /api/customs-pork (키: CUSTOMS_API_KEY, 서버에서만 사용)
@@ -1864,7 +1865,7 @@ app.get('/api/risk-news', async (_, res) => {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.1' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.2' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2087,43 +2088,95 @@ app.get('/api/fx-bonds', async (_, res) => {
 });
 
 // 시장 뉴스: 네이버 금융 주요뉴스 (EUC-KR). 제목·링크·언론사·시각만
+// 시장 뉴스 — 1순위: 네이버 증권 뉴스(stock.naver.com/news). 페이지 안의 기사 자료(JSON 조각)나 기사 링크를 읽는다.
+// 읽지 못하면 2순위 m.stock 뉴스 API, 3순위 네이버 금융 주요뉴스 — 대신 쓴 경우 화면에 이유를 함께 표시한다.
+const NEWS_HDR = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', 'Accept-Language': 'ko-KR,ko;q=0.9' };
+const newsStrip = x => String(x || '').replace(/<[^>]+>/g, ' ').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+function newsWhen(v) {
+  const s = String(v || '').trim(); if (!s) return '';
+  const d = s.replace(/\D/g, '');
+  if (/^\d{12,14}$/.test(d) && /^20\d\d/.test(d)) return d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8) + ' ' + d.slice(8, 10) + ':' + d.slice(10, 12);
+  const m = s.match(/(20\d\d)[-.](\d\d)[-.](\d\d)[T ]?(\d\d:\d\d)?/); if (m) return m[1] + '-' + m[2] + '-' + m[3] + (m[4] ? ' ' + m[4] : '');
+  return s.length <= 20 ? s : '';
+}
+// 텍스트(HTML 또는 JSON) 안에서 기사 객체를 찾는다: 언론사ID·기사ID·제목이 한 객체 안에 있는 것
+function parseNewsObjects(text) {
+  const s = String(text || '').replace(/\\"/g, '"').replace(/\\u002[Ff]/g, '/').replace(/\\\//g, '/');
+  const out = [], seen = new Set();
+  const re = /\{[^{}]{20,3000}\}/g; let m;
+  const field = (o, keys) => { for (const k of keys) { const r = new RegExp('"' + k + '"\\s*:\\s*("(?:[^"\\\\]|\\\\.)*"|\\d+)').exec(o); if (r) { try { return String(JSON.parse(r[1])); } catch (e) { return r[1].replace(/^"|"$/g, ''); } } } return ''; };
+  while ((m = re.exec(s)) && out.length < 15) {
+    const o = m[0];
+    if (!/"(officeId|oid)"/.test(o) || !/"(articleId|aid)"/.test(o) || !/"(title|tit|headline)"/.test(o)) continue;
+    const oid = field(o, ['officeId', 'oid']), aid = field(o, ['articleId', 'aid']), title = newsStrip(field(o, ['title', 'tit', 'headline']));
+    if (!/^\d{3}$/.test(oid) || !/^\d{6,}$/.test(aid) || title.length < 6) continue;
+    const link = field(o, ['linkUrl', 'mobileNewsUrl', 'url']);
+    const url = /^https:\/\/[a-z.]*naver\.com\//.test(link) ? link : 'https://n.news.naver.com/mnews/article/' + oid + '/' + aid;
+    const key = oid + '/' + aid; if (seen.has(key)) continue; seen.add(key);
+    out.push({ title, url, press: newsStrip(field(o, ['officeName', 'ohnm', 'pressName', 'officeHname'])), when: newsWhen(field(o, ['datetime', 'dateTime', 'publishDateTime', 'serviceDateTime', 'dt', 'regDate', 'date'])) });
+  }
+  return out;
+}
+// 기사 링크(<a href=…>제목</a>)를 읽는다 — JSON 조각이 없을 때
+function parseNewsAnchors(html, base) {
+  const out = [], seen = new Set();
+  const re = /<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g; let m;
+  while ((m = re.exec(String(html || ''))) && out.length < 15) {
+    const href = m[1].replace(/&amp;/g, '&');
+    if (!/n\.news\.naver\.com\/(mnews\/)?article\/\d{3}\/\d{6,}|\/news\/[^"]*\d{3}\/\d{6,}|article_id=\d{6,}/.test(href)) continue;
+    const url = /^https:\/\//.test(href) ? href : href.startsWith('/') ? base + href : null;
+    const title = newsStrip(m[2]);
+    if (!url || title.length < 8 || seen.has(url)) continue; seen.add(url);
+    out.push({ title, url, press: '', when: '' });
+  }
+  return out;
+}
+function parseStockNaverNews(html) { const a = parseNewsObjects(html); return a.length ? a : parseNewsAnchors(html, 'https://stock.naver.com'); }
+// 옛 네이버 금융 주요뉴스 (3순위)
 function parseNaverMainNews(html) {
   const out = [];
   const re = /<dd class="articleSubject">\s*<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<dd class="articleSummary">([\s\S]*?)<\/dd>/g;
   let m;
-  const strip = x => String(x || '').replace(/<[^>]+>/g, ' ').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
   while ((m = re.exec(String(html || ''))) && out.length < 12) {
     const href = m[1].replace(/&amp;/g, '&');
     const url = /^https:\/\//.test(href) ? href : (href.startsWith('/') ? 'https://finance.naver.com' + href : null);
-    const title = strip(m[2]);
+    const title = newsStrip(m[2]);
     if (!url || !title) continue;
     const press = (m[3].match(/<span class="press">([\s\S]*?)<\/span>/) || [])[1];
     const when = (m[3].match(/<span class="wdate">([\s\S]*?)<\/span>/) || [])[1];
-    out.push({ title, url, press: strip(press), when: strip(when) });
+    out.push({ title, url, press: newsStrip(press), when: newsStrip(when) });
   }
   return out;
 }
-async function fxNews(getRaw) {
+const NEWS_SOURCES = [
+  { key: 'stock', label: '네이버 증권 뉴스 (stock.naver.com/news)', link: 'https://stock.naver.com/news',
+    get: async () => { const r = await fetch('https://stock.naver.com/news', { headers: Object.assign({ Accept: 'text/html' }, NEWS_HDR), signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); },
+    parse: parseStockNaverNews },
+  { key: 'mstock', label: '네이버 증권 주요뉴스 (m.stock.naver.com)', link: 'https://stock.naver.com/news',
+    get: async () => { const r = await fetch('https://m.stock.naver.com/front-api/news/category?category=mainnews&page=1&pageSize=20', { headers: Object.assign({ Accept: 'application/json', Referer: 'https://m.stock.naver.com/' }, NEWS_HDR), signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); },
+    parse: parseNewsObjects },
+  { key: 'finance', label: '네이버 금융 주요뉴스 (finance.naver.com)', link: 'https://finance.naver.com/news/mainnews.naver',
+    get: async () => { const r = await fetch('https://finance.naver.com/news/mainnews.naver', { headers: Object.assign({ Accept: 'text/html' }, NEWS_HDR), signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return new TextDecoder('euc-kr').decode(await r.arrayBuffer()); },
+    parse: parseNaverMainNews },
+];
+async function fxNews(getters) {
   const hit = aCache.get('fxt_news'); if (hit && Date.now() - hit.ts < 15 * 60000) return hit.data;
   const he = aCache.get('fxt_news_err'); if (he && Date.now() - he.ts < 5 * 60000) throw new Error(he.msg);
-  try {
-    let html;
-    if (getRaw) html = await getRaw();
-    else {
-      const r = await fetch('https://finance.naver.com/news/mainnews.naver', { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'text/html' }, signal: AbortSignal.timeout(8000) });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      html = new TextDecoder('euc-kr').decode(await r.arrayBuffer());
-    }
-    const items = parseNaverMainNews(html);
-    if (!items.length) throw new Error('기사 목록을 찾지 못함 (페이지 모양이 바뀐 듯)');
-    const data = { items, source: '네이버 금융 주요뉴스', fetchedAt: kstNow() };
-    aCache.set('fxt_news', { data, ts: Date.now() });
-    return data;
-  } catch (e) {
-    const msg = '시장 뉴스를 받지 못했습니다 (' + e.message + ')';
-    aCache.set('fxt_news_err', { msg, ts: Date.now() });
-    throw new Error(msg);
+  const errs = [];
+  for (const src of NEWS_SOURCES) {
+    try {
+      const get = getters && getters[src.key] ? getters[src.key] : src.get;
+      const items = src.parse(await get());
+      if (!items.length) throw new Error('기사 목록을 찾지 못함');
+      const data = { items, source: src.label, link: src.link, fetchedAt: kstNow(), note: errs.length ? 'stock.naver.com/news 를 읽지 못해 ' + src.label + ' 로 대신 표시 — ' + errs.join(' / ') : '' };
+      aCache.set('fxt_news', { data, ts: Date.now() });
+      if (errs.length) console.warn('[fx-news] ' + data.note);
+      return data;
+    } catch (e) { errs.push(src.key + ': ' + e.message); }
   }
+  const msg = '시장 뉴스를 받지 못했습니다 (' + errs.join(' / ') + ')';
+  aCache.set('fxt_news_err', { msg, ts: Date.now() });
+  throw new Error(msg);
 }
 app.get('/api/fx-news', async (_, res) => {
   try { res.json({ ok: true, data: await fxNews() }); } catch (e) { res.json({ ok: false, error: e.message }); }
@@ -2642,7 +2695,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.1', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.2', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2859,7 +2912,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, fxNews, buildFxPrompt,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, parseNewsObjects, parseNewsAnchors, parseStockNaverNews, newsWhen, NEWS_SOURCES, fxNews, buildFxPrompt,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2867,7 +2920,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.6.1 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.6.2 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
