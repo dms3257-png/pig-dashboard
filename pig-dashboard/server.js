@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.6.3
+// server.js - 수안푸드 지육가 대시보드 v3.6.4
+// v3.6.4: Gemini 3.x 생각 단계를 low 로(기본 medium 은 1~2분 걸려 시간 초과), 2.5 는 생각 예산 1024, AI 시간 제한 늘림 — 생각 설정이 거절되면 설정 없이 한 번 더
 // v3.6.3: Gemini 모델 정리 — gemini-2.0-flash 종료(2026-06-01) 대응, 3.8-flash 우선, 구글 모델 목록으로 없어진 모델 건너뜀, 실패 시 모델별 이유 모두 표시, /api/ai-models 진단
 // v3.6.2: 시장 뉴스 출처를 네이버 증권 뉴스(stock.naver.com/news)로 변경 — 못 읽으면 m.stock → 네이버 금융 주요뉴스 순으로, 대신 쓴 이유를 함께 표시
 // v3.6.1: '환율·외환' 탭 API — /api/fx-intraday · /api/fx-rates · /api/fx-bonds · /api/fx-news · /api/analysis/fx (모두 실제 수신값만, 실패는 이유와 함께)
@@ -553,6 +554,12 @@ function geminiPick(chain, avail) {
   const ver = m => { const x = m.match(/^gemini-(\d+(?:\.\d+)?)-(flash|pro)(-preview)?$/); return x ? +x[1] * 10 + (x[2] === 'flash' ? 1 : 0) - (x[3] ? 0.5 : 0) : -1; };
   return avail.filter(m => ver(m) > 0).sort((a, b) => ver(b) - ver(a)).slice(0, 3);
 }
+// 생각(추론) 설정: 3.x 는 thinkingLevel(low·medium·high, 기본 medium = 느림), 2.5 는 thinkingBudget(토큰 수). 그 밖의 모델은 건드리지 않음
+function geminiThinking(model, level) {
+  if (/^gemini-3(\.\d+)?-(flash|pro)/.test(model)) return { thinkingLevel: level || 'low' };
+  if (/^gemini-2\.5-(flash|pro)/.test(model)) return { thinkingBudget: level === 'high' ? 8192 : level === 'medium' ? 4096 : 1024 };
+  return null;
+}
 // opts (모두 선택): models 또는 kind('main'|'ocr'|'items'), timeoutMs, deadlineMs, maxOutputTokens, temperature, image
 async function callGemini(prompt, opts = {}) {
   const KEY = process.env.GEMINI_API_KEY;
@@ -564,10 +571,13 @@ async function callGemini(prompt, opts = {}) {
   const deadline = opts.deadlineMs ? Date.now() + opts.deadlineMs : null;
   const errs = [];
   for (const model of models) {
+   if (deadline && deadline - Date.now() < 8000) { if (!errs.some(x => /전체 제한 시간/.test(x))) errs.push('전체 제한 시간을 다 써서 남은 모델은 시도하지 않음'); break; }
+   let think = geminiThinking(model, opts.thinking);
+   for (let attempt = 0; attempt < 2; attempt++) {
     let timeout = opts.timeoutMs || 30000;
     if (deadline) {
       const left = deadline - Date.now();
-      if (left < 8000) { errs.push('응답 시간 초과'); break; }
+      if (left < 8000) { errs.push('전체 제한 시간을 다 써서 남은 모델은 시도하지 않음'); break; }
       timeout = Math.min(timeout, left);
     }
     try {
@@ -578,20 +588,25 @@ async function callGemini(prompt, opts = {}) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }].concat(opts.image ? [{ inline_data: { mime_type: opts.image.mime, data: opts.image.data } }] : []) }],
-            generationConfig: { temperature: opts.temperature ?? 0.4, maxOutputTokens: maxTokens },
+            generationConfig: Object.assign({ temperature: opts.temperature ?? 0.4, maxOutputTokens: maxTokens }, think ? { thinkingConfig: think } : {}),
           }),
           signal: AbortSignal.timeout(timeout),
         }
       );
       const d = await r.json();
-      if (!r.ok) { errs.push(`${model}: ${String(d?.error?.message || r.status).slice(0, 160)}`); continue; }
+      if (!r.ok) {
+        const m = String(d?.error?.message || r.status);
+        if (r.status === 400 && think && /thinking/i.test(m)) { console.warn('[gemini] ' + model + ' 생각 설정 거절 → 설정 없이 다시: ' + m.slice(0, 120)); think = null; continue; }
+        errs.push(`${model}: ${m.slice(0, 160)}`); break;
+      }
       const cand = d.candidates?.[0];
       const text = (cand?.content?.parts || []).map(p => p?.text || '').join('').trim();
       if (text) return { text, model, finishReason: cand?.finishReason || null };
-      errs.push(`${model}: 빈 응답${cand?.finishReason ? ' (' + cand.finishReason + ')' : ''}`);
+      errs.push(`${model}: 빈 응답${cand?.finishReason ? ' (' + cand.finishReason + ')' : ''}`); break;
     } catch (e) {
-      errs.push(`${model}: ${e.name === 'TimeoutError' || /timeout|aborted/i.test(e.message) ? '응답 시간 초과' : e.message}`);
+      errs.push(`${model}: ${e.name === 'TimeoutError' || /timeout|aborted/i.test(e.message) ? '응답 시간 초과(' + Math.round(timeout / 1000) + '초)' : e.message}`); break;
     }
+   }
   }
   throw new Error(errs.join(' / ') || '알 수 없는 오류');
 }
@@ -1899,7 +1914,7 @@ app.get('/api/risk-news', async (_, res) => {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.3' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.4' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2270,7 +2285,7 @@ async function aiEndpoint(cacheKey, ttl, promptFn, res) {
   if (hit && Date.now()-hit.ts < ttl) return res.json({ analysis:hit.analysis, cached:true, model:hit.model });
   try {
     const prompt = await promptFn();
-    const { text, model } = await callGemini(prompt);
+    const { text, model } = await callGemini(prompt, { timeoutMs: 90000, deadlineMs: 150000 });
     aCache.set(cacheKey, { analysis:text, ts:Date.now(), model });
     res.json({ analysis:text, cached:false, model });
   } catch (e) {
@@ -2641,7 +2656,7 @@ app.post('/api/items/ocr', async (req, res) => {
     const { text, model, finishReason } = await callGemini(OCR_PROMPT, {
       image: { mime, data },
       kind: 'ocr',
-      timeoutMs: 40000, deadlineMs: 75000, maxOutputTokens: 8192, temperature: 0,
+      timeoutMs: 60000, deadlineMs: 100000, maxOutputTokens: 8192, temperature: 0,
     });
     console.log(`🖼️ 사진 글자 읽기: ${model}, ${text.length}자, ${((Date.now() - t0) / 1000).toFixed(1)}초`);
     res.json({ ok: true, text, model, truncated: finishReason === 'MAX_TOKENS' });
@@ -2682,11 +2697,11 @@ app.post('/api/analysis/items', async (req, res) => {
     const prompt = buildItemsPrompt({ price: pl.price, meeting: pl.meeting, fx, cur, timing, today, ctx });
     console.log(`🧩 품목 전략 AI 요청: 시세표 ${pl.price.length}자, 회의 ${pl.meeting.length}자, 프롬프트 ${prompt.length}자`);
 
-    // 긴 프롬프트라 flash 를 먼저 시도 (pro 는 30~60초 걸려 프록시 제한에 걸릴 수 있음). 전체 95초 안에 끝냄 — 순서는 GEMINI_CHAINS.items
+    // 긴 프롬프트라 flash 를 먼저 시도 (pro 는 30~60초 걸려 프록시 제한에 걸릴 수 있음). 전체 170초 안에 끝냄(화면은 185초까지 기다림) — 순서는 GEMINI_CHAINS.items
     const { text, model, finishReason } = await callGemini(prompt, {
       kind: 'items',
-      timeoutMs: 45000,
-      deadlineMs: Math.max(30000, 95000 - (Date.now() - t0)),
+      timeoutMs: 100000,
+      deadlineMs: Math.max(60000, 170000 - (Date.now() - t0)),
       maxOutputTokens: 12000,
       temperature: 0.3,
     });
@@ -2729,7 +2744,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.3', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.4', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2946,7 +2961,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { GEMINI_CHAINS, geminiChain, geminiAvailable, geminiPick, GEM_LIST, callGemini, parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, parseNewsObjects, parseNewsAnchors, parseStockNaverNews, newsWhen, NEWS_SOURCES, fxNews, buildFxPrompt,
+  _test: { geminiThinking, GEMINI_CHAINS, geminiChain, geminiAvailable, geminiPick, GEM_LIST, callGemini, parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, parseNewsObjects, parseNewsAnchors, parseStockNaverNews, newsWhen, NEWS_SOURCES, fxNews, buildFxPrompt,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2954,7 +2969,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.6.3 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.6.4 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
