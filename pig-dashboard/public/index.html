@@ -1184,8 +1184,8 @@ async function loadFx() {
   // 뉴스
   const nt = document.getElementById('fx-n-tag'), nb = document.getElementById('fx-news');
   if (news && news.ok) {
-    nt.className = 'tag tg'; nt.textContent = news.data.items.length + '건 · ' + news.data.fetchedAt.slice(11, 16);
-    nb.innerHTML = news.data.items.map(n => '<div class="fxn-i"><a href="' + fxEsc(n.url) + '" target="_blank" rel="noopener noreferrer">' + fxEsc(n.title) + '</a><div class="fxn-m">' + fxEsc([n.press, n.when].filter(Boolean).join(' · ')) + '</div></div>').join('') + (news.data.note ? '<p class="fn" style="color:#fbbf24">' + fxEsc(news.data.note) + '</p>' : '') + '<p class="fn">출처: ' + fxEsc(news.data.source) + ' (제목만 표시, 내용은 원문 확인) · <a href="https://stock.naver.com/news" target="_blank" rel="noopener noreferrer">네이버 증권 뉴스 열기</a></p>';
+    nt.className = 'tag tg'; nt.textContent = Math.min(5, news.data.items.length) + '건 · ' + news.data.fetchedAt.slice(11, 16);
+    nb.innerHTML = news.data.items.slice(0, 5).map(n => '<div class="fxn-i"><a href="' + fxEsc(n.url) + '" target="_blank" rel="noopener noreferrer">' + fxEsc(n.title) + '</a><div class="fxn-m">' + fxEsc([n.press, n.when].filter(Boolean).join(' · ')) + '</div></div>').join('') + (news.data.note ? '<p class="fn" style="color:#fbbf24">' + fxEsc(news.data.note) + '</p>' : '') + '<p class="fn">출처: ' + fxEsc(news.data.source) + ' (제목만 표시, 내용은 원문 확인) · <a href="https://stock.naver.com/news" target="_blank" rel="noopener noreferrer">네이버 증권 뉴스 열기</a></p>';
   } else { nt.className = 'tag tz'; nt.textContent = '수집 실패'; nb.innerHTML = '<div style="padding:12px 0;color:#f87171;font-size:.86rem">' + fxEsc((news && news.error) || '알 수 없는 오류') + '<br><a href="https://stock.naver.com/news" target="_blank" rel="noopener noreferrer">네이버 증권 뉴스 직접 열기</a></div>'; }
 }
 function fxIntraChart(sym, j, col) {
