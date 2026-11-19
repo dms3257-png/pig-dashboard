@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.6.4
+// server.js - 수안푸드 지육가 대시보드 v3.6.5
+// v3.6.5: 품목 전략 AI 를 작업(job) 방식으로 — POST {async:true} 는 바로 작업 번호를 돌려주고 GET /api/analysis/items/job/:id 로 진행 확인 (AI 최대 240초), 모델별 걸린 시간 로그
 // v3.6.4: Gemini 3.x 생각 단계를 low 로(기본 medium 은 1~2분 걸려 시간 초과), 2.5 는 생각 예산 1024, AI 시간 제한 늘림 — 생각 설정이 거절되면 설정 없이 한 번 더
 // v3.6.3: Gemini 모델 정리 — gemini-2.0-flash 종료(2026-06-01) 대응, 3.8-flash 우선, 구글 모델 목록으로 없어진 모델 건너뜀, 실패 시 모델별 이유 모두 표시, /api/ai-models 진단
 // v3.6.2: 시장 뉴스 출처를 네이버 증권 뉴스(stock.naver.com/news)로 변경 — 못 읽으면 m.stock → 네이버 금융 주요뉴스 순으로, 대신 쓴 이유를 함께 표시
@@ -580,6 +581,7 @@ async function callGemini(prompt, opts = {}) {
       if (left < 8000) { errs.push('전체 제한 시간을 다 써서 남은 모델은 시도하지 않음'); break; }
       timeout = Math.min(timeout, left);
     }
+    const tm0 = Date.now();
     try {
       const r = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`,
@@ -601,7 +603,7 @@ async function callGemini(prompt, opts = {}) {
       }
       const cand = d.candidates?.[0];
       const text = (cand?.content?.parts || []).map(p => p?.text || '').join('').trim();
-      if (text) return { text, model, finishReason: cand?.finishReason || null };
+      if (text) { console.log(`🤖 ${model}: ${((Date.now() - tm0) / 1000).toFixed(1)}초, ${text.length}자${think ? ' (생각 ' + (think.thinkingLevel || think.thinkingBudget) + ')' : ''}`); return { text, model, finishReason: cand?.finishReason || null }; }
       errs.push(`${model}: 빈 응답${cand?.finishReason ? ' (' + cand.finishReason + ')' : ''}`); break;
     } catch (e) {
       errs.push(`${model}: ${e.name === 'TimeoutError' || /timeout|aborted/i.test(e.message) ? '응답 시간 초과(' + Math.round(timeout / 1000) + '초)' : e.message}`); break;
@@ -1914,7 +1916,7 @@ app.get('/api/risk-news', async (_, res) => {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.4' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.5' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2666,8 +2668,9 @@ app.post('/api/items/ocr', async (req, res) => {
   }
 });
 
-app.post('/api/analysis/items', async (req, res) => {
+async function itemsAnalysisHandler(req, res) {
   const t0 = Date.now();
+  const LONG = !!req._long;      // 작업 방식이면 화면 연결 제한이 없으므로 AI 에 더 긴 시간을 줌
   try {
     const pl = sanitizeItemsPayload(req.body);
     if (!pl.ok) return res.status(400).json({ ok: false, error: pl.error });
@@ -2700,8 +2703,8 @@ app.post('/api/analysis/items', async (req, res) => {
     // 긴 프롬프트라 flash 를 먼저 시도 (pro 는 30~60초 걸려 프록시 제한에 걸릴 수 있음). 전체 170초 안에 끝냄(화면은 185초까지 기다림) — 순서는 GEMINI_CHAINS.items
     const { text, model, finishReason } = await callGemini(prompt, {
       kind: 'items',
-      timeoutMs: 100000,
-      deadlineMs: Math.max(60000, 170000 - (Date.now() - t0)),
+      timeoutMs: LONG ? 150000 : 100000,
+      deadlineMs: Math.max(60000, (LONG ? 240000 : 170000) - (Date.now() - t0)),
       maxOutputTokens: 12000,
       temperature: 0.3,
     });
@@ -2715,6 +2718,27 @@ app.post('/api/analysis/items', async (req, res) => {
     console.warn('품목 전략 AI 실패:', e.message);
     res.status(502).json({ ok: false, error: `AI 분석 실패: ${e.message}` });
   }
+}
+// 작업 보관 (서버 메모리, 30분) — 서버가 다시 시작되면 사라짐
+const IT_JOBS = new Map();
+function itJobGc() { const now = Date.now(); for (const [k, j] of IT_JOBS) if (now - j.t0 > 30 * 60000) IT_JOBS.delete(k); }
+app.post('/api/analysis/items', async (req, res) => {
+  if (!(req.body && req.body.async)) return itemsAnalysisHandler(req, res);
+  itJobGc();
+  const job = { id: crypto.randomBytes(8).toString('hex'), t0: Date.now(), done: false, code: 200, body: null };
+  const cap = { status(c) { job.code = c; return cap; }, json(b) { job.body = b; job.done = true; return cap; } };
+  const run = itemsAnalysisHandler(Object.assign({}, req, { body: req.body, _long: true }), cap).catch(e => { job.code = 500; job.body = { ok: false, error: 'AI 분석 실패: ' + e.message }; job.done = true; });
+  // 캐시·잘못된 요청·횟수 제한처럼 바로 끝나는 경우는 그대로 돌려줌
+  await Promise.race([run, new Promise(r => setTimeout(r, 1500))]);
+  if (job.done) return res.status(job.code).json(job.body);
+  IT_JOBS.set(job.id, job);
+  res.status(202).json({ ok: true, status: 'running', job: job.id });
+});
+app.get('/api/analysis/items/job/:id', (req, res) => {
+  const job = IT_JOBS.get(String(req.params.id || ''));
+  if (!job) return res.status(404).json({ ok: false, error: '분석 작업을 찾지 못했습니다 (서버가 다시 시작됐거나 30분이 지났습니다). 다시 실행해 주세요.' });
+  if (!job.done) return res.json({ ok: true, status: 'running', elapsed: Math.round((Date.now() - job.t0) / 1000) });
+  res.status(job.code).json(Object.assign({ status: 'done' }, job.body));
 });
 
 // ── 정적 파일 ─────────────────────────────────────────
@@ -2744,7 +2768,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.4', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.5', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2961,7 +2985,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { geminiThinking, GEMINI_CHAINS, geminiChain, geminiAvailable, geminiPick, GEM_LIST, callGemini, parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, parseNewsObjects, parseNewsAnchors, parseStockNaverNews, newsWhen, NEWS_SOURCES, fxNews, buildFxPrompt,
+  _test: { IT_JOBS, geminiThinking, GEMINI_CHAINS, geminiChain, geminiAvailable, geminiPick, GEM_LIST, callGemini, parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, parseNewsObjects, parseNewsAnchors, parseStockNaverNews, newsWhen, NEWS_SOURCES, fxNews, buildFxPrompt,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2969,7 +2993,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.6.4 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.6.5 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
