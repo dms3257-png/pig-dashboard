@@ -2689,11 +2689,22 @@ async function itRunAI(force) {
   itRenderAi();
   const sig = itSig(pk.payload);
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 185000);
+  const to = setTimeout(() => ctrl.abort(), 300000);   // 작업 방식: 5분까지 진행 확인
   try {
-    const r = await fetch('/api/analysis/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, pk.payload, { force: !!force })), signal: ctrl.signal });
-    const t = await r.text();
+    const t0 = Date.now();
+    let r = await fetch('/api/analysis/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, pk.payload, { force: !!force, async: true })), signal: ctrl.signal });
+    let t = await r.text();
     let j = null; try { j = JSON.parse(t); } catch (e) {}
+    // 서버가 작업 번호를 주면 3초마다 진행 확인 (한 요청을 몇 분씩 붙잡지 않음)
+    const jobId = j && j.ok && j.status === 'running' && j.job;
+    while (jobId) {
+      await new Promise((ok, no) => { const w = setTimeout(ok, IT.pollMs || 3000); ctrl.signal.addEventListener('abort', () => { clearTimeout(w); const e = new Error('abort'); e.name = 'AbortError'; no(e); }, { once: true }); });
+      const sec = Math.round((Date.now() - t0) / 1000), box = itEl('it-ai-box');
+      if (box) box.innerHTML = '<p class="aph">⏳ Gemini AI가 분석 중입니다 — ' + sec + '초 지남 (보통 1~3분). 이 화면을 닫지 마세요.</p>';
+      r = await fetch('/api/analysis/items/job/' + encodeURIComponent(jobId), { signal: ctrl.signal });
+      t = await r.text(); j = null; try { j = JSON.parse(t); } catch (e) {}
+      if (!(r.ok && j && j.ok && j.status === 'running')) break;
+    }
     if (!r.ok || !j || !j.ok) throw new Error((j && j.error) || ('서버 응답 오류 (HTTP ' + r.status + ')'));
     IT.ai = { text: j.analysis, model: j.model, cached: !!j.cached, at: j.generatedAt || '', sig: sig };
     itSave();
