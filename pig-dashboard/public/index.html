@@ -2387,7 +2387,7 @@ async function itImageToJpegB64(file) {
 }
 async function itReadImageText(file) {
   const data = await itImageToJpegB64(file);
-  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 90000);
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 110000);
   let r, j;
   try {
     r = await fetch('/api/items/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mime: 'image/jpeg', data: data }), signal: ctl.signal });
@@ -2645,7 +2645,7 @@ function itRenderAi() {
   const hasPx = !!pk.payload.price;
   const can = !!(hasPx || pk.meeting.text.trim());
   btn.disabled = IT.aiBusy || !can;
-  btn.textContent = IT.aiBusy ? '⏳ AI가 분석 중입니다 (보통 30~90초)…' : (IT.ai ? 'AI 품목 전략 다시 실행' : 'AI 품목 전략 분석 실행');
+  btn.textContent = IT.aiBusy ? '⏳ AI가 분석 중입니다 (보통 1~2분)…' : (IT.ai ? 'AI 품목 전략 다시 실행' : 'AI 품목 전략 분석 실행');
   const parts = [];
   if (hasPx) parts.push('주간 시세표 계산표 (품목 ' + IT.price.stats.items.length + '개·브랜드 ' + IT.price.stats.rows.length + '개의 지표 — 원본 엑셀은 보내지 않음)');
   const uf = pk.meeting.usedFiles || [];
@@ -2689,7 +2689,7 @@ async function itRunAI(force) {
   itRenderAi();
   const sig = itSig(pk.payload);
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 125000);
+  const to = setTimeout(() => ctrl.abort(), 185000);
   try {
     const r = await fetch('/api/analysis/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, pk.payload, { force: !!force })), signal: ctrl.signal });
     const t = await r.text();
