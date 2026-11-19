@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.6.0
+// server.js - 수안푸드 지육가 대시보드 v3.6.1
+// v3.6.1: '환율·외환' 탭 API — /api/fx-intraday · /api/fx-rates · /api/fx-bonds · /api/fx-news · /api/analysis/fx (모두 실제 수신값만, 실패는 이유와 함께)
 // v3.6.0: 품목 전략 — 회사 수입 실적 대신 '주간 시세표 계산표'(브라우저에서 계산) + 주간회의 자료 + 시장 맥락(관세청 수입 통계·수출국 위험 보도·EU 지육가·KAMIS·환율)으로 판단
 // v3.5.9: 관세청 품목별 수출입실적(GW) 연결 — 돼지고기(HS 0203) 국가별 월별 수입 중량·금액 GET /api/customs-pork (키: CUSTOMS_API_KEY, 서버에서만 사용)
 // v3.5.8: 수출국 위험 알림 GET /api/risk-news (Google 뉴스 RSS — 국가×질병·수입금지 키워드, 원문 링크) · 시장 AI 분석은 실제로 받은 자료만 사용(통계 숫자 생성 금지)
@@ -1863,7 +1864,7 @@ app.get('/api/risk-news', async (_, res) => {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.0' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.1' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -1971,6 +1972,209 @@ app.get('/api/timing', async (_, res) => {
     const result = await analyzeImportTiming();
     res.json({ ok: true, ...result });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════
+// 환율·외환 탭
+// ════════════════════════════════════════════════════
+const FXT_SYMS = { USDKRW: { y: 'USDKRW=X', name: 'USD/KRW' }, EURKRW: { y: 'EURKRW=X', name: 'EUR/KRW' }, DXY: { y: 'DX-Y.NYB', name: '달러인덱스(DXY)' } };
+// Yahoo 30분봉 응답 → { rows:[{t(초), c}], price, prevClose }
+function parseYahooIntraday(text) {
+  const j = JSON.parse(text);
+  const r = j?.chart?.result?.[0];
+  if (!r) throw new Error(j?.chart?.error?.description || '응답에 시세가 없음');
+  const ts = r.timestamp || [], q = r.indicators?.quote?.[0] || {};
+  const rows = [];
+  for (let i = 0; i < ts.length; i++) {
+    const c = Number(q.close?.[i]);
+    if (Number.isFinite(c) && c > 0 && ts[i] <= Date.now() / 1000 + 600) rows.push({ t: Number(ts[i]), c: +c.toFixed(4) });
+  }
+  if (!rows.length) throw new Error('30분봉 값이 비어 있음');
+  const m = r.meta || {};
+  return { rows, price: Number(m.regularMarketPrice) || rows[rows.length - 1].c, prevClose: Number(m.chartPreviousClose || m.previousClose) || null };
+}
+async function fxIntraday(sym, getter = httpGet) {
+  const cfg = FXT_SYMS[sym]; if (!cfg) throw new Error('지원하지 않는 종목');
+  const key = 'fxi_' + sym, hit = aCache.get(key);
+  if (hit && Date.now() - hit.ts < 2 * 60000) return hit.data;
+  const he = aCache.get(key + '_err'); if (he && Date.now() - he.ts < 60000) throw new Error(he.msg);
+  const errs = [];
+  for (const host of ['query1', 'query2']) {
+    try {
+      const p = parseYahooIntraday(await getter(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cfg.y)}?range=5d&interval=30m`, { Referer: 'https://finance.yahoo.com/', Accept: 'application/json' }));
+      const data = { sym, name: cfg.name, rows: p.rows, last: p.price, prevClose: p.prevClose, chgPct: p.prevClose ? +((p.price / p.prevClose - 1) * 100).toFixed(2) : null,
+        lastAt: p.rows[p.rows.length - 1].t, source: 'Yahoo Finance 30분봉 (최근 5일)', fetchedAt: kstNow() };
+      aCache.set(key, { data, ts: Date.now() });
+      return data;
+    } catch (e) { errs.push(host + ': ' + e.message); }
+  }
+  const msg = cfg.name + ' 30분봉을 받지 못했습니다 (' + errs.join(' / ') + ')';
+  aCache.set(key + '_err', { msg, ts: Date.now() });
+  throw new Error(msg);
+}
+app.get('/api/fx-intraday', async (req, res) => {
+  const sym = String(req.query?.sym || '').toUpperCase();
+  if (!FXT_SYMS[sym]) return res.status(400).json({ ok: false, error: 'sym 은 USDKRW·EURKRW·DXY 중 하나' });
+  try { res.json({ ok: true, data: await fxIntraday(sym) }); } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// 보유 외환 평가용 환율 (네이버 매매기준율). 엔화는 100엔당 값이 나오므로 per=100
+const FXT_CUR = { USD: 'FX_USDKRW', EUR: 'FX_EURKRW', JPY: 'FX_JPYKRW', CNY: 'FX_CNYKRW', GBP: 'FX_GBPKRW', AUD: 'FX_AUDKRW' };
+async function fxRatesAll(fetcher = fetchNaverJson) {
+  const hit = aCache.get('fxt_rates'); if (hit && Date.now() - hit.ts < 10 * 60000) return hit.data;
+  const rates = {}, errors = {};
+  await Promise.all(Object.entries(FXT_CUR).map(async ([cur, code]) => {
+    try {
+      const { src, parsed } = await naverFxFirstPage(code, fetcher);
+      const last = [...parsed.rows].sort((a, b) => (a.ymd < b.ymd ? 1 : -1))[0];
+      const per = cur === 'JPY' && last.std > 100 ? 100 : 1;
+      rates[cur] = { rate: last.std, per, date: last.ymd, basis: '매매기준율', source: '네이버 ' + src.id };
+    } catch (e) { errors[cur] = e.message; }
+  }));
+  if (!Object.keys(rates).length) throw new Error('환율을 하나도 받지 못했습니다 (' + Object.entries(errors).map(([k, v]) => k + ': ' + v).join(' / ').slice(0, 300) + ')');
+  const data = { rates, errors, fetchedAt: kstNow() };
+  aCache.set('fxt_rates', { data, ts: Date.now() });
+  return data;
+}
+app.get('/api/fx-rates', async (_, res) => {
+  try { res.json({ ok: true, data: await fxRatesAll() }); } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// 국채 10년 금리: 네이버(채권) → 미국은 Yahoo ^TNX 보조. 고정값 없음
+const BOND_SOURCES = [
+  { id: 'api.stock.naver.com', url: c => `https://api.stock.naver.com/marketindex/bond/${c}/prices?page=1&pageSize=10` },
+  { id: 'stock.naver.com', url: c => `https://stock.naver.com/api/securityService/marketindex/bond/${c}/prices?page=1&pageSize=10` },
+  { id: 'm.stock.naver.com', url: c => `https://m.stock.naver.com/front-api/marketIndex/prices?category=bond&reutersCode=${c}&page=1&pageSize=10` },
+];
+async function naverBondLatest(code, fetcher = fetchNaverJson) {
+  const errs = [];
+  for (const src of BOND_SOURCES) {
+    try {
+      const payload = await fetcher(src.url(code), 7000);
+      const items = fxItemsFrom(payload);                                  // 환율과 같은 모양(localTradedAt·closePrice)이지만 값 범위가 달라 따로 읽는다
+      if (!items) throw new Error('응답에서 금리 목록을 찾지 못함');
+      const rows = items.filter(it => it && typeof it === 'object').map(it => ({ ymd: fxYmd(it.localTradedAt), std: fxNum(it.closePrice) })).filter(r => r.ymd && r.std != null).sort((a, b) => (a.ymd < b.ymd ? 1 : -1));
+      if (!rows.length) throw new Error('읽을 수 있는 금리 줄이 없음 (항목 ' + items.length + '개, 필드: ' + Object.keys(items.find(x => x && typeof x === 'object') || {}).slice(0, 12).join(',') + ')');
+      const v = rows[0].std;
+      if (!(v > -2 && v < 25)) throw new Error('금리 값이 이상함(' + v + ')');
+      return { value: v, date: rows[0].ymd, prev: rows[1] ? rows[1].std : null, source: '네이버 ' + src.id };
+    } catch (e) { errs.push(src.id + ': ' + e.message); }
+  }
+  throw new Error(errs.join(' / '));
+}
+async function fxBonds(fetcher = fetchNaverJson, getter = httpGet) {
+  const hit = aCache.get('fxt_bonds'); if (hit && Date.now() - hit.ts < 15 * 60000) return hit.data;
+  const out = { KR10Y: null, US10Y: null, errors: {} };
+  try { out.KR10Y = await naverBondLatest('KR10YT=RR', fetcher); } catch (e) { out.errors.KR10Y = '한국 10년물: ' + e.message; }
+  try { out.US10Y = await naverBondLatest('US10YT=RR', fetcher); }
+  catch (e) {
+    try {
+      const j = JSON.parse(await getter('https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=5d', { Referer: 'https://finance.yahoo.com/', Accept: 'application/json' }));
+      const m = j?.chart?.result?.[0]?.meta || {};
+      let v = Number(m.regularMarketPrice); if (v > 20) v = v / 10;
+      if (!(v > 0 && v < 25)) throw new Error('값 없음');
+      out.US10Y = { value: +v.toFixed(3), date: null, prev: null, source: 'Yahoo ^TNX' };
+    } catch (e2) { out.errors.US10Y = '미국 10년물: ' + e.message + ' / Yahoo: ' + e2.message; }
+  }
+  out.spread = out.KR10Y && out.US10Y ? +(out.KR10Y.value - out.US10Y.value).toFixed(3) : null;
+  out.fetchedAt = kstNow();
+  if (out.KR10Y || out.US10Y) aCache.set('fxt_bonds', { data: out, ts: Date.now() });
+  return out;
+}
+app.get('/api/fx-bonds', async (_, res) => {
+  try { const d = await fxBonds(); res.json({ ok: !!(d.KR10Y || d.US10Y), data: d, error: d.KR10Y || d.US10Y ? undefined : Object.values(d.errors).join(' / ') }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// 시장 뉴스: 네이버 금융 주요뉴스 (EUC-KR). 제목·링크·언론사·시각만
+function parseNaverMainNews(html) {
+  const out = [];
+  const re = /<dd class="articleSubject">\s*<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<dd class="articleSummary">([\s\S]*?)<\/dd>/g;
+  let m;
+  const strip = x => String(x || '').replace(/<[^>]+>/g, ' ').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  while ((m = re.exec(String(html || ''))) && out.length < 12) {
+    const href = m[1].replace(/&amp;/g, '&');
+    const url = /^https:\/\//.test(href) ? href : (href.startsWith('/') ? 'https://finance.naver.com' + href : null);
+    const title = strip(m[2]);
+    if (!url || !title) continue;
+    const press = (m[3].match(/<span class="press">([\s\S]*?)<\/span>/) || [])[1];
+    const when = (m[3].match(/<span class="wdate">([\s\S]*?)<\/span>/) || [])[1];
+    out.push({ title, url, press: strip(press), when: strip(when) });
+  }
+  return out;
+}
+async function fxNews(getRaw) {
+  const hit = aCache.get('fxt_news'); if (hit && Date.now() - hit.ts < 15 * 60000) return hit.data;
+  const he = aCache.get('fxt_news_err'); if (he && Date.now() - he.ts < 5 * 60000) throw new Error(he.msg);
+  try {
+    let html;
+    if (getRaw) html = await getRaw();
+    else {
+      const r = await fetch('https://finance.naver.com/news/mainnews.naver', { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'text/html' }, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      html = new TextDecoder('euc-kr').decode(await r.arrayBuffer());
+    }
+    const items = parseNaverMainNews(html);
+    if (!items.length) throw new Error('기사 목록을 찾지 못함 (페이지 모양이 바뀐 듯)');
+    const data = { items, source: '네이버 금융 주요뉴스', fetchedAt: kstNow() };
+    aCache.set('fxt_news', { data, ts: Date.now() });
+    return data;
+  } catch (e) {
+    const msg = '시장 뉴스를 받지 못했습니다 (' + e.message + ')';
+    aCache.set('fxt_news_err', { msg, ts: Date.now() });
+    throw new Error(msg);
+  }
+}
+app.get('/api/fx-news', async (_, res) => {
+  try { res.json({ ok: true, data: await fxNews() }); } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+function buildFxPrompt(x) {
+  const L = [`한국 원화 환율 시장 분석 (${kstNow()}) — 냉동 돼지고기를 수입하는 회사(결제는 계약 2~3개월 뒤 달러·유로)의 실무 참고용
+
+【받은 자료 — 이것만 근거로 쓰세요】`];
+  const ln = (k, v) => L.push('- ' + k + ': ' + v);
+  ['USDKRW', 'EURKRW'].forEach(p => { const c = x.cur && x.cur[p]; ln(FX_NAMES[p] + ' 현재', c && c.price != null && c.source !== 'fallback' ? fxTxt(c) : '자료 없음'); });
+  ['USDKRW', 'EURKRW', 'DXY'].forEach(s => {
+    const d = x.intra[s];
+    if (d) { const r = d.rows, a = r[0], z = r[r.length - 1]; ln(d.name + ' 30분봉(최근 5일)', `최근 ${z.c} · 5일 전 ${a.c} (${((z.c / a.c - 1) * 100).toFixed(2)}%) · 최고 ${Math.max(...r.map(v => v.c))} · 최저 ${Math.min(...r.map(v => v.c))}${d.chgPct != null ? ' · 전일 대비 ' + d.chgPct + '%' : ''}`); }
+    else ln((FXT_SYMS[s] || {}).name + ' 30분봉', '자료 없음' + (x.intraErr[s] ? ' (' + x.intraErr[s] + ')' : ''));
+  });
+  const b = x.bonds || {};
+  ln('한국 국채 10년', b.KR10Y ? b.KR10Y.value + '% (' + (b.KR10Y.date || '날짜 미상') + ')' : '자료 없음');
+  ln('미국 국채 10년', b.US10Y ? b.US10Y.value + '% (' + (b.US10Y.date || '최근') + ')' : '자료 없음');
+  ln('한미 10년 금리차(한국−미국)', b.spread != null ? b.spread + '%p' : '자료 없음');
+  if (x.fx && x.fx.usd) ln('USD/KRW 월평균(최근 6개월)', x.fx.usd.months.slice(-6).map(m => m.ym + ' ' + m.avg.toFixed(1) + (m.partial ? '*' : '')).join(', '));
+  if (x.fx && x.fx.eur) ln('EUR/KRW 월평균(최근 6개월)', x.fx.eur.months.slice(-6).map(m => m.ym + ' ' + m.avg.toFixed(1) + (m.partial ? '*' : '')).join(', '));
+  L.push('- 시장 뉴스 제목 (네이버 금융 주요뉴스, 제목만 — 본문 미확인):');
+  if (x.news && x.news.items.length) x.news.items.slice(0, 10).forEach(n => L.push('  · ' + n.title + (n.press ? ' (' + n.press + (n.when ? ', ' + n.when : '') + ')' : '')));
+  else L.push('  · 자료 없음' + (x.newsErr ? ' (' + x.newsErr + ')' : ''));
+  L.push(`
+【규칙】
+1. 숫자는 위 자료에 적힌 값만 인용하세요. 없는 수치(외환보유액·금리 전망치 등)를 만들지 마세요. 자료가 없으면 "자료 없음"이라고 쓰세요.
+2. 뉴스는 제목만 받았으므로 "~라는 보도가 있음"으로 전하고, 사실로 단정하지 마세요.
+3. 환율을 예측하거나 매매를 권유하지 말고, 조건과 근거를 함께 쓴 실무 참고용 시나리오로 쓰세요.
+
+분석 (한국어 Markdown, 800~1,100자):
+### 1. 지금 환율 상황 (USD·EUR, 최근 5일 흐름)
+### 2. 달러 강약과 금리 (DXY·한미 금리차)
+### 3. 원화에 영향을 준 소식 (뉴스 제목 기반)
+### 4. 수입 결제 관점 체크포인트 (결제가 2~3개월 뒤라는 점 반영, 분할 결제·시점 분산 등)
+### 5. 판단의 한계`);
+  return L.join('\n');
+}
+app.get('/api/analysis/fx', async (_, res) => {
+  await aiEndpoint('ai_fx', 30 * 60000, async () => {
+    const x = { intra: {}, intraErr: {} };
+    await Promise.all([
+      withTimeout(getCurrentPrices().then(c => { x.cur = c; }), 12000),
+      ...Object.keys(FXT_SYMS).map(s => withTimeout(fxIntraday(s).then(d => { x.intra[s] = d; }).catch(e => { x.intraErr[s] = e.message; }), 10000)),
+      withTimeout(fxBonds().then(d => { x.bonds = d; }), 12000),
+      withTimeout(fxNews().then(d => { x.news = d; }).catch(e => { x.newsErr = e.message; }), 10000),
+      withTimeout(getFxMonthly(`${+kstNow().slice(0, 4) - 1}-01`).then(d => { x.fx = d; }), 20000),
+    ]);
+    return buildFxPrompt(x);
+  }, res);
 });
 
 // AI 분석들
@@ -2438,7 +2642,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.0', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.1', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2655,7 +2859,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift,
+  _test: { parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, fxNews, buildFxPrompt,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2663,7 +2867,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.6.0 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.6.1 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
