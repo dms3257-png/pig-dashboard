@@ -2698,7 +2698,7 @@ async function itRunAI(force) {
     IT.ai = { text: j.analysis, model: j.model, cached: !!j.cached, at: j.generatedAt || '', sig: sig };
     itSave();
   } catch (e) {
-    IT.aiErr = e.name === 'AbortError' ? '응답이 너무 오래 걸립니다. 잠시 후 다시 시도해 주세요.' : ('AI 분석 실패: ' + e.message);
+    IT.aiErr = e.name === 'AbortError' ? '응답이 너무 오래 걸립니다. 잠시 후 다시 시도해 주세요.' : (/^AI 분석 실패/.test(e.message) ? e.message : 'AI 분석 실패: ' + e.message);
   } finally {
     clearTimeout(to); IT.aiBusy = false; itRenderAi();
   }
