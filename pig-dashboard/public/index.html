@@ -1855,6 +1855,8 @@ function itPxNum(v) {
   const n = parseFloat(t);
   return n > 0 ? n : null;
 }
+// 엑셀 오류값 (#VALUE! #REF! #N/A …) — 시세표에서는 재고가 없어 저가·고가·평균가를 매길 수 없는 칸
+function itPxErr(v) { return /^#(VALUE!|REF!|N\/A|DIV\/0!|NAME\?|NUM!|NULL!)$/.test(String(v == null ? '' : v).trim()); }
 function itPxDate(y, m, d) { return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'); }
 function itPxAddDays(key, n) { const t = Date.UTC(+key.slice(0, 4), +key.slice(5, 7) - 1, +key.slice(8, 10)) + n * 86400000; const d = new Date(t); return itPxDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
 // 시트 이름에서 연·월 ('26년 10월', '2022년 3월', '23년 01월'). 연도가 없는 시트는 null
@@ -1865,8 +1867,8 @@ function itPxSheetYm(name) {
   return { y: y, m: +m[2] };
 }
 // 한 시트 → { ym, weeks:[{key,col}], rows:[{item,brand,v:{key:{avg,low,high,na}}}] } (시세표가 아니면 null)
-function itPriceSheetParse(aoa, sheetName) {
-  const ym = itPxSheetYm(sheetName);
+function itPriceSheetParse(aoa, sheetName, ymOver) {
+  const ym = ymOver || itPxSheetYm(sheetName);
   if (!ym || !Array.isArray(aoa)) return null;
   let h = -1;
   for (let i = 0; i < Math.min(aoa.length, 15); i++) {
@@ -1875,8 +1877,7 @@ function itPriceSheetParse(aoa, sheetName) {
   }
   if (h < 0) return null;
   const hdr = aoa[h];
-  const weeks = [];
-  let prev = null;
+  const cand = [];
   for (let c = 2; c < hdr.length; c++) {
     const lab = String(hdr[c] == null ? '' : hdr[c]);
     if (!/주/.test(lab) || !/\d\s*월/.test(lab)) continue;
@@ -1887,12 +1888,45 @@ function itPriceSheetParse(aoa, sheetName) {
       let y = ym.y;
       if (ym.m <= 2 && mo >= 11) y -= 1; else if (ym.m >= 11 && mo <= 2) y += 1;
       key = itPxDate(y, mo, dd);
-    } else if (prev) key = itPxAddDays(prev, 7);                                  // 날짜가 깨진 제목은 앞 주 + 7일
-    if (!key) continue;
-    if (prev && key <= prev) continue;                                              // 같은 주가 또 적힘 → 앞 칸만 사용 (뒤 주차를 밀지 않음)
-    prev = key;
-    const mw = lab.match(/(\d{1,2})\s*월\s*(\d)\s*[째쨰]/);
-    weeks.push({ key: key, col: c, mo: mw ? +mw[1] : null, ord: mw ? +mw[2] : null });
+    }
+    const mw = lab.match(/(\d{1,2})\s*월\s*0?(\d)\s*[째쨰]/);
+    cand.push({ col: c, lab: lab, key: key, mo: mw ? +mw[1] : null, ord: mw ? +mw[2] : null });
+  }
+  // 제목의 'N월 M째주'와 날짜가 맞는지 (지난달 칸을 복사하고 날짜를 안 고친 경우 날짜를 믿지 않음)
+  const fits = (key, mo, ord) => {
+    if (!key) return false;
+    if (mo == null) return true;
+    const m = +key.slice(5, 7), d = +key.slice(8, 10);
+    if (m === mo) return ord == null || Math.abs(Math.ceil(d / 7) - ord) <= 1;
+    return ord === 1 && (mo - m + 12) % 12 === 1 && d >= 24;                     // 1째주는 지난달 말일 쪽에서 시작할 수 있음
+  };
+  cand.forEach(w => { w.ok = fits(w.key, w.mo, w.ord); });
+  const fixes = [];
+  cand.forEach((w, i) => {
+    if (w.ok) return;
+    // 가장 가까운 믿을 수 있는 칸에서 7일 단위로 계산 → 제목과 맞을 때만 쓰고, 아니면 그 칸은 버림 (추측으로 채우지 않음)
+    let k = null;
+    for (let d = 1; d < cand.length && !k; d++) {
+      const nx = cand[i + d], pv = cand[i - d];
+      if (nx && nx.ok) k = itPxAddDays(nx.key, -7 * d);
+      else if (pv && pv.ok) k = itPxAddDays(pv.key, 7 * d);
+    }
+    const use = k && fits(k, w.mo, w.ord) ? k : null;
+    fixes.push({ label: w.lab.replace(/\s+/g, ' ').trim(), written: w.key, used: use });
+    w.key = use; w.fixed = !!use;
+  });
+  const weeks = [];
+  let prev = null;
+  cand.forEach(w => {
+    if (!w.key) return;
+    if (prev && w.key <= prev) return;                                              // 같은 주가 또 적힘 → 앞 칸만 사용
+    prev = w.key;
+    weeks.push({ lab: w.lab, key: w.key, col: w.col, mo: w.mo, ord: w.ord, fixed: !!w.fixed, fix: w.fixed ? fixes[fixes.length - 1] && fixes.find(f => f.label === w.lab.replace(/\s+/g, ' ').trim() && f.used === w.key) : null });
+  });
+  // 맨 앞 칸이 다음 칸보다 2주 넘게 앞선 날짜면(지난 시트 제목을 통째로 복사한 칸) 날짜를 알 수 없어 버림
+  while (weeks.length > 2 && itPxDays(weeks[0].key, weeks[1].key) > 14) {
+    const w0 = weeks.shift();
+    fixes.push({ label: w0.lab.replace(/\s+/g, ' ').trim(), written: w0.key, used: null, why: '다음 칸과 ' + itPxDays(w0.key, weeks[0].key) + '일 차이' });
   }
   if (weeks.length < 2) return null;
   // 저가·고가·평균가 열 위치 확인 (제목 아래 2~3줄 안에 '저가'가 있어야 함)
@@ -1914,11 +1948,11 @@ function itPriceSheetParse(aoa, sheetName) {
       let avg = avgCell;
       if (avg == null && low != null && high != null) avg = (low + high) / 2;
       if (avg != null) { v[w.key] = { avg: avg, low: low, high: high }; any = true; }
-      else if (/재고\s*없/.test(txt)) v[w.key] = { na: true };
+      else if (/재고\s*없/.test(txt) || [r[w.col], r[w.col + 1], r[w.col + 2]].some(itPxErr)) v[w.key] = { na: true };
     }
     if (any || Object.keys(v).length) rows.push({ item: item, brand: b, v: v });
   }
-  return rows.length ? { ym: ym, weeks: weeks, rows: rows } : null;
+  return rows.length ? { ym: ym, weeks: weeks, rows: rows, fixes: fixes } : null;
 }
 // 여러 시트를 시간순으로 합쳐 (겹치는 주는 나중 시트 값 사용) 최근 n주를 요약 문장으로
 function itPriceBookText(parsedList, nWeeks) {
@@ -2007,9 +2041,23 @@ function itPxDataSheetParse(aoa) {
 // 월별 시트(+데이터서식)를 합쳐 품목·브랜드별 주간 시계열로. 데이터서식 연도는 월별 시트 값과 가장 많이 일치하는 연도로 맞추고 일치율을 남긴다.
 function itPriceBook(sheets, todayYmd) {
   const monthly = [], data = [];
-  (sheets || []).forEach(sh => {
-    const p = itPriceSheetParse(sh.aoa, sh.name);
-    if (p) { monthly.push(p); return; }
+  const yms = (sheets || []).map(sh => itPxSheetYm(sh.name));
+  const mOnly = n => { const m = String(n || '').match(/^\s*(\d{1,2})\s*월\s*$/); return m && +m[1] >= 1 && +m[1] <= 12 ? +m[1] : null; };
+  const inferred = [];
+  for (let i = (sheets || []).length - 1; i >= 0; i--) {                       // 뒤 시트에서 거꾸로: 월이 커지면 한 해 전
+    const m = mOnly(sheets[i].name), nx = yms[i + 1];
+    if (yms[i] || m == null || !nx) continue;
+    yms[i] = { y: m < nx.m ? nx.y : nx.y - 1, m: m, guess: true };
+  }
+  for (let i = 0; i < (sheets || []).length; i++) {                               // 앞 시트에서 이어서: 월이 작아지면 다음 해
+    const m = mOnly(sheets[i].name), pv = yms[i - 1];
+    if (yms[i] || m == null || !pv) continue;
+    yms[i] = { y: m > pv.m ? pv.y : pv.y + 1, m: m, guess: true };
+  }
+  (sheets || []).forEach((sh, si) => {
+    const p = itPriceSheetParse(sh.aoa, sh.name, yms[si]);
+    if (p && yms[si] && yms[si].guess) inferred.push(sh.name.trim() + '→' + yms[si].y + '년');
+    if (p) { p.name = sh.name; monthly.push(p); return; }
     const d = itPxDataSheetParse(sh.aoa);
     if (d) data.push(Object.assign({ name: sh.name }, d));
   });
@@ -2025,13 +2073,42 @@ function itPriceBook(sheets, todayYmd) {
   // (연,월,째주) → 실제 주 시작일: 월별 시트 제목에서
   const wkMap = {};
   monthly.forEach(p => p.weeks.forEach(w => {
-    if (w.mo == null || w.ord == null) return;
+    if (w.mo == null || w.ord == null || w.fixed) return;
     const y = +w.key.slice(0, 4), km = +w.key.slice(5, 7);
     const yy = (w.mo === 12 && km === 1) ? y - 1 : (w.mo === 1 && km === 12) ? y + 1 : y;   // 제목의 월과 시작일의 월이 해를 넘는 경우
     wkMap[yy + '-' + w.mo + '-' + w.ord] = w.key;
   }));
-  monthly.forEach(p => p.rows.forEach(r => Object.keys(r.v).forEach(k => { if (r.v[k].avg != null) put(r.item, r.brand, k, r.v[k].avg, 'm'); })));
-  const check = { data: !!data.length, monthlySheets: monthly.length, compared: 0, equal: 0, rate: null, lastYear: null, approxWeeks: 0, yearBasis: null };
+  // 같은 주가 두 시트에 있으면 그 주가 속한 달의 시트(처음 기록한 시트)를 우선 — 다음 달 시트 앞쪽에 복사된 칸은 값이 바뀐 경우가 있음. 조건이 같으면 나중 시트
+  // 날짜를 바로잡은 칸은 다른 시트에 같은 'N월 M째주'가 있으면 그 날짜로 맞춤 (하루 차이로 같은 주가 두 번 생기지 않게)
+  const wkFix = {};
+  monthly.forEach(p => p.weeks.forEach(w => {
+    if (!w.fixed || w.mo == null || w.ord == null) return;
+    const y = +w.key.slice(0, 4), km = +w.key.slice(5, 7);
+    const yy = (w.mo === 12 && km === 1) ? y - 1 : (w.mo === 1 && km === 12) ? y + 1 : y;
+    const id = yy + '-' + w.mo + '-' + w.ord;
+    const tg = wkMap[id] || wkFix[id];
+    if (!tg) { wkFix[id] = w.key; return; }
+    if (tg === w.key || Math.abs(itPxDays(tg, w.key)) > 3 || p.weeks.some(x => x !== w && x.key === tg)) return;
+    p.rows.forEach(r => { if (r.v[w.key]) { r.v[tg] = r.v[w.key]; delete r.v[w.key]; } });
+    if (w.fix) w.fix.used = tg;
+    w.key = tg;
+  }));
+  const naMap = {}, pri = {};
+  monthly.forEach(p => {
+    const moOf = {}; p.weeks.forEach(w => { moOf[w.key] = w.mo; });
+    p.rows.forEach(r => Object.keys(r.v).forEach(k => {
+      const id = r.item + '|' + r.brand, pk = id + '|' + k;
+      const pr = moOf[k] != null && moOf[k] === p.ym.m ? 2 : 1;
+      if (pri[pk] > pr) return;
+      pri[pk] = pr;
+      if (r.v[k].avg != null) { put(r.item, r.brand, k, r.v[k].avg, 'm'); if (naMap[id]) delete naMap[id][k]; }
+      else if (r.v[k].na) { (naMap[id] = naMap[id] || {})[k] = true; const e = ser.get(id); if (e && e.src[k] === 'm') { delete e.v[k]; delete e.src[k]; } }
+    }));
+  });
+  ser.forEach((e, k) => { e.na = Object.keys(naMap[k] || {}).sort(); });
+  const fixList = [];
+  monthly.forEach(p => (p.fixes || []).forEach(f => fixList.push(Object.assign({ sheet: p.name }, f))));
+  const check = { inferredYears: inferred, dateFixes: fixList, data: !!data.length, monthlySheets: monthly.length, compared: 0, equal: 0, rate: null, lastYear: null, approxWeeks: 0, yearBasis: null };
   const mVal = {};
   ser.forEach((e, k) => { mVal[k] = Object.assign({}, e.v); });
   const ty = +(todayYmd || '2026-01-01').slice(0, 4);
@@ -2075,7 +2152,7 @@ function itPriceBook(sheets, todayYmd) {
   });
   if (check.compared) check.rate = Math.round(check.equal / check.compared * 1000) / 10;
   const weeks = Array.from(new Set([].concat(...Array.from(ser.values()).map(e => Object.keys(e.v))))).sort();
-  return { weeks: weeks, rows: order.map(k => ser.get(k)), check: check };
+  return { weeks: weeks, rows: order.map(k => ser.get(k)).filter(e => Object.keys(e.v).length), check: check };
 }
 
 function itPxDays(a, b) { return Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 86400000); }
@@ -2102,6 +2179,7 @@ function itPriceStats(book) {
     const avg3 = w3y.reduce((a, x) => a + x, 0) / w3y.length;
     return {
       item: e.item, brand: e.brand, lastKey: lk, last: lv, stale: stale, n: keys.length, first: keys[0],
+      soldOut: (() => { const na = (e.na || []).filter(k => k > lk); return na.length && itPxDays(na[na.length - 1], last) <= 21 ? na[0] : null; })(),
       chg4: itPxPct(itPxAt(keys, e.v, lk, 28, 7), lv), chg12: itPxPct(itPxAt(keys, e.v, lk, 84, 7), lv), yoy: itPxPct(itPxAt(keys, e.v, lk, 364, 10), lv),
       min52: mn, max52: mx, pos52: mx > mn ? Math.round((lv - mn) / (mx - mn) * 100) : null,
       avg3: Math.round(avg3), dev3: itPxPct(avg3, lv), years3: w3y.length,
@@ -2140,7 +2218,7 @@ function itPriceStats(book) {
     });
     const season = acc.map(a => a.length >= 2 ? Math.round(mean(a)) : null);
     return {
-      item: item, brands: rs.length, active: act.length,
+      item: item, brands: rs.length, active: act.length, out: rs.filter(r => r.soldOut).length,
       avg: use.length ? Math.round(mean(use.map(r => r.last))) : null,
       chg4: r1(mean(vals('chg4'))), chg12: r1(mean(vals('chg12'))), yoy: r1(mean(vals('yoy'))),
       pos52: vals('pos52').length ? Math.round(mean(vals('pos52'))) : null, dev3: r1(mean(vals('dev3'))),
@@ -2161,12 +2239,12 @@ function itPriceForAI(st, cap) {
   const w = v => v == null ? '-' : Math.round(v).toLocaleString('en-US');
   const L = ['기준: 최신 주 ' + st.last + ' · 자료 시작 ' + st.first + (st.check && st.check.rate != null ? ' · 그래프 원본(데이터서식)과 월별 시트 대조 일치율 ' + st.check.rate + '%' : ''),
     '', '[품목 요약] (현재 시세가 있는 브랜드 평균)', '| 품목 | 브랜드(최근 시세 있음/시세표 전체) | 평균 시세 | 4주 | 12주 | 전년비 | 52주 위치 | 3년평균比 | 최저 브랜드 | 최고 브랜드 | 브랜드 가격차 | 계절지수 1~12월 |', '|---|---|---|---|---|---|---|---|---|---|---|---|'];
-  st.items.forEach(it => L.push('| ' + it.item + ' | ' + it.active + '/' + it.brands + ' | ' + w(it.avg) + ' | ' + f(it.chg4) + ' | ' + f(it.chg12) + ' | ' + f(it.yoy) + ' | ' + (it.pos52 == null ? '-' : it.pos52 + '%') + ' | ' + f(it.dev3) + ' | ' + (it.low ? it.low.brand + ' ' + w(it.low.price) : '-') + ' | ' + (it.high ? it.high.brand + ' ' + w(it.high.price) : '-') + ' | ' + f(it.spread) + ' | ' + it.season.map(x => x == null ? '-' : x).join(' ') + ' |'));
-  L.push('', '[브랜드별] (최근 시세 없음 = 최신 주보다 3주 넘게 시세가 끊긴 브랜드)', '| 품목/브랜드 | 시세(기준주) | 4주 | 12주 | 전년비 | 52주 최저~최고 | 52주 위치 | 3년평균比 |', '|---|---|---|---|---|---|---|---|');
+  st.items.forEach(it => L.push('| ' + it.item + ' | ' + it.active + '/' + it.brands + (it.out ? ' (재고없음 ' + it.out + ')' : '') + ' | ' + w(it.avg) + ' | ' + f(it.chg4) + ' | ' + f(it.chg12) + ' | ' + f(it.yoy) + ' | ' + (it.pos52 == null ? '-' : it.pos52 + '%') + ' | ' + f(it.dev3) + ' | ' + (it.low ? it.low.brand + ' ' + w(it.low.price) : '-') + ' | ' + (it.high ? it.high.brand + ' ' + w(it.high.price) : '-') + ' | ' + f(it.spread) + ' | ' + it.season.map(x => x == null ? '-' : x).join(' ') + ' |'));
+  L.push('', '[브랜드별] (재고없음 = 시세표에 재고없음 또는 #VALUE! 로 적힌 주부터, 최근 시세 없음 = 최신 주보다 3주 넘게 시세가 끊긴 브랜드)', '| 품목/브랜드 | 시세(기준주) | 4주 | 12주 | 전년비 | 52주 최저~최고 | 52주 위치 | 3년평균比 |', '|---|---|---|---|---|---|---|---|');
   let text = L.join('\n');
   if (text.length > cap - 40) return text.slice(0, cap - 60) + '\n…(일부 생략 — 글자 수 제한)';
   for (const it of st.items) for (const r of it.rows) {
-    const line = '\n| ' + r.item + '/' + r.brand + ' | ' + w(r.last) + ' (' + r.lastKey + ')' + (r.stale ? ' 최근 시세 없음' : '') + ' | ' + f(r.chg4) + ' | ' + f(r.chg12) + ' | ' + f(r.yoy) + ' | ' + w(r.min52) + '~' + w(r.max52) + ' | ' + (r.pos52 == null ? '-' : r.pos52 + '%') + ' | ' + f(r.dev3) + ' |';
+    const line = '\n| ' + r.item + '/' + r.brand + ' | ' + w(r.last) + ' (' + r.lastKey + ')' + (r.soldOut ? ' 재고없음(' + r.soldOut + '~)' : r.stale ? ' 최근 시세 없음' : '') + ' | ' + f(r.chg4) + ' | ' + f(r.chg12) + ' | ' + f(r.yoy) + ' | ' + w(r.min52) + '~' + w(r.max52) + ' | ' + (r.pos52 == null ? '-' : r.pos52 + '%') + ' | ' + f(r.dev3) + ' |';
     if (text.length + line.length > cap - 40) { text += '\n…(브랜드 표 일부 생략 — 글자 수 제한)'; return text; }
     text += line;
   }
@@ -2243,12 +2321,12 @@ function itLoadXlsx() {
 // ── 저장 / 복원 ──
 function itPxPack(p) {
   const wi = {}; p.book.weeks.forEach((w, i) => { wi[w] = i; });
-  return { v: 1, name: p.name, sig: p.sig, include: p.include, at: p.at, weeks: p.book.weeks, check: p.book.check,
-    rows: p.book.rows.map(e => { const a = new Array(p.book.weeks.length).fill(null); Object.keys(e.v).forEach(k => { a[wi[k]] = e.v[k]; }); return [e.item, e.brand, a]; }) };
+  return { v: 2, name: p.name, sig: p.sig, include: p.include, at: p.at, weeks: p.book.weeks, check: p.book.check,
+    rows: p.book.rows.map(e => { const a = new Array(p.book.weeks.length).fill(null); Object.keys(e.v).forEach(k => { a[wi[k]] = e.v[k]; }); return [e.item, e.brand, a, e.na || []]; }) };
 }
 function itPxUnpack(d) {
-  if (!d || d.v !== 1 || !Array.isArray(d.weeks) || !Array.isArray(d.rows)) return null;
-  const rows = d.rows.map(r => { const v = {}; (r[2] || []).forEach((x, i) => { if (x != null && d.weeks[i]) v[d.weeks[i]] = x; }); return { item: r[0], brand: r[1], v: v, src: {} }; }).filter(e => Object.keys(e.v).length);
+  if (!d || d.v !== 2 || !Array.isArray(d.weeks) || !Array.isArray(d.rows)) return null;
+  const rows = d.rows.map(r => { const v = {}; (r[2] || []).forEach((x, i) => { if (x != null && d.weeks[i]) v[d.weeks[i]] = x; }); return { item: r[0], brand: r[1], v: v, src: {}, na: Array.isArray(r[3]) ? r[3].filter(k => typeof k === 'string') : [] }; }).filter(e => Object.keys(e.v).length);
   if (!rows.length) return null;
   const book = { weeks: d.weeks.slice(), rows: rows, check: d.check || {} };
   return { name: d.name, sig: d.sig, include: d.include !== false, at: d.at, book: book, stats: itPriceStats(book) };
@@ -2301,6 +2379,10 @@ function itIsHidden(wb, i) {
 }
 const IT_MAX_ROWS = 100000;
 // 세로로 합쳐진 칸(품목을 위 칸 하나에만 적어 둔 경우)은 아래 칸에도 같은 값을 채운다 — 가로로만 합쳐진 제목 칸은 건드리지 않음
+const IT_ERR = { 0: '#NULL!', 7: '#DIV/0!', 15: '#VALUE!', 23: '#REF!', 29: '#NAME?', 36: '#NUM!', 42: '#N/A' };
+function itErrToText(ws) {
+  Object.keys(ws).forEach(a => { const c = ws[a]; if (a[0] !== '!' && c && c.t === 'e') { const t = c.w || IT_ERR[c.v] || '#N/A'; ws[a] = { t: 's', v: t, w: t }; } });
+}
 function itUnmergeDown(XLSX, ws) {
   (ws['!merges'] || []).forEach(m => {
     if (!m || !m.s || !m.e || m.e.r <= m.s.r) return;
@@ -2337,6 +2419,7 @@ function itAddWorkbook(XLSX, file, wb) {
     const ws = wb.Sheets[sn];
     if (!ws) return;
     itUnmergeDown(XLSX, ws);
+    itErrToText(ws);
     if (!itTrimSheet(XLSX, ws).rows) return;
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: false });
     sheets.push({ name: sn, aoa: aoa });
@@ -2538,7 +2621,7 @@ function itLowHigh(it) {
   return '<div class="pxlh"><span class="lo">최저 ' + itW(lh.min) + '</span> ' + itEsc(lh.low.join(' · ')) + '</div><div class="pxlh"><span class="hi">최고 ' + itW(lh.max) + '</span> ' + itEsc(lh.high.join(' · ')) + ' <span class="fn">(+' + itPxPct(lh.min, lh.max) + '%)</span></div>' + d;
 }
 function itBrandCnt(it) {
-  return '<span title="최근 3주 안에 시세가 있는 브랜드 ' + it.active + '개 / 시세표에 나온 적 있는 브랜드 ' + it.brands + '개"><b>' + it.active + '</b>개 <span class="fn">/ ' + it.brands + '개</span></span>';
+  return '<span title="최근 3주 안에 시세가 있는 브랜드 ' + it.active + '개 / 시세표에 나온 적 있는 브랜드 ' + it.brands + '개"><b>' + it.active + '</b>개 <span class="fn">/ ' + it.brands + '개</span></span>' + (it.out ? '<div class="fn" style="color:#fbbf24" title="최근 주가 재고없음(또는 #VALUE!)으로 적힌 브랜드">재고없음 ' + it.out + '개</div>' : '');
 }
 function itRenderPrice() {
   const box = itEl('it-px');
@@ -2561,35 +2644,57 @@ function itRenderPrice() {
       sel.season.map((v, i) => '<div><span class="b" style="height:' + (v == null ? 0 : Math.max(4, Math.min(60, (v - 85) * 3))) + 'px;' + (v != null && v >= 100 ? 'background:#f59e0b' : '') + '"></span><span class="v">' + (v == null ? '-' : v) + '</span><span class="m">' + (i + 1) + '월</span></div>').join('') + '</div>' : '';
     detail = '<div class="card pxdet" id="it-px-det"><div class="ch"><span class="ct">' + itEsc(sel.item) + ' — 브랜드별</span><button class="mbtn" data-act="px-close" style="margin:0">닫기</button></div>' +
       '<div class="tscroll"><table class="dt"><thead><tr><th class="l">브랜드</th><th>시세 (기준주)</th><th>4주</th><th>12주</th><th>전년비</th><th>52주 최저~최고</th><th>52주 위치</th><th>3년평균比</th></tr></thead><tbody>' +
-      br.map(r => '<tr' + (r.stale ? ' class="stale"' : '') + '><td class="l">' + itEsc(r.brand) + '</td><td class="num">' + itW(r.last) + ' <span class="fn">' + itEsc(r.lastKey) + (r.stale ? ' · 최근 시세 없음' : '') + '</span></td><td>' + itPc(r.chg4) + '</td><td>' + itPc(r.chg12) + '</td><td>' + itPc(r.yoy) + '</td><td class="num">' + itW(r.min52) + ' ~ ' + itW(r.max52) + '</td><td class="pxpos">' + itPosBar(r.pos52, r.min52, r.max52) + '</td><td>' + itPc(r.dev3) + '</td></tr>').join('') +
+      br.map(r => '<tr' + (r.stale ? ' class="stale"' : '') + '><td class="l">' + itEsc(r.brand) + '</td><td class="num">' + itW(r.last) + ' <span class="fn">' + itEsc(r.lastKey) + (r.soldOut ? ' · <b style="color:#fbbf24">재고없음</b> (' + itEsc(r.soldOut.slice(5).replace('-', '/')) + ' 주부터)' : r.stale ? ' · 최근 시세 없음' : '') + '</span></td><td>' + itPc(r.chg4) + '</td><td>' + itPc(r.chg12) + '</td><td>' + itPc(r.yoy) + '</td><td class="num">' + itW(r.min52) + ' ~ ' + itW(r.max52) + '</td><td class="pxpos">' + itPosBar(r.pos52, r.min52, r.max52) + '</td><td>' + itPc(r.dev3) + '</td></tr>').join('') +
       '</tbody></table></div><div class="cw" style="height:260px;margin-top:10px"><canvas id="it-px-ch"></canvas></div>' + season + '</div>';
   }
   box.innerHTML = '<div class="card" id="it-px-card"><div class="ch"><span class="ct">주간 시세표 분석 — ' + itEsc(px.name) + '</span><span class="tag tg">최신 ' + itEsc(st.last) + '</span></div>' +
     '<div class="fn" style="margin:0 0 8px;line-height:1.7">' + itEsc(src.join(' + ')) + '으로 ' + itEsc(st.first) + ' ~ ' + itEsc(st.last) + ' (' + px.book.weeks.length + '주)를 읽었습니다. ' + chk + '<br>품목을 누르면 브랜드별 표와 추이 그래프가 열립니다. 평균 시세·변화율은 <b>최근 시세가 있는 브랜드</b>의 평균입니다 (최신 주보다 3주 넘게 끊긴 브랜드 제외).</div>' +
     itTrendBox(st) + '<div class="tscroll"><table class="dt pxmain"><thead><tr><th class="l">품목</th><th>브랜드 수<br><span class="fn">시세 있음 / 전체</span></th><th>평균 시세<br><span class="fn">원/kg</span></th><th>4주</th><th>12주</th><th>전년비</th><th>52주 위치</th><th>3년평균比</th><th class="l">최저 ~ 최고 브랜드<br><span class="fn">원/kg · 같은 주끼리 비교</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-    '<p class="fn" style="line-height:1.7"><b>브랜드 수</b> = 최근 3주 안에 시세가 있는 브랜드 / 시세표에 한 번이라도 나온 브랜드 · <b>최저~최고 브랜드</b> = 그 품목의 가장 최근 주에 시세가 있는 브랜드끼리 비교(같은 값이면 모두 표시) · <b>52주 위치</b> = 0~20% 저점권 · 20~40% 낮은 편 · 40~60% 중간 · 60~80% 높은 편 · 80~100% 고점권 (품목은 브랜드 위치의 평균)<br>4주·12주 = 그 기간 전 같은 브랜드 값 대비 · 전년비 = 약 52주 전(±10일) 대비 · 52주 위치 = 최근 52주 최저(0%)~최고(100%) 중 현재 · 3년평균比 = 최근 3년 평균 대비. 값은 엑셀 숫자로 계산했고 고정값·추정값은 쓰지 않았습니다.</p></div>' + detail;
+    '<p class="fn" style="line-height:1.7"><b>재고없음</b> = 시세표에 재고없음 또는 #VALUE! 로 적힌 주 (값을 매길 수 없어 계산에서 뺌) · <b>브랜드 수</b> = 최근 3주 안에 시세가 있는 브랜드 / 시세표에 한 번이라도 나온 브랜드 · <b>최저~최고 브랜드</b> = 그 품목의 가장 최근 주에 시세가 있는 브랜드끼리 비교(같은 값이면 모두 표시) · <b>52주 위치</b> = 0~20% 저점권 · 20~40% 낮은 편 · 40~60% 중간 · 60~80% 높은 편 · 80~100% 고점권 (품목은 브랜드 위치의 평균)<br>4주·12주 = 그 기간 전 같은 브랜드 값 대비 · 전년비 = 약 52주 전(±10일) 대비 · 52주 위치 = 최근 52주 최저(0%)~최고(100%) 중 현재 · 3년평균比 = 최근 3년 평균 대비. 값은 엑셀 숫자로 계산했고 고정값·추정값은 쓰지 않았습니다.</p></div>' + detail;
   itRenderTrend();
   if (sel) itRenderPxChart(sel);
 }
 // ── 주요 품목 시세 추이 ── 시세표에는 판매량이 없으므로, 처음에는 시세 있는 브랜드가 많은 6개 품목 → 사용자가 고른 품목을 이 브라우저에 기억
 const IT_TR_KEY = 'suan_it_trend';
+const IT_TR_PIN = ['갈매기', '장족', '로인립'];
 function itTrendSel(st) {
   const names = st.items.filter(i => i.active > 0).map(i => i.item);
   let pick = null;
   try { pick = JSON.parse(localStorage.getItem(IT_TR_KEY) || 'null'); } catch (e) { pick = null; }
-  if (pick && Array.isArray(pick.items)) { const ok = pick.items.filter(n => names.includes(n)); return { items: ok, range: pick.range || 52, mine: true }; }
+  const pin = IT_TR_PIN.filter(n => names.includes(n));
+  const ord = a => names.filter(n => a.includes(n));
+  if (pick && Array.isArray(pick.items)) {
+    const its = pick.v >= 2 ? pick.items : pick.items.concat(pin);            // 예전에 고른 목록에도 갈매기·장족·로인립을 한 번 넣어 줌
+    return { items: ord(its), range: pick.range || 52, mode: pick.mode || 'pct', mine: true };
+  }
   const top = st.items.filter(i => i.active > 0).slice().sort((a, b) => (b.active - a.active) || (b.brands - a.brands)).slice(0, 6).map(i => i.item);
-  return { items: top, range: (IT.trRange || 52), mine: false };
+  return { items: ord(top.concat(pin)), range: 52, mode: 'pct', mine: false };
 }
-function itTrendSave(o) { try { localStorage.setItem(IT_TR_KEY, JSON.stringify({ items: o.items, range: o.range })); } catch (e) {} }
+function itTrendSave(o) { try { localStorage.setItem(IT_TR_KEY, JSON.stringify({ v: 2, items: o.items, range: o.range, mode: o.mode })); } catch (e) {} }
 function itTrendBox(st) {
   const t = itTrendSel(st);
   const chips = st.items.filter(i => i.active > 0).map(i => '<button type="button" class="trc' + (t.items.includes(i.item) ? ' on' : '') + '" data-tri="' + itEsc(i.item) + '">' + itEsc(i.item) + '</button>').join('');
   const rg = [[26, '6개월'], [52, '1년'], [156, '3년']].map(([w, l]) => '<button type="button" class="trr' + (t.range === w ? ' on' : '') + '" data-trr="' + w + '">' + l + '</button>').join('');
-  return '<div class="pxtr"><div class="slb" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><span>주요 품목 시세 추이 (원/kg · 그 주에 시세가 있는 브랜드 평균)</span><span class="trrg">' + rg + '</span></div>' +
+  const md = [['pct', '변화율 %'], ['won', '가격 원/kg']].map(([m, l]) => '<button type="button" class="trr' + (t.mode === m ? ' on' : '') + '" data-trm="' + m + '">' + l + '</button>').join('');
+  const ttl = t.mode === 'pct' ? '주요 품목 시세 변화율 (기간 첫 주 = 0%)' : '주요 품목 시세 추이 (원/kg · 그 주에 시세가 있는 브랜드 평균)';
+  return '<div class="pxtr"><div class="slb" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><span>' + ttl + '</span><span class="trrg">' + md + ' <span style="color:#334155">|</span> ' + rg + '</span></div>' +
     '<div class="trchips">' + chips + '</div>' +
-    '<div class="fn" id="it-tr-note" style="margin:4px 0 6px">' + (t.mine ? '고른 품목을 이 브라우저에 기억합니다. 품목 이름을 눌러 넣고 뺄 수 있습니다.' : '시세표에는 판매량이 없어 처음에는 <b>시세가 있는 브랜드가 많은 6개 품목</b>을 보여줍니다. 많이 파는 품목을 눌러 고르면 이 브라우저에 기억합니다.') + '</div>' +
+    '<div class="fn" id="it-tr-note" style="margin:4px 0 6px">' + (t.mode === 'pct' ? '변화율 = 같은 브랜드끼리 주마다 비교해 이어 붙인 값이라, 브랜드가 빠지거나 새로 들어와도 튀지 않습니다. 선에 마우스를 올리면 그 주 평균 가격도 보입니다.<br>' : '') + (t.mine ? '고른 품목을 이 브라우저에 기억합니다. 품목 이름을 눌러 넣고 뺄 수 있습니다.' : '시세표에는 판매량이 없어 처음에는 <b>시세가 있는 브랜드가 많은 6개 품목</b>을 보여줍니다. 많이 파는 품목을 눌러 고르면 이 브라우저에 기억합니다.') + '</div>' +
     (t.items.length ? '<div class="cw" style="height:280px"><canvas id="it-tr-ch"></canvas></div>' : '<p class="fn" style="padding:10px 0">위에서 품목을 고르세요.</p>') + '</div>';
+}
+// 변화율: 품목 지수 = 이웃한 두 주에 모두 시세가 있는 브랜드들의 가격 비율 평균을 이어 곱함 (첫 주 = 0%)
+function itTrendIndex(item, weeks) {
+  const rows = IT.price.book.rows.filter(e => e.item === item);
+  let idx = null, prevW = null;
+  return weeks.map(w => {
+    const now = rows.filter(e => e.v[w] > 0);
+    if (!now.length) return null;
+    if (idx == null) { idx = 1; prevW = w; return 0; }
+    const pair = now.filter(e => e.v[prevW] > 0);
+    if (pair.length) idx *= pair.reduce((a, e) => a + e.v[w] / e.v[prevW], 0) / pair.length;
+    prevW = w;
+    return Math.round((idx - 1) * 1000) / 10;
+  });
 }
 function itTrendSeries(item, weeks) {
   const rows = IT.price.book.rows.filter(e => e.item === item);
@@ -2604,10 +2709,10 @@ function itRenderTrend() {
   try {
     if (charts['it-tr-ch']) { charts['it-tr-ch'].destroy(); delete charts['it-tr-ch']; }
     charts['it-tr-ch'] = new Chart(itEl('it-tr-ch').getContext('2d'), { type: 'line',
-      data: { labels: weeks.map(w => w.slice(2)), datasets: t.items.map((n, i) => ({ label: n, data: itTrendSeries(n, weeks), borderColor: pal[i % pal.length], backgroundColor: 'transparent', tension: .2, spanGaps: true, pointRadius: 0, borderWidth: 2 })) },
+      data: { labels: weeks.map(w => w.slice(2)), datasets: t.items.map((n, i) => ({ label: n, data: t.mode === 'pct' ? itTrendIndex(n, weeks) : itTrendSeries(n, weeks), won: itTrendSeries(n, weeks), borderColor: pal[i % pal.length], backgroundColor: 'transparent', tension: .2, spanGaps: true, pointRadius: 0, borderWidth: 2 })) },
       options: { responsive: true, maintainAspectRatio: false, animation: { duration: 250 }, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } }, tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9', borderColor: '#334155', borderWidth: 1 } },
-        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 12 } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } }, title: { display: true, text: '원/kg', color: '#475569' } } } } });
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } }, tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9', borderColor: '#334155', borderWidth: 1, callbacks: { label: c => { const won = c.dataset.won && c.dataset.won[c.dataIndex]; return t.mode === 'pct' ? c.dataset.label + ': ' + (c.parsed.y > 0 ? '+' : '') + c.parsed.y + '%' + (won ? ' (평균 ' + Math.round(won).toLocaleString('ko-KR') + '원)' : '') : c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString('ko-KR') + '원'; } } } },
+        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 12 } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } }, title: { display: true, text: t.mode === 'pct' ? '기간 첫 주 대비 %' : '원/kg', color: '#475569' } } } } });
   } catch (e) { console.error('trend chart error', e); }
 }
 function itRenderPxChart(sel) {
@@ -2717,11 +2822,12 @@ async function itRunAI(force) {
 
 // ── 이벤트 ──
 function itOnClick(e) {
-  const tri = e.target.closest('[data-tri]'), trr = e.target.closest('[data-trr]');
-  if ((tri || trr) && IT.price) {
+  const tri = e.target.closest('[data-tri]'), trr = e.target.closest('[data-trr]'), trm = e.target.closest('[data-trm]');
+  if ((tri || trr || trm) && IT.price) {
     const t = itTrendSel(IT.price.stats);
     if (tri) { const n = tri.dataset.tri; t.items = t.items.includes(n) ? t.items.filter(x => x !== n) : t.items.concat([n]).slice(-10); }
     if (trr) t.range = +trr.dataset.trr;
+    if (trm) t.mode = trm.dataset.trm;
     itTrendSave(t); itRenderPrice(); return;
   }
   const row = e.target.closest('tr[data-pxi]');
