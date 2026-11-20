@@ -266,48 +266,118 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .trc,.trr{background:#0f172a;border:1px solid #334155;color:#94a3b8;border-radius:14px;padding:3px 10px;font-size:.76rem;cursor:pointer}
 .trc.on{background:#1e3a5f;border-color:#38bdf8;color:#e0f2fe}
 .trr{border-radius:6px;margin-left:4px}.trr.on{background:#334155;color:#f1f5f9}
+
+/* ── v380 디자인 ── */
+html,body{font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo','Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums;background:#0e1520}
+header{background:#3b322c;border-bottom:none;padding:10px 24px}
+.logo{display:flex;align-items:center;gap:10px;color:#f2e6da;font-weight:700;font-size:1.02rem}
+.logo img{width:28px;height:28px;border-radius:5px;display:block}
+.live{background:none;border:1px solid #8c7d70;color:#e4d6c8;animation:none;font-weight:600}
+.asof{color:#cdbfb2}
+.fsz button{background:#4a4038;border-color:#6b5e53;color:#f2e6da}
+.fsz button:hover{background:#5a4f46}
+#pwa-install-btn{background:#4a4038!important;border-color:#6b5e53!important;color:#f2e6da!important}
+.tab-nav{background:#0e1520;border-bottom:1px solid #243041;padding:0 24px;gap:4px}
+.tab-btn{border:none;border-radius:0;background:none;color:#8a96a8;padding:13px 12px 10px;border-bottom:3px solid transparent;font-weight:600;font-size:.88rem;transition:color .15s}
+.tab-btn:hover{background:none;color:#e2e8f0}
+.tab-btn.active,.tab-btn.hl.active{background:none;color:#f1f5f9;border-bottom-color:#c8a888}
+.tab-btn.hl{border-color:transparent;color:#8a96a8}
+.tab-btn:focus-visible,.mnav select:focus-visible{outline:2px solid #c8a888;outline-offset:2px}
+.page{padding:20px 24px}
+.pt{font-size:1.2rem}
+.ps{font-size:.78rem;color:#8a96a8}
+.card{background:#151e2b;border-color:#243041;border-radius:6px}
+.ct{font-size:.9rem}
+.tag,.tag.tb,.tag.tg,.tag.to,.tag.tp,.tag.tr,.tag.tz{background:none;border:none;color:#7d899b;font-weight:500;padding:0;font-size:.72rem}
+.bdg,.bdg-g{background:none;color:#7d899b;font-weight:500;font-size:.74rem;padding:0}
+.slb{text-transform:none;letter-spacing:0;font-size:.82rem;color:#aab4c3}
+.fxnote{background:none;border:none;padding:0;margin:-8px 0 16px;font-size:.76rem}
+.spin{width:12px;height:12px;border:2px solid #334155;border-top-color:#c8a888;border-radius:50%}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.cu,.up{color:#f05252}.cd,.dn{color:#5b9cf5}
+/* 시세판: 카드 여러 개 → 칸막이 한 줄 */
+#kpi-timing,#kpi-market,#kpi-weekly,#kpi-monthly,#kpi-yearly,#fx-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:0;background:#151e2b;border:1px solid #243041;border-radius:6px;overflow:hidden;margin-bottom:18px}
+#kpi-timing .kpi,#kpi-market .kpi,#kpi-weekly .kpi,#kpi-monthly .kpi,#kpi-yearly .kpi,#fx-kpi .kpi{background:none;border-radius:0;padding:14px 18px;box-shadow:-1px 0 0 #243041,0 -1px 0 #243041;margin:0}
+.kl{font-size:.8rem;color:#8a96a8;font-weight:600}
+.kv{font-size:1.55rem;letter-spacing:-.3px;margin:2px 0 3px}
+/* 오늘의 판정 */
+.vd{display:grid;grid-template-columns:minmax(240px,1fr) 1.5fr;gap:32px;align-items:center;background:#151e2b;border:1px solid #243041;border-left:5px solid #d4a017;border-radius:6px;padding:18px 24px;margin-bottom:16px}
+.vd.tv-g{border-left-color:#3fae6a}.vd.tv-r{border-left-color:#e5484d}
+.vd-k{font-size:.8rem;color:#8a96a8;font-weight:600}
+.vd-h{font-size:1.85rem;font-weight:800;line-height:1.25;margin:4px 0 6px;color:#f8fafc;letter-spacing:-.5px;word-break:keep-all}
+.vd.tv-y .vd-h{color:#f5c84c}.vd.tv-g .vd-h{color:#6fd39a}.vd.tv-r .vd-h{color:#ff7b7f}
+.vd-s{font-size:.95rem;color:#c3ccd8;word-break:keep-all}
+.sc-t{font-size:.8rem;color:#8a96a8;margin-bottom:30px}.sc-t b{color:#e2e8f0}
+.sc{position:relative;height:10px;display:flex}
+.sc span{height:100%}.sc .z1{background:#1f4d36}.sc .z2{background:#2a3445}.sc .z3{background:#5a2b2b}
+.sc i{position:absolute;top:-7px;width:3px;height:24px;background:#f8fafc;margin-left:-1.5px;border-radius:1px}
+.sc b{position:absolute;top:-28px;transform:translateX(-50%);font-size:.9rem;white-space:nowrap;color:#f8fafc}
+.sc-l{position:relative;height:34px;font-size:.74rem;color:#8a96a8}
+.sc-l em{position:absolute;top:6px;transform:translateX(-50%);font-style:normal;white-space:nowrap;text-align:center;line-height:1.35}
+.tbox{background:none;padding:0}
+.tgrid{background:#151e2b;border:1px solid #243041;border-radius:6px;gap:0;overflow:hidden}
+.titem{background:none;border-radius:0;padding:13px 18px;box-shadow:-1px 0 0 #243041,0 -1px 0 #243041}
+.til{color:#8a96a8;font-weight:600}
+.fkind{display:inline-block;font-size:.66rem;color:#aab4c3;border:1px solid #334155;border-radius:3px;padding:0 4px;margin-right:6px;vertical-align:1px}
+details.xn>summary{cursor:pointer;color:#8a96a8;font-size:.78rem;margin:6px 0;list-style:none;text-decoration:underline;text-underline-offset:3px}
+details.xn>summary::-webkit-details-marker{display:none}
+details.xn[open]>summary{margin-bottom:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.mnav{display:none}
+@media (max-width:640px){
+  header{padding:10px 16px}.asof,.fsz{display:none}
+  .tab-nav{display:none}
+  .mnav{display:block;position:sticky;top:0;z-index:99;background:#0e1520;border-bottom:1px solid #243041;padding:10px 16px}
+  .mnav select{width:100%;font:600 1rem inherit;font-family:inherit;padding:9px 10px;border:1px solid #334155;border-radius:6px;background:#151e2b;color:#f1f5f9}
+  .page{padding:16px}
+  .vd{grid-template-columns:1fr;gap:16px;padding:16px 18px}.vd-h{font-size:1.55rem}
+  #kpi-timing,#kpi-market,#kpi-weekly,#kpi-monthly,#kpi-yearly,#fx-kpi{grid-template-columns:1fr 1fr}
+  .kv{font-size:1.3rem}
+  .tgrid{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 <header>
   <div style="display:flex;align-items:center">
-    <span class="logo">SUAN FOOD 지육가 대시보드</span>
+    <span class="logo"><img src="/icons/icon-192x192.png" alt="" width="28" height="28" onerror="this.remove()">수안푸드 지육가</span>
     <span class="live">LIVE</span>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <button id="pwa-install-btn" onclick="installPWA()" style="display:none;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 12px;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">
-      📲 앱 설치
+      앱 설치
     </button>
     <span class="fsz" role="group" aria-label="AI 분석 글자 크기"><button type="button" id="fs-down" onclick="setAiFs(-1)" title="AI 분석 글자 작게" aria-label="글자 작게">가−</button><button type="button" id="fs-up" onclick="setAiFs(1)" title="AI 분석 글자 크게" aria-label="글자 크게">가+</button></span>
     <span class="asof" id="asof">—</span>
   </div>
 </header>
 <div class="tab-nav">
-  <button class="tab-btn hl active" onclick="switchTab('timing',this)">🎯 수입 타이밍</button>
-  <button class="tab-btn" onclick="switchTab('market',this)">🌍 수입육 시장동향</button>
-  <button class="tab-btn" onclick="switchTab('items',this)">🧩 품목 전략</button>
-  <button class="tab-btn" onclick="switchTab('weekly',this)">📊 주간 보고서</button>
-  <button class="tab-btn" onclick="switchTab('monthly',this)">📅 월간 보고서</button>
-  <button class="tab-btn" onclick="switchTab('yearly',this)">📈 연간 보고서</button>
-  <button class="tab-btn" onclick="switchTab('fx',this)">💱 환율·외환</button>
+  <button class="tab-btn hl active" onclick="switchTab('timing',this)">수입 타이밍</button>
+  <button class="tab-btn" onclick="switchTab('market',this)">수입육 시장동향</button>
+  <button class="tab-btn" onclick="switchTab('items',this)">품목 전략</button>
+  <button class="tab-btn" onclick="switchTab('weekly',this)">주간 보고서</button>
+  <button class="tab-btn" onclick="switchTab('monthly',this)">월간 보고서</button>
+  <button class="tab-btn" onclick="switchTab('yearly',this)">연간 보고서</button>
+  <button class="tab-btn" onclick="switchTab('fx',this)">환율·외환</button>
 </div>
 
+<div class="mnav"><label for="tab-sel" class="sr">화면 고르기</label><select id="tab-sel" onchange="pickTab(this.value)"></select></div>
 <!-- 수입 타이밍 -->
 <div id="page-timing" class="page active">
   <div class="ph">
     <div><div class="pt">수입 타이밍 분석</div><div class="ps">계약 후 2~3개월 결제 기준 · 환율 추세 반영</div></div>
-    <span class="bdg bdg-g">핵심 지표</span>
+    
   </div>
-  <div id="fx-note" class="fxnote">💱 환율 기준 확인 중…</div>
-  <div class="g5" id="kpi-timing"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span> 시세 로딩 중...</div></div>
-  <div id="timing-main" class="tbox"><div class="lding"><span class="spin">⏳</span> 분석 중...</div></div>
+  <div id="fx-note" class="fxnote">환율 기준 확인 중…</div>
+  <div class="g5" id="kpi-timing"><div class="lding" style="grid-column:1/-1"><span class="spin" aria-hidden="true"></span> 시세 로딩 중...</div></div>
+  <div id="timing-main" class="tbox"><div class="lding"><span class="spin" aria-hidden="true"></span> 분석 중...</div></div>
   <div class="g2">
-    <div class="card"><div class="ch"><span class="ct">📈 USD/KRW 30일 추이</span><span class="tag tz" id="tag-c-usd">환율 이력 확인 중</span></div><div class="cw"><canvas id="c-usd"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">📈 EUR/KRW 30일 추이</span><span class="tag tz" id="tag-c-eur">환율 이력 확인 중</span></div><div class="cw"><canvas id="c-eur"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">USD/KRW 30일 추이</span><span class="tag tz" id="tag-c-usd">환율 이력 확인 중</span></div><div class="cw"><canvas id="c-usd"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">EUR/KRW 30일 추이</span><span class="tag tz" id="tag-c-eur">환율 이력 확인 중</span></div><div class="cw"><canvas id="c-eur"></canvas></div></div>
   </div>
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 30일</span><span class="tag to">Yahoo Finance</span></div><div class="cw"><canvas id="c-lh"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 부위별 가격</span><span class="tag tz" id="tag-cuts-timing">확인 중</span></div><div id="cuts-timing"><div class="lding"><span class="spin">⏳</span></div></div></div>
+    <div class="card"><div class="ch"><span class="ct">국내 부위별 가격</span><span class="tag tz" id="tag-cuts-timing">확인 중</span></div><div id="cuts-timing"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div></div>
   </div>
 
   <!-- 도착 원가 계산기 -->
@@ -346,16 +416,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   <!-- EU 공식 지육가 -->
   <div class="card" style="margin-bottom:14px">
     <div class="ch">
-      <span class="ct">🇪🇺 EU 국가별 지육가 (공식)</span>
+      <span class="ct">EU 국가별 지육가 (공식)</span>
       <span class="tag tg">EU 집행위(api.tech.ec.europa.eu) · Class S EUR/100kg</span>
     </div>
-    <div id="eu-pig-wrap"><div class="lding"><span class="spin">⏳</span> EU 공식 데이터 로딩 중...</div></div>
+    <div id="eu-pig-wrap"><div class="lding"><span class="spin" aria-hidden="true"></span> EU 공식 데이터 로딩 중...</div></div>
     <div class="g2" style="margin-top:12px;margin-bottom:0">
       <div>
         <div class="slb" style="margin-bottom:6px">국가별 추이 (Class S, 최근 3개월)</div>
         <div class="cw"><canvas id="c-eu"></canvas></div>
       </div>
-      <div id="eu-table-wrap"><div class="lding"><span class="spin">⏳</span></div></div>
+      <div id="eu-table-wrap"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div>
     </div>
     <p class="fn">※ EU 집행위 농업총국 공식 주간 데이터 · EUR/100kg 지육중량 기준<span id="eu-fx-note"></span></p>
   </div>
@@ -373,21 +443,21 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
     <div><div class="pt">수입육 시장동향</div><div class="ps" id="mkt-date">—</div></div>
     <span class="bdg">실시간 자료만 표시</span>
   </div>
-  <div class="g4" id="kpi-market"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
+  <div class="g4" id="kpi-market"><div class="lding" style="grid-column:1/-1"><span class="spin" aria-hidden="true"></span></div></div>
   <div class="g2">
     <div class="card">
       <div class="ch"><span class="ct">국가별 돼지고기 수입 통계 (관세청)</span><span class="tag tz" id="tag-cx">확인 중</span></div>
-      <div id="cx-wrap"><div class="lding"><span class="spin">⏳</span> 관세청 통계 확인 중...</div></div>
+      <div id="cx-wrap"><div class="lding"><span class="spin" aria-hidden="true"></span> 관세청 통계 확인 중...</div></div>
     </div>
     <div class="card">
       <div class="ch"><span class="ct">수출국별 위험 보도 (최근 30일)</span><span class="tag tz" id="tag-risk-cnt">확인 중</span></div>
-      <div id="risk-counts"><div class="lding"><span class="spin">⏳</span></div></div>
+      <div id="risk-counts"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div>
     </div>
   </div>
   <div class="card" style="margin-bottom:14px">
     <div class="ch"><span class="ct">수출국 위험 알림 — 질병·수입 금지·관세 보도</span><span class="tag tz" id="tag-risk">확인 중</span></div>
     <div id="risk-filter" class="rk-f"></div>
-    <div id="risk-list"><div class="lding"><span class="spin">⏳</span> 뉴스 확인 중...</div></div>
+    <div id="risk-list"><div class="lding"><span class="spin" aria-hidden="true"></span> 뉴스 확인 중...</div></div>
     <p class="fn" style="margin-top:8px">※ Google 뉴스 검색에서 제목에 <b>주요 수출국</b>과 <b>위험 주제(아프리카돼지열병·구제역·수입 금지·관세)</b>가 함께 들어간 기사만 모았습니다. 제목만 보여주며 내용·사실 여부는 원문과 공식 발표(<a href="https://www.qia.go.kr" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">농림축산검역본부</a>, <a href="https://www.woah.org/en/disease/african-swine-fever/" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">WOAH</a>)로 확인하세요.</p>
   </div>
   <div class="card">
@@ -400,18 +470,18 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <!-- 주간 보고서 -->
 <div id="page-weekly" class="page">
   <div class="ph"><div><div class="pt">주간 보고서</div><div class="ps" id="rng-weekly">—</div></div><span class="bdg">Weekly Report</span></div>
-  <div class="g4" id="kpi-weekly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
+  <div class="g4" id="kpi-weekly"><div class="lding" style="grid-column:1/-1"><span class="spin" aria-hidden="true"></span></div></div>
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 주간</span><span class="tag to">7일</span></div><div class="cw"><canvas id="wc-lh"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🌾 사료 원료가 주간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="wc-feed"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">사료 원료가 주간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="wc-feed"></canvas></div></div>
   </div>
   <div class="g2">
     <div class="card">
       <div class="ch"><span class="ct">CME Lean Hog 일별 시세</span><span class="tag tz" id="rng-wlh">—</span></div>
-      <div id="tbl-wlh"><div class="lding"><span class="spin">⏳</span></div></div>
-      <button class="mbtn" onclick="window.open('https://www.pig333.com/markets_and_prices/','_blank')">pig333.com →</button>
+      <div id="tbl-wlh"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div>
+      <button class="mbtn" onclick="window.open('https://www.pig333.com/markets_and_prices/','_blank')">pig333.com 열기</button>
     </div>
-    <div class="card"><div class="ch"><span class="ct">🇰🇷 국내 부위별 가격</span><span class="tag tz" id="tag-cuts-weekly">확인 중</span></div><div id="cuts-weekly"><div class="lding"><span class="spin">⏳</span></div></div></div>
+    <div class="card"><div class="ch"><span class="ct">국내 부위별 가격</span><span class="tag tz" id="tag-cuts-weekly">확인 중</span></div><div id="cuts-weekly"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div></div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct" style="font-size:.9rem">주간 AI 분석</span><span class="amdl" id="m-weekly">—</span></div>
@@ -423,13 +493,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <!-- 월간 보고서 -->
 <div id="page-monthly" class="page">
   <div class="ph"><div><div class="pt">월간 보고서</div><div class="ps" id="rng-monthly">—</div></div><span class="bdg">Monthly Report</span></div>
-  <div class="g4" id="kpi-monthly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
+  <div class="g4" id="kpi-monthly"><div class="lding" style="grid-column:1/-1"><span class="spin" aria-hidden="true"></span></div></div>
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 월간</span><span class="tag to">30일</span></div><div class="cw"><canvas id="mc-lh"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🌾 사료 원료가 월간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="mc-feed"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">사료 원료가 월간</span><span class="tag tg">옥수수/대두</span></div><div class="cw"><canvas id="mc-feed"></canvas></div></div>
   </div>
   <div class="g2" style="grid-template-columns:1fr">
-    <div class="card"><div class="ch"><span class="ct">CME Lean Hog 월간 시세표</span><span class="tag tz" id="rng-mlh">—</span></div><div id="tbl-mlh"><div class="lding"><span class="spin">⏳</span></div></div></div>
+    <div class="card"><div class="ch"><span class="ct">CME Lean Hog 월간 시세표</span><span class="tag tz" id="rng-mlh">—</span></div><div id="tbl-mlh"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div></div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct" style="font-size:.9rem">월간 AI 분석</span><span class="amdl" id="m-monthly">—</span></div>
@@ -441,17 +511,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <!-- 연간 보고서 -->
 <div id="page-yearly" class="page">
   <div class="ph"><div><div class="pt">연간 보고서</div><div class="ps" id="rng-yearly">—</div></div><span class="bdg">Yearly Report</span></div>
-  <div class="g4" id="kpi-yearly"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span></div></div>
+  <div class="g4" id="kpi-yearly"><div class="lding" style="grid-column:1/-1"><span class="spin" aria-hidden="true"></span></div></div>
   <div class="g2" style="grid-template-columns:1fr">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 1년</span><span class="tag to">365일</span></div><div class="cwl"><canvas id="yc-lh"></canvas></div></div>
   </div>
   <div class="g2">
-    <div class="card"><div class="ch"><span class="ct">💱 USD/KRW 1년 추이</span><span class="tag tz" id="tag-yc-usd">환율 이력 확인 중</span></div><div class="cw"><canvas id="yc-usd"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">💱 EUR/KRW 1년 추이</span><span class="tag tz" id="tag-yc-eur">환율 이력 확인 중</span></div><div class="cw"><canvas id="yc-eur"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">USD/KRW 1년 추이</span><span class="tag tz" id="tag-yc-usd">환율 이력 확인 중</span></div><div class="cw"><canvas id="yc-usd"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">EUR/KRW 1년 추이</span><span class="tag tz" id="tag-yc-eur">환율 이력 확인 중</span></div><div class="cw"><canvas id="yc-eur"></canvas></div></div>
   </div>
   <div class="g2">
-    <div class="card"><div class="ch"><span class="ct">🌽 옥수수 선물 1년</span><span class="tag tg">ZC=F</span></div><div class="cw"><canvas id="yc-zc"></canvas></div></div>
-    <div class="card"><div class="ch"><span class="ct">🫘 대두 선물 1년</span><span class="tag tp">ZS=F</span></div><div class="cw"><canvas id="yc-zs"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">옥수수 선물 1년</span><span class="tag tg">ZC=F</span></div><div class="cw"><canvas id="yc-zc"></canvas></div></div>
+    <div class="card"><div class="ch"><span class="ct">대두 선물 1년</span><span class="tag tp">ZS=F</span></div><div class="cw"><canvas id="yc-zs"></canvas></div></div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct" style="font-size:.9rem">연간 AI 분석</span><span class="amdl" id="m-yearly">—</span></div>
@@ -463,7 +533,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 <!-- ══════════════ 환율·외환 ══════════════ -->
 <div id="page-fx" class="page">
   <div class="ph"><div><div class="pt">환율·외환</div><div class="ps">실시간 환율(30분봉) · 달러인덱스 · 국채 10년 금리 · 시장 뉴스(네이버 증권)</div></div><span class="bdg">실제 수신값만</span></div>
-  <div class="g3" id="fx-kpi"><div class="lding" style="grid-column:1/-1"><span class="spin">⏳</span> 시세 확인 중...</div></div>
+  <div class="g3" id="fx-kpi"><div class="lding" style="grid-column:1/-1"><span class="spin" aria-hidden="true"></span> 시세 확인 중...</div></div>
   <div class="g3">
     <div class="card"><div class="ch"><span class="ct">USD/KRW 30분봉</span><span class="tag tb" id="fx-tag-USDKRW">5일</span></div><div class="cw"><canvas id="fx-c-USDKRW"></canvas></div></div>
     <div class="card"><div class="ch"><span class="ct">EUR/KRW 30분봉</span><span class="tag to" id="fx-tag-EURKRW">5일</span></div><div class="cw"><canvas id="fx-c-EURKRW"></canvas></div></div>
@@ -472,7 +542,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   <p class="fn" id="fx-src" style="margin:-6px 0 14px">출처: Yahoo Finance 30분봉 · 네이버 증권(매매기준율·국채 금리·뉴스) — 받지 못한 값은 "수집 실패"로 표시하고 고정값으로 채우지 않습니다.</p>
   <div class="card">
       <div class="ch"><span class="ct">시장 뉴스</span><span class="tag tz" id="fx-n-tag">확인 중</span></div>
-      <div id="fx-news"><div class="lding"><span class="spin">⏳</span></div></div>
+      <div id="fx-news"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct" style="font-size:.9rem">AI 환율 분석</span><span class="amdl" id="m-fx">—</span></div>
@@ -491,7 +561,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
   <div class="card" id="it-m-card">
     <div class="ch"><span class="ct">주간회의 자료 — 회의록·주간 시세표 엑셀·사진</span><span class="tag tz" id="it-m-stat">미등록</span></div>
     <div class="dz" id="dz-meeting" tabindex="0" role="button" aria-label="주간회의 엑셀 또는 사진 올리기">
-      <div class="dzi">📋</div>
+      
       <div class="dzt">주간회의 엑셀이나 사진을 여기로 끌어다 놓으세요</div>
       <div class="dzs">또는 눌러서 파일 선택 · 여러 개 가능 (.xlsx .xls .csv · 사진 .jpg .png .webp)<br>
         <b>주간 시세표</b>(품목·브랜드 × 주차별 저가·고가·평균가 시트)는 자동으로 알아보고 전체 기간을 계산합니다 — 엑셀은 브라우저 안에서만 처리<br>
@@ -573,18 +643,18 @@ function renderFxNote(cur, uH, eH) {
     if (c && c.price) {
       const w = fxWant(c);
       if (c.basis === w) { okParts.push((nm + ' ' + (c.date || '')).trim()); okLabel = c.basisLabel || FXL[w]; }
-      else { lines.push('⚠️ ' + nm + ': 네이버 응답에 \'' + FXL[w] + '\' 값이 없어 <b>' + fxEsc(c.basisLabel || '기준 미상') + '</b>을 표시 중입니다 (' + FXN[w] + ' 아님).'); bump('warn'); }
+      else { lines.push(nm + ': 네이버 응답에 \'' + FXL[w] + '\' 값이 없어 <b>' + fxEsc(c.basisLabel || '기준 미상') + '</b>을 표시 중입니다 (' + FXN[w] + ' 아님).'); bump('warn'); }
     } else {
       const why = cur && cur.fxErrors && cur.fxErrors[k];
-      lines.push('❌ ' + nm + '/KRW 현재 환율 수집 실패' + (why ? ' (' + fxEsc(why) + ')' : '') + ' — 고정값으로 대신하지 않았습니다.'); bump('bad');
+      lines.push(nm + '/KRW 현재 환율 수집 실패' + (why ? ' (' + fxEsc(why) + ')' : '') + ' — 고정값으로 대신하지 않았습니다.'); bump('bad');
     }
     if (h && h.rows && h.rows.length) {
-      if (h.basis !== fxWant(h)) { lines.push('⚠️ ' + nm + '/KRW 추이 그래프는 ' + fxEsc(h.source === 'yahoo' ? 'Yahoo 국제 종가' : (h.basisLabel || '기준 미상')) + ' 기준입니다 (' + FXN[fxWant(h)] + ' 아님).'); bump('warn'); }
+      if (h.basis !== fxWant(h)) { lines.push(nm + '/KRW 추이 그래프는 ' + fxEsc(h.source === 'yahoo' ? 'Yahoo 국제 종가' : (h.basisLabel || '기준 미상')) + ' 기준입니다 (' + FXN[fxWant(h)] + ' 아님).'); bump('warn'); }
     } else {
-      lines.push('❌ ' + nm + '/KRW 이력 수집 실패 — 추세·예측을 계산하지 않았고 가짜 값으로 채우지 않았습니다.'); bump('bad');
+      lines.push(nm + '/KRW 이력 수집 실패 — 추세·예측을 계산하지 않았고 가짜 값으로 채우지 않았습니다.'); bump('bad');
     }
   });
-  const head = okParts.length ? '💱 환율 기준: <b>네이버 증권 · ' + fxEsc(okLabel) + '</b> (' + okParts.map(fxEsc).join(' · ') + ' 기준)' : '💱 환율 기준: 네이버 증권';
+  const head = okParts.length ? '환율 기준: <b>네이버 증권 · ' + fxEsc(okLabel) + '</b> (' + okParts.map(fxEsc).join(' · ') + ' 기준)' : '환율 기준: 네이버 증권';
   el.className = 'fxnote' + (level ? ' ' + level : '');
   el.innerHTML = [head].concat(lines).join('<br>');
 }
@@ -599,11 +669,18 @@ const CLR = {
 };
 
 // ─── 탭 전환 ─────────────────────────────────────────
+// 휴대폰: 탭 대신 고르기 목록
+function pickTab(name) { const b = [...document.querySelectorAll('.tab-btn')].find(x => (x.getAttribute('onclick') || '').includes("'" + name + "'")); if (b) b.click(); }
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('tab-sel'); if (!sel) return;
+  sel.innerHTML = [...document.querySelectorAll('.tab-btn')].map(b => { const m = (b.getAttribute('onclick') || '').match(/switchTab\('([a-z]+)'/); return m ? '<option value="' + m[1] + '"' + (b.classList.contains('active') ? ' selected' : '') + '>' + b.textContent.trim() + '</option>' : ''; }).join('');
+});
 function switchTab(name, btn) {
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   btn.classList.add('active');
+  const sel = document.getElementById('tab-sel'); if (sel) sel.value = name;
   if (!loaded.has(name)) {
     loaded.add(name);
     if (name === 'timing')      loadTiming().catch(e => console.error('timing:', e));
@@ -642,7 +719,7 @@ function mkChart(id, rows, sym, unit, isReal) {
         warnEl = document.createElement('div');
         warnEl.className = 'fake-data-warn';
         warnEl.style.cssText = 'background:#451a03;border:1px solid #ea580c;color:#fb923c;font-size:.68rem;font-weight:700;padding:5px 9px;border-radius:5px;margin-bottom:8px;text-align:center';
-        warnEl.textContent = '⚠️ 실데이터 수신 실패 — 추정 패턴 데이터 표시 중 (실제 시세 아님)';
+        warnEl.textContent = '실데이터 수신 실패 — 추정 패턴 데이터 표시 중 (실제 시세 아님)';
         canvas.closest('.cw,.cwl')?.before(warnEl);
       }
     } else if (warnEl) {
@@ -705,8 +782,8 @@ function renderKpi(id, data, keys) {
   const el = document.getElementById(id);
   if (!el) return;
   const items = keys || [
-    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},
-    {k:'ZC',i:'🌽',l:'옥수수 선물'},{k:'ZS',i:'🫘',l:'대두 선물'}
+    {k:'LH',i:'',l:'CME Lean Hog'},
+    {k:'ZC',i:'',l:'옥수수 선물'},{k:'ZS',i:'',l:'대두 선물'}
   ];
   el.innerHTML = items.map(item => {
     const d = data?.[item.k];
@@ -714,15 +791,15 @@ function renderKpi(id, data, keys) {
     if (isFx && (!d || !d.price)) {
       // 환율은 못 받았으면 못 받았다고 표시한다 (고정값·추정값으로 채우지 않음)
       const why = data?.fxErrors?.[item.k];
-      return `<div class="kpi" style="border:1px solid #7f1d1d"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5">${why ? `<span class="whyclip" title="${fxEsc(why)}">${fxEsc(why)}</span>` : ''}고정값으로 대신하지 않음</div></div>`;
+      return `<div class="kpi" style="border:1px solid #7f1d1d"><div class="kl">${item.l}</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5">${why ? `<span class="whyclip" title="${fxEsc(why)}">${fxEsc(why)}</span>` : ''}고정값으로 대신하지 않음</div></div>`;
     }
-    if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
+    if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
     const chgHtml = d.change != null ? `<div class="kc ${d.change>0?'up':'dn'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}${d.changePct?' ('+d.changePct+'%)':''}</div>` : '';
     if (isFx) {
       const buy = d.basis === fxWant(d);
-      return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku" style="color:${buy?'#86efac':'#fb923c'};font-weight:700">원 · ${fxEsc(d.basisLabel||'기준 미상')}${buy?'':' (' + FXN[fxWant(d)] + ' 아님)'}</div><div class="ku">${d.source==='naver'?'네이버 증권':fxEsc(d.source||'')}${d.date?' · '+fxEsc(d.date)+' 기준':''}</div></div>`;
+      return `<div class="kpi"><div class="kl">${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku" style="color:${buy?'#86efac':'#fb923c'};font-weight:700">원 · ${fxEsc(d.basisLabel||'기준 미상')}${buy?'':' (' + FXN[fxWant(d)] + ' 아님)'}</div><div class="ku">${d.source==='naver'?'네이버 증권':fxEsc(d.source||'')}${d.date?' · '+fxEsc(d.date)+' 기준':''}</div></div>`;
     }
-    return `<div class="kpi"><div class="kl">${item.i} ${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku">${d.unit||''}${d.date?' · '+d.date:''}</div>${chgHtml}</div>`;
+    return `<div class="kpi"><div class="kl">${item.l}</div><div class="kv">${Number(d.price).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div><div class="ku">${d.unit||''}${d.date?' · '+d.date:''}</div>${chgHtml}</div>`;
   }).join('');
 }
 
@@ -752,6 +829,9 @@ function renderTable(id, rows, unit, max=8) {
   el.innerHTML = h;
 }
 
+// 글 앞에 붙은 이모지 떼기 (서버 판정 문구의 🟡 등)
+const EMO_LEAD = /^[\s\u2600-\u27BF\u2B00-\u2BFF\u{1F000}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]+/u;
+function noEmo(t) { return String(t == null ? '' : t).replace(EMO_LEAD, ''); }
 // ─── 타이밍 메인 렌더 ────────────────────────────────
 function renderTimingMain(json) {
   if (!json.ok) {
@@ -764,7 +844,21 @@ function renderTimingMain(json) {
   // 값이 없으면 물음표·0 으로 채우지 않고 '자료 없음'/'수집 실패'로 표시
   const trTxt = t => t ? `${t.dir} (${t.pct}%)` : '자료 없음';
   const curTxt = (v, info) => v != null ? `현재: ${Number(v).toLocaleString()}원${info?.basisLabel ? ' · ' + fxEsc(info.basisLabel) : ''}` : '현재: 수집 실패';
-  let h = `<div class="tv ${vc}">${json.verdict}</div>`;
+  const vtxt = noEmo(json.verdict), vparts = vtxt.split(/\s+[—-]\s+/);
+  let scale = '';
+  {
+    const c = json.criteria && json.criteria.usd, now = json.current && json.current.usd;
+    if (c && now != null && (!fxU || !fxU.basis || fxU.basis === 'std')) {
+      const a = +c.favor, m = +c.center, b = +c.burden, lo = Math.min(a, now) - (b - a) * 0.35, hi = Math.max(b, now) + (b - a) * 0.35;
+      const P = v => ((v - lo) / (hi - lo) * 100).toFixed(2) + '%', W = (x, y) => ((y - x) / (hi - lo) * 100).toFixed(2) + '%';
+      const zone = now < a ? '유리' : now > b ? '부담' : now <= m ? '중심 아래' : '중심 위';
+      scale = '<div class="sc-t">원/달러가 판정 기준의 어디쯤인지 · 지금 <b>' + zone + '</b> 구간</div>' +
+        '<div class="sc" role="img" aria-label="USD/KRW ' + now + '원, 유리 ' + a + ' 중심 ' + m + ' 부담 ' + b + '"><span class="z1" style="width:' + W(lo, a) + '"></span><span class="z2" style="width:' + W(a, b) + '"></span><span class="z3" style="width:' + W(b, hi) + '"></span>' +
+        '<i style="left:' + P(now) + '"></i><b style="left:' + P(now) + '">' + Number(now).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) + '</b></div>' +
+        '<div class="sc-l"><em style="left:' + P(a) + '">' + a.toLocaleString('ko-KR') + '<br>유리</em><em style="left:' + P(m) + '">' + m.toLocaleString('ko-KR') + '<br>중심</em><em style="left:' + P(b) + '">' + b.toLocaleString('ko-KR') + '<br>부담</em></div>';
+    } else if (c && now != null) scale = '<div class="sc-t">판정 기준은 매매기준율이라 지금 받은 ' + fxEsc((fxU && fxU.basisLabel) || '') + ' 환율로는 눈금자를 그리지 않았습니다</div>';
+  }
+  let h = '<div class="vd ' + vc + '"><div><div class="vd-k">오늘의 판정</div><div class="vd-h">' + fxEsc(vparts[0]) + '</div>' + (vparts[1] ? '<div class="vd-s">' + fxEsc(vparts.slice(1).join(' — ')) + '</div>' : '') + '</div><div>' + scale + '</div></div>';
 
   // 핵심 수치 4개
   {
@@ -775,10 +869,10 @@ function renderTimingMain(json) {
                   : `<span style="color:#4ade80">${diff.toLocaleString()}원/kg 절감 가능</span>`)
       : '—';
     h += `<div class="tgrid">
-      <div class="titem"><div class="til">📈 USD/KRW 추세 (30일)</div><div class="tiv">${trTxt(trends.usd)}</div><div class="tis">${curTxt(json.current?.usd, fxU)}</div></div>
-      <div class="titem"><div class="til">🎯 2~3개월 후 USD 예측</div><div class="tiv">${hasFu ? fu.low + '~' + fu.high + '원' : '자료 없음'}</div><div class="tis">${hasFu ? '기준값: ' + fu.base + '원' : '환율 이력이 없어 계산하지 않음'}</div></div>
-      <div class="titem"><div class="til">💰 현재 수입원가 (추정)</div><div class="tiv">${importCost.currentKrwPerKg != null ? importCost.currentKrwPerKg.toLocaleString() + '원/kg' : '—'}</div><div class="tis">CME LH + 물류비 기준</div></div>
-      <div class="titem"><div class="til">📅 2~3개월 후 예상 원가</div><div class="tiv">${importCost.forecastKrwPerKg != null ? importCost.forecastKrwPerKg.toLocaleString() + '원/kg' : '—'}</div><div class="tis">${diffStr}</div></div>
+      <div class="titem"><div class="til">USD/KRW 추세 (30일)</div><div class="tiv">${trTxt(trends.usd)}</div><div class="tis">${curTxt(json.current?.usd, fxU)}</div></div>
+      <div class="titem"><div class="til">2~3개월 후 USD 예측</div><div class="tiv">${hasFu ? fu.low + '~' + fu.high + '원' : '자료 없음'}</div><div class="tis">${hasFu ? '기준값: ' + fu.base + '원' : '환율 이력이 없어 계산하지 않음'}</div></div>
+      <div class="titem"><div class="til">현재 수입원가 (추정)</div><div class="tiv">${importCost.currentKrwPerKg != null ? importCost.currentKrwPerKg.toLocaleString() + '원/kg' : '—'}</div><div class="tis">CME LH + 물류비 기준</div></div>
+      <div class="titem"><div class="til">2~3개월 후 예상 원가</div><div class="tiv">${importCost.forecastKrwPerKg != null ? importCost.forecastKrwPerKg.toLocaleString() + '원/kg' : '—'}</div><div class="tis">${diffStr}</div></div>
     </div>`;
   }
 
@@ -786,7 +880,7 @@ function renderTimingMain(json) {
   {
     const fe = forecasts.eur, hasFe = !!(fe && fe.base != null);
     h += `<div style="background:#1e293b;border-radius:7px;padding:10px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span style="font-size:.72rem;color:#64748b;flex-shrink:0">🇪🇺 EUR/KRW 예측</span>
+      <span style="font-size:.78rem;color:#94a3b8;flex-shrink:0">EUR/KRW 예측</span>
       <span style="font-size:.9rem;font-weight:700;color:${hasFe ? '#fb923c' : '#64748b'}">${hasFe ? fe.low + '~' + fe.high + '원' : '자료 없음'}</span>
       <span style="font-size:.72rem;color:#64748b">(${curTxt(json.current?.eur, fxE)} · 추세: ${trTxt(trends.eur)})</span>
     </div>`;
@@ -795,7 +889,7 @@ function renderTimingMain(json) {
   // 세부 분석
   if (json.analysis?.length) {
     h += `<div class="slb" style="margin-bottom:8px">세부 분석</div><ul class="alist">`;
-    json.analysis.forEach(a => { h += `<li>${a.msg}</li>`; });
+    json.analysis.forEach(a => { h += `<li>${noEmo(a.msg)}</li>`; });
     h += '</ul>';
   }
   const fxLbl = (nm, c) => c ? nm + ' ' + fxEsc(c.basisLabel || '기준 미상') + '(' + fxEsc(c.date || '?') + ')' : null;
@@ -806,7 +900,7 @@ function renderTimingMain(json) {
   const cr = json.criteria;
   const num = v => Number(v).toLocaleString('ko-KR');
   const crHtml = cr ? `<div class="slb" style="margin:12px 0 6px">판정 기준 (매매기준율 · ${fxEsc(cr.setOn)} 설정 · ${fxEsc(cr.reviewOn)} 검토)</div>
-    <p class="fn" style="margin:0 0 6px${cr.expired ? ';color:#fbbf24' : ''}">USD/KRW 유리 ${num(cr.usd.favor)}원 미만 · 중심 ${num(cr.usd.center)}원 · 부담 ${num(cr.usd.burden)}원 초과 | EUR/KRW 유리 ${num(cr.eur.favor)}원 미만 · 중심 ${num(cr.eur.center)}원 · 부담 ${num(cr.eur.burden)}원 초과${cr.expired ? ' | ⏰ 검토일이 지나 거시 보정 꺼짐 — 기준 재설정 필요' : ''}${cr.lh && !cr.lh.checked ? ' | CME 린호그 구간(' + cr.lh.cheap + '/' + cr.lh.low + '/' + cr.lh.high + '¢/lb)은 이번에 새로 검증하지 않음' : ''}</p>
+    <p class="fn" style="margin:0 0 6px${cr.expired ? ';color:#fbbf24' : ''}">USD/KRW 유리 ${num(cr.usd.favor)}원 미만 · 중심 ${num(cr.usd.center)}원 · 부담 ${num(cr.usd.burden)}원 초과 | EUR/KRW 유리 ${num(cr.eur.favor)}원 미만 · 중심 ${num(cr.eur.center)}원 · 부담 ${num(cr.eur.burden)}원 초과${cr.expired ? ' | 검토일이 지나 거시 보정 꺼짐 — 기준 재설정 필요' : ''}${cr.lh && !cr.lh.checked ? ' | CME 린호그 구간(' + cr.lh.cheap + '/' + cr.lh.low + '/' + cr.lh.high + '¢/lb)은 이번에 새로 검증하지 않음' : ''}</p>
     <details class="fn"><summary style="cursor:pointer">기준을 정한 근거 보기</summary><ul class="alist" style="margin-top:6px">${(cr.rationale || []).map(r => '<li>' + fxEsc(r) + '</li>').join('')}</ul></details>
     <p class="fn" style="margin-top:6px">${fxEsc(cr.disclaimer || '')}</p>` : '';
   h += crHtml;
@@ -865,9 +959,9 @@ async function loadTiming() {
 
   // KPI 먼저 표시 (KAMIS 현재가는 나중에 업데이트)
   renderKpi('kpi-timing', cur, [
-    {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
-    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'},
-    {k:'ZC',i:'🌽',l:'옥수수 선물'}
+    {k:'USDKRW',i:'',l:'USD/KRW'},{k:'EURKRW',i:'',l:'EUR/KRW'},
+    {k:'LH',i:'',l:'CME Lean Hog'},
+    {k:'ZC',i:'',l:'옥수수 선물'}
   ]);
 
   // 차트 즉시 표시
@@ -885,8 +979,8 @@ async function loadMarket() {
   const cur = await ensureCurrent();
   document.getElementById('mkt-date').textContent = new Date().toLocaleDateString('ko-KR') + ' 기준';
   renderKpi('kpi-market', cur, [
-    {k:'USDKRW',i:'🇺🇸',l:'USD/KRW'},{k:'EURKRW',i:'🇪🇺',l:'EUR/KRW'},
-    {k:'LH',i:'🇺🇸',l:'CME Lean Hog'}
+    {k:'USDKRW',i:'',l:'USD/KRW'},{k:'EURKRW',i:'',l:'EUR/KRW'},
+    {k:'LH',i:'',l:'CME Lean Hog'}
   ]);
   loadRisk();
   loadCustoms(cur);
@@ -1018,8 +1112,8 @@ async function runAI(period) {
   const badge = document.getElementById('m-' + period);
   if (!btn || !box) return;
   btn.disabled = true;
-  btn.textContent = '⏳ AI 분석 중...';
-  box.innerHTML = '<p class="aph">⏳ Gemini AI가 분석 중입니다. 잠시 기다려주세요...</p>';
+  btn.textContent = 'AI 분석 중...';
+  box.innerHTML = '<p class="aph">Gemini AI가 분석 중입니다. 잠시 기다려주세요...</p>';
   try {
     const j = await fetch('/api/analysis/' + period).then(r => r.json());
     if (typeof marked !== 'undefined') {
@@ -1045,12 +1139,12 @@ async function loadEuPig() {
     if (!j.ok) throw new Error(j.error);
 
     const EUR_COUNTRIES = [
-      {code:'ES', name:'🇪🇸 스페인'},
-      {code:'DE', name:'🇩🇪 독일'},
-      {code:'NL', name:'🇳🇱 네덜란드'},
-      {code:'FR', name:'🇫🇷 프랑스'},
-      {code:'DK', name:'🇩🇰 덴마크'},
-      {code:'PL', name:'🇵🇱 폴란드'},
+      {code:'ES', name:'스페인'},
+      {code:'DE', name:'독일'},
+      {code:'NL', name:'네덜란드'},
+      {code:'FR', name:'프랑스'},
+      {code:'DK', name:'덴마크'},
+      {code:'PL', name:'폴란드'},
     ];
     const byC = j.byCountry || {};
     const eurKrw = curData?.EURKRW?.price || null;   // 환율을 못 받았으면 원화 환산을 생략한다 (고정값 사용 금지)
@@ -1069,7 +1163,7 @@ async function loadEuPig() {
         <span style="font-size:.68rem;color:#86efac;font-weight:600;width:90px;text-align:right;flex-shrink:0">${krwPer100 != null ? krwPer100.toLocaleString() + '원/kg' : '환율 없음'}</span>
       </div>`;
     });
-    const staleNote = j.stale ? '<p style="color:#fbbf24;font-size:.85rem;line-height:1.6;margin:0 0 10px">⚠ EU 서버 오류로 새 값을 받지 못해 <b>' + fxEsc(j.staleSince || '이전') + '</b>에 받은 값을 보여줍니다 (' + fxEsc(String(j.staleReason || '').slice(0, 160)) + ')</p>' : '';
+    const staleNote = j.stale ? '<p style="color:#fbbf24;font-size:.85rem;line-height:1.6;margin:0 0 10px">EU 서버 오류로 새 값을 받지 못해 <b>' + fxEsc(j.staleSince || '이전') + '</b>에 받은 값을 보여줍니다 (' + fxEsc(String(j.staleReason || '').slice(0, 160)) + ')</p>' : '';
     const pdfNote = j.endpoint === 'PDF 주간 보고서' ? '<p style="color:#94a3b8;font-size:.85rem;line-height:1.6;margin:0 0 10px">EU 데이터 서버(API)가 응답하지 않아 EU 집행위 <b>주간 PDF 보고서</b>(갱신 ' + fxEsc(j.reportUpdated || '?') + ')에서 읽었습니다. 나라별 기준주는 아래 표에 표시됩니다.</p>' : '';
     document.getElementById('eu-pig-wrap').innerHTML = staleNote + pdfNote + (bars ||
       '<p style="color:#475569;font-size:.78rem;text-align:center;padding:12px">데이터 없음</p>');
@@ -2507,13 +2601,13 @@ async function itHandleFiles(fileList) {
   if (dups.length && !imgs.length && !good.length) { itSetMsg('이미 올린 파일이라 건너뛰었습니다: ' + dups.join(', '), 'warn'); return; }
   let XLSX;
   if (good.length) {
-    itSetMsg('⏳ 엑셀을 읽는 중입니다… (주간 시세표처럼 시트가 많으면 몇 초 걸릴 수 있습니다)', 'info');
+    itSetMsg('엑셀을 읽는 중입니다… (주간 시세표처럼 시트가 많으면 몇 초 걸릴 수 있습니다)', 'info');
     try { XLSX = await itLoadXlsx(); } catch (e) { itSetMsg(e.message, 'bad'); if (!imgs.length) return; good.length = 0; }
   }
   const errs = [], notes = [];
   let added = 0;
   for (let i = 0; i < imgs.length; i++) {
-    itSetMsg('⏳ 사진 글자를 읽는 중입니다 (' + (i + 1) + '/' + imgs.length + ') — 한 장에 10~30초 걸릴 수 있습니다…', 'info');
+    itSetMsg('사진 글자를 읽는 중입니다 (' + (i + 1) + '/' + imgs.length + ') — 한 장에 10~30초 걸릴 수 있습니다…', 'info');
     try { itAddImage(await itReadImageText(imgs[i]), imgs[i]); added++; } catch (e) { errs.push(imgs[i].name + ': ' + (e && e.message || e)); }
   }
   for (const f of good) {
@@ -2580,11 +2674,11 @@ function itRenderFiles() {
   const chips = [];
   if (px) {
     const st = px.stats, ck = px.book.check || {};
-    chips.push('<div class="fchip"><input type="checkbox" data-px="1"' + (px.include ? ' checked' : '') + ' title="AI 분석에 포함"><span class="fn1">📈 ' + itEsc(px.name) + '</span>' +
+    chips.push('<div class="fchip"><input type="checkbox" data-px="1"' + (px.include ? ' checked' : '') + ' title="AI 분석에 포함"><span class="fn1">' + itEsc(px.name) + '</span>' +
       '<span class="fm">주간 시세표 · 품목 ' + st.items.length + ' · 브랜드 ' + st.rows.length + ' · ' + itEsc(st.first) + ' ~ ' + itEsc(st.last) + (ck.monthlySheets ? ' · 월별 시트 ' + ck.monthlySheets + '장' : '') + '</span>' +
       '<button data-act="rm-price" title="삭제">✕</button></div>');
   }
-  IT.meeting.forEach(f => chips.push('<div class="fchip"><input type="checkbox" data-mi="' + f.id + '"' + (f.include ? ' checked' : '') + ' title="AI 분석에 포함"><span class="fn1">' + (f.kind === 'image' ? '📷 ' : '📋 ') + itEsc(f.name) + '</span>' +
+  IT.meeting.forEach(f => chips.push('<div class="fchip"><input type="checkbox" data-mi="' + f.id + '"' + (f.include ? ' checked' : '') + ' title="AI 분석에 포함"><span class="fn1">' + (f.kind === 'image' ? '<span class="fkind">사진</span>' : '<span class="fkind">엑셀</span>') + itEsc(f.name) + '</span>' +
     '<span class="fm">' + (f.note ? itEsc(f.note) : f.chars.toLocaleString('ko-KR') + '자' + (f.truncated ? ' · 앞부분만' : '') + (f.chars ? '' : ' · 내용 없음')) + '</span>' +
     '<button data-act="rm-meeting" data-id="' + f.id + '" title="삭제">✕</button></div>'));
   itEl('it-m-files').innerHTML = chips.join('');
@@ -2650,7 +2744,7 @@ function itRenderPrice() {
   box.innerHTML = '<div class="card" id="it-px-card"><div class="ch"><span class="ct">주간 시세표 분석 — ' + itEsc(px.name) + '</span><span class="tag tg">최신 ' + itEsc(st.last) + '</span></div>' +
     '<div class="fn" style="margin:0 0 8px;line-height:1.7">' + itEsc(src.join(' + ')) + '으로 ' + itEsc(st.first) + ' ~ ' + itEsc(st.last) + ' (' + px.book.weeks.length + '주)를 읽었습니다. ' + chk + '<br>품목을 누르면 브랜드별 표와 추이 그래프가 열립니다. 평균 시세·변화율은 <b>최근 시세가 있는 브랜드</b>의 평균입니다 (최신 주보다 3주 넘게 끊긴 브랜드 제외).</div>' +
     itTrendBox(st) + '<div class="tscroll"><table class="dt pxmain"><thead><tr><th class="l">품목</th><th>브랜드 수<br><span class="fn">시세 있음 / 전체</span></th><th>평균 시세<br><span class="fn">원/kg</span></th><th>4주</th><th>12주</th><th>전년비</th><th>52주 위치</th><th>3년평균比</th><th class="l">최저 ~ 최고 브랜드<br><span class="fn">원/kg · 같은 주끼리 비교</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-    '<p class="fn" style="line-height:1.7"><b>재고없음</b> = 시세표에 재고없음 또는 #VALUE! 로 적힌 주 (값을 매길 수 없어 계산에서 뺌) · <b>브랜드 수</b> = 최근 3주 안에 시세가 있는 브랜드 / 시세표에 한 번이라도 나온 브랜드 · <b>최저~최고 브랜드</b> = 그 품목의 가장 최근 주에 시세가 있는 브랜드끼리 비교(같은 값이면 모두 표시) · <b>52주 위치</b> = 0~20% 저점권 · 20~40% 낮은 편 · 40~60% 중간 · 60~80% 높은 편 · 80~100% 고점권 (품목은 브랜드 위치의 평균)<br>4주·12주 = 그 기간 전 같은 브랜드 값 대비 · 전년비 = 약 52주 전(±10일) 대비 · 52주 위치 = 최근 52주 최저(0%)~최고(100%) 중 현재 · 3년평균比 = 최근 3년 평균 대비. 값은 엑셀 숫자로 계산했고 고정값·추정값은 쓰지 않았습니다.</p></div>' + detail;
+    '<details class="xn"><summary>표 보는 법</summary><p class="fn" style="line-height:1.7"><b>재고없음</b> = 시세표에 재고없음 또는 #VALUE! 로 적힌 주 (값을 매길 수 없어 계산에서 뺌) · <b>브랜드 수</b> = 최근 3주 안에 시세가 있는 브랜드 / 시세표에 한 번이라도 나온 브랜드 · <b>최저~최고 브랜드</b> = 그 품목의 가장 최근 주에 시세가 있는 브랜드끼리 비교(같은 값이면 모두 표시) · <b>52주 위치</b> = 0~20% 저점권 · 20~40% 낮은 편 · 40~60% 중간 · 60~80% 높은 편 · 80~100% 고점권 (품목은 브랜드 위치의 평균)<br>4주·12주 = 그 기간 전 같은 브랜드 값 대비 · 전년비 = 약 52주 전(±10일) 대비 · 52주 위치 = 최근 52주 최저(0%)~최고(100%) 중 현재 · 3년평균比 = 최근 3년 평균 대비. 값은 엑셀 숫자로 계산했고 고정값·추정값은 쓰지 않았습니다.</p></details></div>' + detail;
   itRenderTrend();
   if (sel) itRenderPxChart(sel);
 }
@@ -2679,7 +2773,7 @@ function itTrendBox(st) {
   const ttl = t.mode === 'pct' ? '주요 품목 시세 변화율 (기간 첫 주 = 0%)' : '주요 품목 시세 추이 (원/kg · 그 주에 시세가 있는 브랜드 평균)';
   return '<div class="pxtr"><div class="slb" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><span>' + ttl + '</span><span class="trrg">' + md + ' <span style="color:#334155">|</span> ' + rg + '</span></div>' +
     '<div class="trchips">' + chips + '</div>' +
-    '<div class="fn" id="it-tr-note" style="margin:4px 0 6px">' + (t.mode === 'pct' ? '변화율 = 같은 브랜드끼리 주마다 비교해 이어 붙인 값이라, 브랜드가 빠지거나 새로 들어와도 튀지 않습니다. 선에 마우스를 올리면 그 주 평균 가격도 보입니다.<br>' : '') + (t.mine ? '고른 품목을 이 브라우저에 기억합니다. 품목 이름을 눌러 넣고 뺄 수 있습니다.' : '시세표에는 판매량이 없어 처음에는 <b>시세가 있는 브랜드가 많은 6개 품목</b>을 보여줍니다. 많이 파는 품목을 눌러 고르면 이 브라우저에 기억합니다.') + '</div>' +
+    '<details class="xn"><summary>그래프 설명</summary><div class="fn" id="it-tr-note" style="margin:4px 0 6px">' + (t.mode === 'pct' ? '변화율 = 같은 브랜드끼리 주마다 비교해 이어 붙인 값이라, 브랜드가 빠지거나 새로 들어와도 튀지 않습니다. 선에 마우스를 올리면 그 주 평균 가격도 보입니다.<br>' : '') + (t.mine ? '고른 품목을 이 브라우저에 기억합니다. 품목 이름을 눌러 넣고 뺄 수 있습니다.' : '시세표에는 판매량이 없어 처음에는 <b>시세가 있는 브랜드가 많은 6개 품목</b>을 보여줍니다. 많이 파는 품목을 눌러 고르면 이 브라우저에 기억합니다.') + '</div></details>' +
     (t.items.length ? '<div class="cw" style="height:280px"><canvas id="it-tr-ch"></canvas></div>' : '<p class="fn" style="padding:10px 0">위에서 품목을 고르세요.</p>') + '</div>';
 }
 // 변화율: 품목 지수 = 이웃한 두 주에 모두 시세가 있는 브랜드들의 가격 비율 평균을 이어 곱함 (첫 주 = 0%)
@@ -2750,7 +2844,7 @@ function itRenderAi() {
   const hasPx = !!pk.payload.price;
   const can = !!(hasPx || pk.meeting.text.trim());
   btn.disabled = IT.aiBusy || !can;
-  btn.textContent = IT.aiBusy ? '⏳ AI가 분석 중입니다 (보통 1~2분)…' : (IT.ai ? 'AI 품목 전략 다시 실행' : 'AI 품목 전략 분석 실행');
+  btn.textContent = IT.aiBusy ? 'AI가 분석 중입니다 (보통 1~2분)…' : (IT.ai ? 'AI 품목 전략 다시 실행' : 'AI 품목 전략 분석 실행');
   const parts = [];
   if (hasPx) parts.push('주간 시세표 계산표 (품목 ' + IT.price.stats.items.length + '개·브랜드 ' + IT.price.stats.rows.length + '개의 지표 — 원본 엑셀은 보내지 않음)');
   const uf = pk.meeting.usedFiles || [];
@@ -2763,7 +2857,7 @@ function itRenderAi() {
       ((pk.meeting.droppedFiles || []).length ? '<br><span style="color:#fbbf24">※ 글자 길이 제한(약 4만 자)으로 AI에 보내지 못한 파일 ' + pk.meeting.droppedFiles.length + '개: ' + pk.meeting.droppedFiles.map(f => itEsc(f.name)).join(', ') + ' — 필요 없는 파일의 체크를 해제하면 들어갑니다</span>' : '') :
       '주간회의 자료(회의록·시세표 엑셀·사진)를 올리면 실행할 수 있습니다.') +
     '<br>전송은 서버를 거쳐 Google Gemini 로 이뤄집니다. <b>회의 내용과 시세 지표가 외부로 나갑니다.</b> 무료(결제 미연결) Gemini 키는 구글 약관상 입력 내용이 서비스 개선에 쓰이고 사람이 검토할 수 있어 <b>민감한 자료에는 유료 키를 권장</b>합니다 (<a href="https://ai.google.dev/gemini/terms" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">구글 약관</a>). 보내고 싶지 않은 파일은 위 목록의 체크를 해제하세요. 서버는 자료를 파일·DB에 저장하지 않습니다 (같은 자료로 다시 실행할 때를 위해 AI 결과만 메모리에 6시간 보관).</div>';
-  if (IT.ai && IT.ai.sig && can && IT.ai.sig !== itSig(pk.payload)) note.innerHTML += '<div class="itwarn">⚠️ 아래 분석은 이전 자료로 만든 것입니다. 자료가 바뀌었으니 다시 실행해 주세요.</div>';
+  if (IT.ai && IT.ai.sig && can && IT.ai.sig !== itSig(pk.payload)) note.innerHTML += '<div class="itwarn">아래 분석은 이전 자료로 만든 것입니다. 자료가 바뀌었으니 다시 실행해 주세요.</div>';
   if (IT.aiErr) {
     box.innerHTML = '<p style="color:#f87171;line-height:1.7">' + itEsc(IT.aiErr) + '</p>';
     badge.textContent = '실패';
@@ -2790,7 +2884,7 @@ async function itRunAI(force) {
     itLsSet('suan_it_ai_ok', 1);
   }
   IT.aiBusy = true; IT.aiErr = '';
-  itEl('it-ai-box').innerHTML = '<p class="aph">⏳ Gemini AI가 분석 중입니다. 관세청 통계·위험 보도·환율도 함께 확인하느라 시간이 걸릴 수 있습니다…</p>';
+  itEl('it-ai-box').innerHTML = '<p class="aph">Gemini AI가 분석 중입니다. 관세청 통계·위험 보도·환율도 함께 확인하느라 시간이 걸릴 수 있습니다…</p>';
   itRenderAi();
   const sig = itSig(pk.payload);
   const ctrl = new AbortController();
@@ -2805,7 +2899,7 @@ async function itRunAI(force) {
     while (jobId) {
       await new Promise((ok, no) => { const w = setTimeout(ok, IT.pollMs || 3000); ctrl.signal.addEventListener('abort', () => { clearTimeout(w); const e = new Error('abort'); e.name = 'AbortError'; no(e); }, { once: true }); });
       const sec = Math.round((Date.now() - t0) / 1000), box = itEl('it-ai-box');
-      if (box) box.innerHTML = '<p class="aph">⏳ Gemini AI가 분석 중입니다 — ' + sec + '초 지남 (보통 1~3분). 이 화면을 닫지 마세요.</p>';
+      if (box) box.innerHTML = '<p class="aph">Gemini AI가 분석 중입니다 — ' + sec + '초 지남 (보통 1~3분). 이 화면을 닫지 마세요.</p>';
       r = await fetch('/api/analysis/items/job/' + encodeURIComponent(jobId), { signal: ctrl.signal });
       t = await r.text(); j = null; try { j = JSON.parse(t); } catch (e) {}
       if (!(r.ok && j && j.ok && j.status === 'running')) break;
