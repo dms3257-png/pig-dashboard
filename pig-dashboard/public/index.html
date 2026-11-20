@@ -28,19 +28,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .live{background:#16a34a;color:#fff;font-size:.63rem;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:8px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .asof{font-size:.76rem;color:#94a3b8}
-.lc-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.lc-g label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:#94a3b8}
-.lc-g input,.lc-g select{background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:8px 9px;font-size:.92rem;width:100%;min-width:0}
-.lc-g input:focus,.lc-g select:focus{outline:none;border-color:#3b82f6}
-.lc-sec{font-size:.8rem;font-weight:700;color:#93c5fd;margin:14px 0 8px}
-.lc-out{background:#0f172a;border-radius:10px;padding:14px 16px;margin-top:14px}
-.lc-out table{width:100%;border-collapse:collapse;font-size:.92rem}
-.lc-out td{padding:6px 4px;border-bottom:1px solid #1e293b;color:#e2e8f0}
-.lc-out td:last-child{text-align:right;font-weight:700;white-space:nowrap}
-.lc-out tr.lc-tot td{font-size:1.1rem;color:#fff;border-top:2px solid #334155}
-.lc-cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
-.lc-cmp>div{background:#111c33;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;font-size:.85rem;color:#cbd5e1;line-height:1.6}
-.lc-cmp b{font-size:1.05rem}
 .fxn-i{padding:9px 0;border-bottom:1px solid #1e293b}
 .fxn-i a{color:#e2e8f0;text-decoration:none;font-size:.9rem;line-height:1.5;font-weight:600}
 .fxn-i a:hover{color:#93c5fd;text-decoration:underline}
@@ -378,39 +365,6 @@ details.xn[open]>summary{margin-bottom:2px}
   <div class="g2">
     <div class="card"><div class="ch"><span class="ct">CME Lean Hog 30일</span><span class="tag to">Yahoo Finance</span></div><div class="cw"><canvas id="c-lh"></canvas></div></div>
     <div class="card"><div class="ch"><span class="ct">국내 부위별 가격</span><span class="tag tz" id="tag-cuts-timing">확인 중</span></div><div id="cuts-timing"><div class="lding"><span class="spin" aria-hidden="true"></span></div></div></div>
-  </div>
-
-  <!-- 도착 원가 계산기 -->
-  <div class="card" style="margin-bottom:14px" id="lc-card">
-    <div class="ch"><span class="ct">도착 원가 계산기 (원/kg)</span><span class="tag tz" id="lc-tag">입력 대기</span></div>
-    <div class="lc-sec">① 오퍼</div>
-    <div class="lc-g">
-      <label>품목<select id="lc-item"><option value="삼겹살">삼겹살</option><option value="앞다리">앞다리</option><option value="목심">목심</option><option value="갈비">갈비</option><option value="기타">기타</option></select></label>
-      <label>원산지 (메모)<input id="lc-origin" placeholder="예: 스페인"></label>
-      <label>오퍼가<input id="lc-offer" type="number" step="0.01" min="0" inputmode="decimal" placeholder="예: 3.15"></label>
-      <label>통화<select id="lc-cur"><option value="USD">USD</option><option value="EUR">EUR</option></select></label>
-      <label>단위<select id="lc-unit"><option value="kg">/kg</option><option value="ton">/톤</option></select></label>
-      <label>가격 조건<select id="lc-term"><option value="CIF">CIF (운임·보험 포함)</option><option value="CFR">CFR (운임 포함, 보험 별도)</option><option value="FOB">FOB (운임·보험 별도)</option></select></label>
-      <label id="lc-freight-l">해상운임 (외화/kg)<input id="lc-freight" type="number" step="0.001" min="0" inputmode="decimal" placeholder="FOB일 때"></label>
-      <label id="lc-ins-l">보험료율 (%)<input id="lc-ins" type="number" step="0.01" min="0" inputmode="decimal" placeholder="예: 0.2"></label>
-    </div>
-    <div class="lc-sec">② 환율 · 관세</div>
-    <div class="lc-g">
-      <label>환율 (원/외화)<input id="lc-fx" type="number" step="0.01" min="0" inputmode="decimal"></label>
-      <label>&nbsp;<button type="button" class="mbtn" id="lc-fx-btn" style="padding:9px;margin-top:0;color:#cbd5e1;font-size:.84rem">현재 매매기준율 넣기</button></label>
-      <label>관세율 (%)<input id="lc-tariff" type="number" step="0.1" min="0" max="100" inputmode="decimal" placeholder="통관 서류·FTA 포털 확인"></label>
-    </div>
-    <div class="fn" id="lc-fx-src" style="margin-top:6px"></div>
-    <div class="lc-sec">③ 부대비용 (원/kg)</div>
-    <div class="lc-g">
-      <label>통관·검역<input id="lc-c1" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
-      <label>내륙 운송<input id="lc-c2" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
-      <label>냉동 창고<input id="lc-c3" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
-      <label>기타 (금융·수수료)<input id="lc-c4" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></label>
-      <label>우리 판매가 (선택)<input id="lc-sell" type="number" step="1" min="0" inputmode="numeric" placeholder="원/kg"></label>
-    </div>
-    <div id="lc-out"></div>
-    <p class="fn" style="margin-top:10px">※ 관세율은 원산지·FTA 연차·부위(HS 코드)마다 다르고 해마다 바뀌어 미리 넣지 않았습니다 — 통관 서류나 <a href="https://www.customs.go.kr" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">관세청</a>·<a href="https://www.yesfta.go.kr" target="_blank" rel="noopener noreferrer" style="color:#60a5fa">FTA 포털</a>에서 확인해 넣으세요. 실제 관세는 관세청 고시 과세환율(주 단위)로 계산돼 약간 다를 수 있습니다. 부가가치세(10%)는 매입세액 공제 대상이라 원가에 넣지 않았습니다. 입력값은 이 브라우저에만 저장됩니다.</p>
   </div>
 
   <!-- EU 공식 지육가 -->
@@ -1007,7 +961,7 @@ async function loadCustoms(cur) {
     '<td class="' + (r.yoy12 == null ? '' : r.yoy12 >= 0 ? 'cu' : 'cd') + '">' + (r.yoy12 == null ? '-' : (r.yoy12 >= 0 ? '+' : '') + r.yoy12.toFixed(1) + '%') + '</td><td>' + n1(r.lastT) + '톤</td></tr>').join('');
   h += '</tbody></table></div>';
   h += '<p class="fn" style="margin-top:8px">' + fxEsc(d.scope) + ' · 최근 12개월 ' + fxEsc(ymTxt(d.period.cur[0])) + '~' + fxEsc(ymTxt(d.period.cur[1])) + ', 전년 대비는 그 전 12개월과 비교 · ' + fxEsc(d.source) + ' · ' + fxEsc(d.fetchedAt || '') + '<br>* ' + fxEsc(d.note) +
-    (fx ? ' · 원화는 현재 USD/KRW ' + Number(fx).toLocaleString('ko-KR') + '원으로 단순 환산(관세·부대비용 제외 — 도착 원가는 수입 타이밍 탭 계산기에서)' : ' · 환율을 받지 못해 원화 환산을 하지 않았습니다') +
+    (fx ? ' · 원화는 현재 USD/KRW ' + Number(fx).toLocaleString('ko-KR') + '원으로 단순 환산(관세·부대비용 제외)' : ' · 환율을 받지 못해 원화 환산을 하지 않았습니다') +
     (d.errors && d.errors.length ? '<br><span style="color:#fbbf24">일부 국가 실패: ' + d.errors.map(fxEsc).join(' / ') + '</span>' : '') + '</p>';
   wrap.innerHTML = h;
 }
@@ -1322,98 +1276,9 @@ function fxIntraChart(sym, j, col) {
   if (tag) tag.textContent = '최근 5일 · ' + lab[lab.length - 1] + ' KST';
 }
 
-// ── 도착 원가 계산기 ────────────────────────────────────
-// 계산식: 1kg 외화가 → (FOB면 운임 더함) → (CIF가 아니면 보험료 더함) = CIF 외화 → ×환율 = CIF 원화
-//          관세 = CIF 원화 × 관세율 → 도착 원가 = CIF 원화 + 관세 + 부대비용 (부가세 제외)
-function landedCalc(i) {
-  const n = v => (v === '' || v == null || !isFinite(+v)) ? null : +v;
-  const offer = n(i.offer), fx = n(i.fx), tariff = n(i.tariff);
-  const need = [];
-  if (!(offer > 0)) need.push('오퍼가');
-  if (!(fx > 0)) need.push('환율');
-  if (tariff == null || tariff < 0 || tariff > 100) need.push('관세율(0~100%)');
-  const freight = n(i.freight) || 0, insPct = n(i.ins) || 0;
-  if (i.term === 'FOB' && !(n(i.freight) >= 0 && i.freight !== '' && i.freight != null)) need.push('해상운임');
-  if (need.length) return { ok: false, need };
-  const perKg = i.unit === 'ton' ? offer / 1000 : offer;
-  const base = perKg + (i.term === 'FOB' ? freight : 0);
-  const insFx = i.term === 'CIF' ? 0 : base * insPct / 100;
-  const cifFx = base + insFx;
-  const cifKrw = cifFx * fx;
-  const duty = cifKrw * tariff / 100;
-  const costs = ['c1', 'c2', 'c3', 'c4'].reduce((a, k) => a + Math.max(0, n(i[k]) || 0), 0);
-  const landed = cifKrw + duty + costs;
-  return { ok: true, perKg, freight: i.term === 'FOB' ? freight : 0, insFx, cifFx, cifKrw, duty, costs, landed };
-}
-const LC_KEYS = ['item', 'origin', 'offer', 'cur', 'unit', 'term', 'freight', 'ins', 'fx', 'tariff', 'c1', 'c2', 'c3', 'c4', 'sell'];
-function lcRead() { const o = {}; LC_KEYS.forEach(k => { const el = document.getElementById('lc-' + k); if (el) o[k] = el.value; }); return o; }
-let lcFxSrc = '';
-async function lcFillFx(force) {
-  const el = document.getElementById('lc-fx'), cur = document.getElementById('lc-cur').value;
-  if (!force && el.value) return;
-  const d = await ensureCurrent().catch(() => ({}));
-  const q = d && d[cur + 'KRW'];
-  const v = q && (q.std || q.price);
-  const src = document.getElementById('lc-fx-src');
-  if (v) { el.value = (+v).toFixed(2); lcFxSrc = cur + '/KRW ' + (q.std ? '매매기준율' : (q.basisLabel || '')) + ' · ' + (q.date || '') + ' · 네이버'; }
-  else lcFxSrc = cur + '/KRW 현재 환율을 받지 못했습니다 — 직접 입력하세요';
-  if (src) src.textContent = '환율 출처: ' + lcFxSrc;
-  lcRender();
-}
-function lcRender() {
-  const i = lcRead();
-  try { localStorage.setItem('suan_landed_v1', JSON.stringify(i)); } catch (e) {}
-  const fob = i.term === 'FOB', cif = i.term === 'CIF';
-  document.getElementById('lc-freight-l').style.display = fob ? '' : 'none';
-  document.getElementById('lc-ins-l').style.display = cif ? 'none' : '';
-  const out = document.getElementById('lc-out'), tag = document.getElementById('lc-tag');
-  const r = landedCalc(i);
-  if (!r.ok) { tag.className = 'tag tz'; tag.textContent = '입력 대기'; out.innerHTML = '<div class="lc-out" style="color:#94a3b8;font-size:.88rem">입력이 필요합니다: ' + r.need.map(fxEsc).join(', ') + '</div>'; return; }
-  const w = v => Math.round(v).toLocaleString('ko-KR') + '원';
-  const f = v => v.toFixed(3) + ' ' + fxEsc(i.cur);
-  let h = '<div class="lc-out"><table>';
-  h += '<tr><td>오퍼가 (1kg)</td><td>' + f(r.perKg) + '</td></tr>';
-  if (r.freight) h += '<tr><td>+ 해상운임</td><td>' + f(r.freight) + '</td></tr>';
-  if (r.insFx) h += '<tr><td>+ 보험료 (' + fxEsc(i.ins || 0) + '%)</td><td>' + f(r.insFx) + '</td></tr>';
-  h += '<tr><td>= CIF (외화)</td><td>' + f(r.cifFx) + '</td></tr>';
-  h += '<tr><td>CIF 원화 (× ' + (+i.fx).toLocaleString('ko-KR') + ')</td><td>' + w(r.cifKrw) + '</td></tr>';
-  h += '<tr><td>+ 관세 (' + fxEsc(i.tariff) + '%)</td><td>' + w(r.duty) + '</td></tr>';
-  h += '<tr><td>+ 부대비용</td><td>' + w(r.costs) + '</td></tr>';
-  h += '<tr class="lc-tot"><td>도착 원가 (부가세 제외)</td><td>' + w(r.landed) + '/kg</td></tr></table>';
-  const cmp = [];
-  const kamis = cutsCache && cutsCache.json && cutsCache.json.ok ? cutsCache.json.data : null;
-  const pick = (grp, nm) => kamis && (kamis.items || []).find(x => x.group.indexOf(grp) === 0 && x.name === nm);
-  const box = (title, ref, note) => {
-    const m = ref - r.landed, p = m / ref * 100;
-    return '<div>' + title + '<br><b>' + Math.round(ref).toLocaleString('ko-KR') + '원/kg</b><br>차이 <b class="' + (m >= 0 ? 'cu' : 'cd') + '">' + (m >= 0 ? '+' : '') + Math.round(m).toLocaleString('ko-KR') + '원 (' + (p >= 0 ? '+' : '') + p.toFixed(1) + '%)</b>' + (note ? '<br><span class="fn">' + note + '</span>' : '') + '</div>';
-  };
-  const sell = +i.sell;
-  if (sell > 0) cmp.push(box('우리 판매가', sell, '판매가 − 도착 원가'));
-  const imp = pick('수입', i.item);
-  if (imp) cmp.push(box('KAMIS 수입 ' + fxEsc(i.item), imp.price, 'KAMIS · ' + fxEsc(kamis.date) + ' · 시장 가격 참고'));
-  const dom = pick('국내', i.item);
-  if (dom) cmp.push(box('KAMIS 국내산 ' + fxEsc(i.item), dom.price, 'KAMIS · ' + fxEsc(kamis.date) + ' · 국산과의 가격 차이'));
-  if (!kamis) cmp.push('<div>KAMIS 부위별 가격을 받지 못해 시장 가격과 비교하지 않았습니다.</div>');
-  else if (!imp && !dom) cmp.push('<div>' + fxEsc(i.item) + '은(는) KAMIS 비교 항목이 없습니다.</div>');
-  h += '<div class="lc-cmp">' + cmp.join('') + '</div></div>';
-  out.innerHTML = h;
-  tag.className = 'tag tg'; tag.textContent = Math.round(r.landed).toLocaleString('ko-KR') + '원/kg';
-}
-function lcInit() {
-  const card = document.getElementById('lc-card'); if (!card || card.dataset.ready) return;
-  card.dataset.ready = '1';
-  try { const sv = JSON.parse(localStorage.getItem('suan_landed_v1') || 'null'); if (sv) LC_KEYS.forEach(k => { const el = document.getElementById('lc-' + k); if (el && sv[k] != null) el.value = sv[k]; }); } catch (e) {}
-  card.addEventListener('input', lcRender);
-  card.addEventListener('change', e => { if (e.target && e.target.id === 'lc-cur') { document.getElementById('lc-fx').value = ''; lcFillFx(true); } else lcRender(); });
-  document.getElementById('lc-fx-btn').addEventListener('click', () => lcFillFx(true));
-  lcRender();
-  lcFillFx(false);
-  fetchCuts().then(() => lcRender()).catch(() => {});
-}
-
 window.addEventListener('DOMContentLoaded', () => {
   loaded.add('timing');
-  try { lcInit(); } catch (e) { console.warn('계산기 초기화 실패', e); }
+  try { localStorage.removeItem('suan_landed_v1'); } catch (e) {}   // 예전 원가 계산 입력값 정리
   loadTiming().catch(e => {
     console.error('loadTiming failed:', e);
     const el = document.getElementById('timing-main');
