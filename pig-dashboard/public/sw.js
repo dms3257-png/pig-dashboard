@@ -1,106 +1,56 @@
-// sw.js - 수안푸드 지육가 대시보드 PWA v1.0
-const SW_VERSION  = 'sw-v1';
-const CACHE_NAME  = 'suanfood-shell-v1';
+// sw.js - 수안푸드 지육가 대시보드 (홈 화면 설치용)
+// 화면(/pig)·API 는 항상 서버에서 새로 받음 → 코드를 고쳐 올리면 새로고침만으로 반영
+// 인터넷이 끊겼을 때만 마지막으로 본 화면을 보여줌 (시세 숫자는 새로 받지 못하므로 화면의 수집 시각을 확인)
+const CACHE_NAME = 'pig-shell-v1';
 
-// 오프라인 시 캐시할 핵심 파일
-const SHELL_FILES = [
-  '/pig',
-  '/manifest.webmanifest',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-];
-
-// ── 설치 ──────────────────────────────────────────────
 self.addEventListener('install', (event) => {
-  console.log('[SW] install', SW_VERSION);
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_FILES).catch((err) => {
-        console.warn('[SW] 캐시 프리패치 일부 실패 (무시):', err);
-      });
-    })
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(['/manifest.webmanifest', '/icons/icon-192x192.png', '/icons/icon-512x512.png']))
+      .catch(() => {})
   );
   self.skipWaiting();
 });
 
-// ── 활성화 ────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
-  console.log('[SW] activate', SW_VERSION);
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => k !== CACHE_NAME)
-          .map((k) => {
-            console.log('[SW] 구버전 캐시 삭제:', k);
-            return caches.delete(k);
-          })
-      )
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))   // 예전 앱(환율 앱 등) 캐시 삭제
+      .then(() => self.clients.claim())
   );
 });
 
-// ── Fetch 처리 ────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
+  const req = event.request;
+  if (req.method !== 'GET') return;                              // AI 분석 요청(POST) 등은 그대로 서버로
+  const url = new URL(req.url);
 
-  // 1) API 요청 → 항상 네트워크 (캐시 금지)
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' }).catch(() => {
-        return new Response(
-          JSON.stringify({ ok: false, error: '오프라인 상태입니다' }),
-          { status: 503, headers: { 'Content-Type': 'application/json' } }
-        );
-      })
-    );
-    return;
-  }
+  // API → 항상 서버 (저장하지 않음)
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
 
-  // 2) HTML 페이지 네비게이션 → 네트워크 우선, 실패 시 캐시
-  if (request.mode === 'navigate') {
+  // 화면 → 서버 우선, 끊겼을 때만 마지막 화면
+  if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(request, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
-      })
-        .then((response) => {
-          // 성공 시 캐시 업데이트
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
+      fetch(req, { cache: 'no-store' })
+        .then(res => {
+          if (res && res.ok) { const copy = res.clone(); caches.open(CACHE_NAME).then(c => c.put('/pig', copy)); }
+          return res;
         })
-        .catch(() => {
-          // 오프라인 → 캐시에서 서빙
-          return caches.match(request).then(
-            (cached) => cached || caches.match('/pig')
-          );
-        })
+        .catch(() => caches.match('/pig').then(c => c || new Response('<meta charset="utf-8"><body style="background:#0f172a;color:#e2e8f0;font-family:sans-serif;padding:24px">인터넷에 연결되어 있지 않습니다. 연결 후 다시 열어 주세요.</body>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } })))
     );
     return;
   }
 
-  // 3) 아이콘 / 정적 파일 → 캐시 우선
-  if (
-    url.pathname.startsWith('/icons/') ||
-    url.pathname === '/manifest.webmanifest'
-  ) {
+  // 아이콘, 버전이 고정된 외부 라이브러리(Chart.js 등) → 저장해 두고 사용
+  const isIcon = url.origin === self.location.origin && url.pathname.startsWith('/icons/');
+  const isLib = /cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|cdn\.sheetjs\.com/.test(url.host) && /@?\d+\.\d+\.\d+/.test(url.pathname);
+  if (isIcon || isLib) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        });
-      })
+      caches.match(req).then(hit => hit || fetch(req).then(res => {
+        if (res && (res.ok || res.type === 'opaque')) { const copy = res.clone(); caches.open(CACHE_NAME).then(c => c.put(req, copy)); }
+        return res;
+      }))
     );
-    return;
   }
-
-  // 4) 그 외 → 네트워크 우선
-  event.respondWith(fetch(request).catch(() => caches.match(request)));
+  // 그 밖은 브라우저 기본 동작
 });
