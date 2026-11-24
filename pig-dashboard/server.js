@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.6.5
+// server.js - 수안푸드 지육가 대시보드 v3.6.6
+// v3.6.6: 가짜 자료 제거 — 린호그 85.0 고정값·수집 실패 시 추정 이력(시드) 삭제, 못 받으면 '수집 실패 + 이유'. 무료에서 늘 거절되는 gemini-3.1-pro-preview 기본 순서에서 뺌
 // v3.6.5: 품목 전략 AI 를 작업(job) 방식으로 — POST {async:true} 는 바로 작업 번호를 돌려주고 GET /api/analysis/items/job/:id 로 진행 확인 (AI 최대 240초), 모델별 걸린 시간 로그
 // v3.6.4: Gemini 3.x 생각 단계를 low 로(기본 medium 은 1~2분 걸려 시간 초과), 2.5 는 생각 예산 1024, AI 시간 제한 늘림 — 생각 설정이 거절되면 설정 없이 한 번 더
 // v3.6.3: Gemini 모델 정리 — gemini-2.0-flash 종료(2026-06-01) 대응, 3.8-flash 우선, 구글 모델 목록으로 없어진 모델 건너뜀, 실패 시 모델별 이유 모두 표시, /api/ai-models 진단
@@ -523,9 +524,9 @@ async function naverFxHistoryCrawl(pair, startYmd, maxPages = 80, fetcher = fetc
 //  - Render 환경변수 GEMINI_MODELS="모델1,모델2" 를 넣으면 모든 AI 기능이 그 순서를 씀
 //  - 실행 중에는 구글 모델 목록(ListModels)을 6시간마다 확인해 없어진 모델은 건너뜀. 목록 확인이 안 되면 순서대로 그냥 시도
 const GEMINI_CHAINS = {
-  main:  ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-flash-latest'],
+  main:  ['gemini-3.8-flash', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-flash-latest'],   // 3.1-pro-preview 는 무료 단계에서 늘 할당량 초과 → 뺌
   ocr:   ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash'],
-  items: ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-flash-latest'],
+  items: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-flash-latest'],
 };
 function geminiChain(kind) {
   const env = String(process.env.GEMINI_MODELS || '').split(',').map(x => x.trim().replace(/^models\//, '')).filter(x => /^[a-z0-9][a-z0-9.\-]{2,60}$/.test(x));
@@ -848,8 +849,8 @@ async function fetchKamisHistory(startYmd) {
   const endDate = new Date().toISOString().slice(0,10);
 
   if (!certKey || !certId) {
-    console.warn('KAMIS_API_KEY/ID 없음 → 시드 데이터 (실데이터 아님)');
-    return genRealisticSeed('KAMIS');
+    console.warn('KAMIS_API_KEY/ID 없음 → 이력 없음 (가짜 값으로 채우지 않음)');
+    return [];
   }
 
   try {
@@ -893,7 +894,7 @@ async function fetchKamisHistory(startYmd) {
   }
 
   console.warn('⚠️ KAMIS History 최종 실패 (해외 IP 차단) → 빈 배열 반환');
-  return []; // 빈 배열 반환 → getHistory에서 시드 처리 (isReal=false 보장)
+  return []; // 빈 배열 → getHistory 가 '수집 실패'로 처리 (가짜 값 없음)
 }
 
 // ════════════════════════════════════════════════════
@@ -1132,101 +1133,33 @@ async function getHistory(sym) {
   // 캐시 유효하면 바로 반환
   if (c.d.length > 5 && Date.now() - c.at < HIST_TTL) return c.d;
   // 환율은 수집에 실패하면 5분 동안은 다시 시도하지 않고 빈 값을 돌려준다 (요청마다 네이버를 수십 번 두드리지 않도록)
-  if ((isFx || sym === 'KAMIS') && c.failUntil && Date.now() < c.failUntil) return [];
+  if (c.failUntil && Date.now() < c.failUntil) return [];
 
   let rows = [], meta = null;
+  c.err = null;
   try {
     if (sym === 'LH')     rows = await yahooHistory('HE=F', START_YMD);
     if (sym === 'ZC')     rows = await yahooHistory('ZC=F', START_YMD);
     if (sym === 'ZS')     rows = await yahooHistory('ZS=F', START_YMD);
     if (sym === 'KAMIS')  rows = await fetchEkapepiaHistory(START_YMD); // ekapepia로 교체
     if (isFx) { const r = await fetchFxHistory(sym, START_YMD); rows = r.rows; meta = { source: r.source, basis: r.basis }; }
-  } catch (e) { console.warn(`getHistory ${sym}:`, e.message); }
+  } catch (e) { console.warn(`getHistory ${sym}:`, e.message); c.err = e.message; }
 
   if (rows.length > 5) {
-    c.d = rows; c.at = Date.now(); c.isReal = true; c.meta = meta; c.failUntil = 0;
+    c.d = rows; c.at = Date.now(); c.isReal = true; c.meta = meta; c.failUntil = 0; c.err = null;
     console.log(`✅ ${sym} history: ${rows.length}건 (실데이터)`);
     return rows;
   }
 
-  // 환율은 가짜(시드) 값을 만들지 않는다 — 못 가져왔으면 빈 값 (화면이 '수집 실패'로 표시)
-  if (isFx || sym === 'KAMIS') {
-    c.d = []; c.isReal = false; c.meta = null; c.failUntil = Date.now() + 5 * 60000;
-    console.warn(`⚠️ ${sym} ${isFx ? '환율 ' : ''}이력 수집 실패 — 가짜 값으로 채우지 않음`);
+  // 가짜(시드) 값을 만들지 않는다 — 못 가져왔으면 빈 값 (화면이 '수집 실패'로 표시)
+  {
+    c.d = []; c.isReal = false; c.meta = null; c.failUntil = Date.now() + 5 * 60000; if (!c.err) c.err = '응답에 쓸 수 있는 자료가 없음';
+    console.warn(`⚠️ ${sym} 이력 수집 실패 — 가짜 값으로 채우지 않음`);
     return [];
   }
 
-  // 그 밖의 항목(LH 등)은 기존대로 시드 데이터 반환 — 단, isReal=false로 명시
-  const seed = genRealisticSeed(sym);
-  c.d = seed;
-  c.at = Date.now() - HIST_TTL + 30*60000; // 30분 후 재시도
-  c.isReal = false;
-  console.warn(`⚠️ ${sym} 실데이터 실패 → 시드(가짜, 실제 시세 아님) ${seed.length}건 사용`);
-  return seed;
 }
 
-// 현실적인 시드 데이터 생성 (실제 시세 패턴 반영)
-function genRealisticSeed(sym) {
-  // 실제 2024~2025 시세 패턴 기반 파라미터
-  const params = {
-    LH: {
-      // CME Lean Hog: 2024년 60~110 cents/lb 범위, 계절성 있음
-      monthly: [78,82,88,95,102,108,104,98,90,84,78,75, 72,76,82,89,96,103,107,101,94,86,80,76],
-      vol: 0.025
-    },
-    ZC: {
-      // 옥수수: 400~550 cents/bu
-      monthly: [440,445,455,465,470,468,455,445,440,442,448,452, 455,460,468,475,480,472,462,450,445,448,455,460],
-      vol: 0.018
-    },
-    ZS: {
-      // 대두: 950~1150 cents/bu
-      monthly: [980,990,1005,1020,1035,1042,1030,1015,1000,990,985,978, 975,982,995,1010,1025,1038,1028,1012,998,988,982,978],
-      vol: 0.016
-    },
-    KAMIS: {
-      // 국내 지육 도매가: 4200~5500원/kg, 계절성 강함
-      monthly: [4600,4550,4500,4600,4800,5000,5100,5200,5000,4800,4700,4800, 4750,4700,4650,4750,4950,5150,5250,5300,5100,4900,4800,4850],
-      vol: 0.02
-    }
-  };
-
-  const p = params[sym] || { monthly: Array(24).fill(100), vol: 0.03 };
-  const rows = [];
-  // 오늘 기준 400일 전부터 생성 (필터링 문제 방지)
-  const start = new Date(Date.now() - 400*86400000);
-  let monthIdx = 0;
-  let price = p.monthly[0];
-
-  for (let d = 0; d < 420; d++) {
-    const date = new Date(start);
-    date.setUTCDate(date.getUTCDate() + d);
-    if ([0, 6].includes(date.getUTCDay())) continue;
-
-    // 월별 목표가 향해 천천히 이동
-    const month = date.getUTCMonth();
-    const yearOffset = date.getUTCFullYear() - 2024;
-    monthIdx = Math.min(yearOffset * 12 + month, p.monthly.length - 1);
-    const target = p.monthly[monthIdx];
-
-    // 목표가 방향으로 수렴 + 랜덤 변동
-    price = price * 0.97 + target * 0.03;
-    price *= 1 + (Math.random() - 0.5) * p.vol;
-    price = Math.max(target * 0.85, Math.min(target * 1.15, price));
-
-    const ymd = date.toISOString().slice(0, 10);
-    const pr = +price.toFixed(sym === 'KAMIS' ? 0 : 2);
-    const spread = sym === 'KAMIS' ? pr * 0.005 : pr * 0.003;
-    rows.push({
-      time: dateToUnix(ymd),
-      open: +(pr + (Math.random()-0.5)*spread).toFixed(sym==='KAMIS'?0:2),
-      high: +(pr + spread).toFixed(sym==='KAMIS'?0:2),
-      low:  +(pr - spread).toFixed(sym==='KAMIS'?0:2),
-      close: pr
-    });
-  }
-  return rows.filter(r => ymdFromUnix(r.time) >= START_YMD);
-}
 
 function filterByPeriod(rows, period) {
   const days = period==='weekly'?7:period==='monthly'?30:365;
@@ -1348,29 +1281,30 @@ async function getCurrentPrices() {
   if (Object.keys(fxErrors).length) results.fxErrors = fxErrors;
 
   // CME Lean Hog
+  // 못 받으면 고정값으로 채우지 않고 이유만 남긴다 (예전 85.0 고정값 삭제)
+  const errs = {};
   if (lhRes.status === 'fulfilled' && lhRes.value) {
     results.LH = { price: lhRes.value, name: 'CME Lean Hog', unit: 'cents/lb' };
-  } else {
-    results.LH = { price: 85.0, name: 'CME Lean Hog', unit: 'cents/lb', source: 'fallback' };
-  }
+  } else errs.LH = 'Yahoo HE=F: ' + ((lhRes.reason && lhRes.reason.message) || '응답 없음');
 
   // 옥수수
   if (zcRes.status === 'fulfilled' && zcRes.value) {
     results.ZC = { price: zcRes.value, name: '옥수수 선물', unit: 'cents/bu' };
-  }
+  } else errs.ZC = 'Yahoo ZC=F: ' + ((zcRes.reason && zcRes.reason.message) || '응답 없음');
 
   // 대두
   if (zsRes.status === 'fulfilled' && zsRes.value) {
     results.ZS = { price: zsRes.value, name: '대두 선물', unit: 'cents/bu' };
-  }
+  } else errs.ZS = 'Yahoo ZS=F: ' + ((zsRes.reason && zsRes.reason.message) || '응답 없음');
 
   // 국내 도매가
   if (kamisRes.status === 'fulfilled' && kamisRes.value) {
     results.KAMIS = kamisRes.value;
-  }   // 지육 도매가(ekapepia)를 못 받으면 항목 자체를 비워 둔다 — 고정값(4,750원)으로 채우지 않음
+  } else errs.KAMIS = '축산물품질평가원: ' + ((kamisRes.reason && kamisRes.reason.message) || '응답 없음');   // 고정값(4,750원)으로 채우지 않음
+  if (Object.keys(errs).length) results.errors = errs;
 
   // 환율 수집에 실패했으면 1분 뒤 다시 시도 (실패 결과를 8분 동안 붙들고 있지 않음)
-  aCache.set('current', { data: results, ts: Date.now(), ttl: Object.keys(fxErrors).length ? 60 * 1000 : 8 * 60000 });
+  aCache.set('current', { data: results, ts: Date.now(), ttl: (Object.keys(fxErrors).length || Object.keys(errs).length) ? 60 * 1000 : 8 * 60000 });
   return results;
 }
 
@@ -1532,6 +1466,7 @@ async function analyzeImportTiming() {
     analysis.push({ msg: `⏰ 판정 기준 검토일(${cfg.reviewOn})이 지났습니다 — 거시 보정은 꺼졌고, 기준값을 다시 설정해야 합니다` });
   }
 
+  if (!lh) analysis.push({ msg: 'CME Lean Hog 수집 실패 — 린호그 조건은 이번 판단에서 뺐습니다 (고정값으로 대신하지 않음)' });
   if (lh) {
     if (lh < cfg.lh.cheap) {
       signals.buy += 3;
@@ -1634,8 +1569,8 @@ function buildTimingPrompt(timing, current) {
 【현재 시장 데이터 — ${kstNow()}】
 - USD/KRW: ${fxTxt(current?.USDKRW)} | 30일 추세: ${trTxt(trends.usd)}
 - EUR/KRW: ${fxTxt(current?.EURKRW)} | 30일 추세: ${trTxt(trends.eur)}
-- CME Lean Hog: ${current?.LH?.price||'N/A'}¢/lb | 30일 추세: ${trTxt(trends.lh)}
-- 국내 지육 도매가: ${current?.KAMIS?.price||'N/A'}원/kg
+- CME Lean Hog: ${current?.LH?.price ? current.LH.price + '¢/lb' : '자료 없음(수집 실패)'} | 30일 추세: ${trTxt(trends.lh)}
+- 국내 지육 도매가: ${current?.KAMIS?.price ? current.KAMIS.price + '원/kg' : '자료 없음(수집 실패)'}
 
 【2~3개월 후 예측】
 - USD/KRW 예측 범위: ${fcTxt(forecasts.usd)}
@@ -1670,7 +1605,7 @@ function buildPigPrompt(period, histData, current) {
   const fmt = rows => (rows||[]).slice(-12).map(r=>`${ymdFromUnix(r.time)}: ${r.close}`).join(', ')||'없음';
   return `수안푸드 돼지고기 지육 수입 ${label} 분석
 
-현재: LH ${current?.LH?.price||'?'}¢/lb, 국내도매가 ${current?.KAMIS?.price||'?'}원/kg, USD ${fxTxt(current?.USDKRW)}, EUR ${fxTxt(current?.EURKRW)}
+현재: LH ${current?.LH?.price ? current.LH.price + '¢/lb' : '자료 없음'}, 국내도매가 ${current?.KAMIS?.price ? current.KAMIS.price + '원/kg' : '자료 없음'}, USD ${fxTxt(current?.USDKRW)}, EUR ${fxTxt(current?.EURKRW)}
 LH 이력: ${fmt(histData.LH)}
 옥수수: ${fmt(histData.ZC)}
 대두: ${fmt(histData.ZS)}
@@ -1916,7 +1851,7 @@ app.get('/api/risk-news', async (_, res) => {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.5' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.6' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -1941,7 +1876,7 @@ app.get('/api/history', async (req, res) => {
     // 캐시에 기록된 실데이터 여부 확인
     const isReal = histCache[sym]?.isReal !== false;
     const meta = histCache[sym]?.meta || null;      // 환율: 어느 출처·어느 기준 값인지
-    res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length, isReal,
+    res.json({ ok:true, sym, period, rows, rangeLabel:rangeLabel(rows,period), total:rows.length, isReal, error: isReal ? null : (histCache[sym]?.err || null),
                source: meta?.source || null, basis: meta?.basis || null, basisLabel: meta ? fxBasisLabel(meta.basis) : null,
                wanted: (sym === 'USDKRW' || sym === 'EURKRW') ? FX_CFG.want : null });
   } catch (e) { res.status(500).json({ ok:false, error:e.message }); }
@@ -2768,7 +2703,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.5', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.6', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2993,7 +2928,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.6.5 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.6.6 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
