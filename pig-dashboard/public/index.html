@@ -255,6 +255,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .trc.on{background:#1e3a5f;border-color:#38bdf8;color:#e0f2fe}
 .trr{border-radius:6px;margin-left:4px}.trr.on{background:#334155;color:#f1f5f9}
 
+.verline{text-align:center;color:#56637a;font-size:.7rem;padding:18px 0 22px}
 /* ── v380 디자인 ── */
 html,body{font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo','Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums;background:#0e1520}
 header{background:#3b322c;border-bottom:none;padding:10px 24px}
@@ -647,13 +648,14 @@ function switchTab(name, btn) {
 }
 
 // ─── Chart.js 헬퍼 ───────────────────────────────────
-function mkChart(id, rows, sym, unit, isReal) {
-  if (!rows || rows.length === 0) {
+const CHART_NM = { LH: 'CME Lean Hog', ZC: '옥수수 선물', ZS: '대두 선물', KAMIS: '국내 지육 도매가' };
+function mkChart(id, rows, sym, unit, isReal, why) {
+  if (!rows || rows.length === 0 || isReal === false) {
     const el = document.getElementById(id);
     if (el) {
       el.parentElement.innerHTML = (sym === 'USDKRW' || sym === 'EURKRW')
         ? '<div class="fxfail"><div style="font-size:.8rem;font-weight:700;color:#f87171;margin-bottom:6px">환율 이력 수집 실패</div><div style="font-size:.7rem;color:#64748b;line-height:1.6">네이버 증권에서 값을 받지 못했습니다.<br>추정값·고정값으로 채우지 않았습니다. 잠시 후 새로고침해 주세요.</div></div>'
-        : '<p style="text-align:center;color:#475569;padding:40px 0;font-size:.78rem;">데이터 없음</p>';
+        : '<div class="fxfail"><div style="font-size:.8rem;font-weight:700;color:#f87171;margin-bottom:6px">' + fxEsc(CHART_NM[sym] || sym) + ' 이력 수집 실패</div><div style="font-size:.7rem;color:#64748b;line-height:1.6">' + (why ? fxEsc(why) + '<br>' : '') + '추정값·고정값으로 채우지 않았습니다. 잠시 후 새로고침해 주세요.</div></div>';
     }
     return;
   }
@@ -665,32 +667,16 @@ function mkChart(id, rows, sym, unit, isReal) {
     const d = new Date(r.time * 1000);
     return (d.getMonth()+1) + '/' + d.getDate();
   });
-  // 가짜(시드) 데이터일 경우 경고 배지 표시
-  const wrapEl = canvas.closest('.card');
-  if (wrapEl) {
-    let warnEl = wrapEl.querySelector('.fake-data-warn');
-    if (isReal === false) {
-      if (!warnEl) {
-        warnEl = document.createElement('div');
-        warnEl.className = 'fake-data-warn';
-        warnEl.style.cssText = 'background:#451a03;border:1px solid #ea580c;color:#fb923c;font-size:.68rem;font-weight:700;padding:5px 9px;border-radius:5px;margin-bottom:8px;text-align:center';
-        warnEl.textContent = '실데이터 수신 실패 — 추정 패턴 데이터 표시 중 (실제 시세 아님)';
-        canvas.closest('.cw,.cwl')?.before(warnEl);
-      }
-    } else if (warnEl) {
-      warnEl.remove();
-    }
-  }
   try {
     charts[id] = new Chart(canvas.getContext('2d'), {
       type: 'line',
-      data: { labels, datasets: [{ data: rows.map(r => r.close), borderColor: isReal===false?'#64748b':c.l, backgroundColor: isReal===false?'rgba(100,116,139,.1)':c.f,
-        borderWidth: 2, borderDash: isReal===false?[5,4]:[], pointRadius: rows.length > 60 ? 0 : 3, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
+      data: { labels, datasets: [{ data: rows.map(r => r.close), borderColor: c.l, backgroundColor: c.f,
+        borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
       options: {
         responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
         plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#94a3b8',
           bodyColor: '#f1f5f9', borderColor: '#334155', borderWidth: 1,
-          callbacks: { label: ctx => (isReal===false?'[추정] ':'') + ctx.parsed.y.toFixed(2) + ' ' + unit } } },
+          callbacks: { label: ctx => ctx.parsed.y.toFixed(2) + ' ' + unit } } },
         scales: {
           x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', maxTicksLimit: 8, font: { size: 10 } } },
           y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } } }
@@ -748,7 +734,7 @@ function renderKpi(id, data, keys) {
       const why = data?.fxErrors?.[item.k];
       return `<div class="kpi" style="border:1px solid #7f1d1d"><div class="kl">${item.l}</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5">${why ? `<span class="whyclip" title="${fxEsc(why)}">${fxEsc(why)}</span>` : ''}고정값으로 대신하지 않음</div></div>`;
     }
-    if (!d || !d.price) return `<div class="kpi"><div class="kl">${item.l}</div><div class="kv" style="color:#475569">—</div><div class="ku">데이터 없음</div></div>`;
+    if (!d || !d.price) { const why = data?.errors?.[item.k]; return `<div class="kpi"><div class="kl">${item.l}</div><div class="kv" style="font-size:.85rem;color:#f87171">수집 실패</div><div class="ku" style="color:#fca5a5">${why ? `<span class="whyclip" title="${fxEsc(why)}">${fxEsc(why)}</span><br>` : ''}고정값으로 대신하지 않음</div></div>`; }
     const chgHtml = d.change != null ? `<div class="kc ${d.change>0?'up':'dn'}">${d.change>0?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}${d.changePct?' ('+d.changePct+'%)':''}</div>` : '';
     if (isFx) {
       const buy = d.basis === fxWant(d);
@@ -889,7 +875,7 @@ async function getHist(sym, period) {
   if (hcache[key]) return hcache[key];
 
   const j = await fetch(`/api/history?sym=${sym}&period=${period}`).then(r => r.json()).catch(() => ({ ok: false, rows: [] }));
-  const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '', isReal: j.isReal !== false, source: j.source || null, basis: j.basis || null, basisLabel: j.basisLabel || null, wanted: j.wanted || null };
+  const result = { rows: j.rows || [], rangeLabel: j.rangeLabel || '', isReal: j.isReal !== false, source: j.source || null, basis: j.basis || null, basisLabel: j.basisLabel || null, wanted: j.wanted || null, error: j.error || (j.ok === false ? '서버 응답 없음' : null) };
   if (result.rows.length > 0) hcache[key] = result;
   return result;
 }
@@ -923,7 +909,7 @@ async function loadTiming() {
   mkChart('c-usd',   uH.rows, 'USDKRW', '원',       uH.isReal);
   mkChart('c-eur',   eH.rows, 'EURKRW', '원',       eH.isReal);
   fxTag('tag-c-usd', uH); fxTag('tag-c-eur', eH);
-  mkChart('c-lh',    lH.rows, 'LH',     'cents/lb', lH.isReal);
+  mkChart('c-lh',    lH.rows, 'LH',     'cents/lb', lH.isReal, lH.error);
 
   // EU 지육가 백그라운드 로드
   loadEuPig();
@@ -1017,14 +1003,14 @@ async function loadPeriod(period) {
 
   if (period === 'weekly') {
     const el = document.getElementById('rng-weekly'); if(el) el.textContent = rl;
-    mkChart('wc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
+    mkChart('wc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal, lhH.error);
     mkFeedChart('wc-feed', zcH.rows, zsH.rows);
     renderTable('tbl-wlh', lhH.rows, 'cents/lb', 7);
     const wr = document.getElementById('rng-wlh'); if(wr) wr.textContent = rl;
 
   } else if (period === 'monthly') {
     const el = document.getElementById('rng-monthly'); if(el) el.textContent = rl;
-    mkChart('mc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
+    mkChart('mc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal, lhH.error);
     mkFeedChart('mc-feed', zcH.rows, zsH.rows);
     renderTable('tbl-mlh', lhH.rows, 'cents/lb', 10);
     const mr = document.getElementById('rng-mlh'); if(mr) mr.textContent = rl;
@@ -1032,12 +1018,12 @@ async function loadPeriod(period) {
   } else { // yearly
     const el = document.getElementById('rng-yearly'); if(el) el.textContent = rl;
     const [uH, eH] = await Promise.all([getHist('USDKRW','yearly'), getHist('EURKRW','yearly')]);
-    mkChart('yc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal);
+    mkChart('yc-lh', lhH.rows, 'LH', 'cents/lb', lhH.isReal, lhH.error);
     mkChart('yc-usd', uH.rows, 'USDKRW', '원', uH.isReal);
     mkChart('yc-eur', eH.rows, 'EURKRW', '원', eH.isReal);
     fxTag('tag-yc-usd', uH); fxTag('tag-yc-eur', eH);
-    mkChart('yc-zc', zcH.rows, 'ZC', 'cents/bu', zcH.isReal);
-    mkChart('yc-zs', zsH.rows, 'ZS', 'cents/bu', zsH.isReal);
+    mkChart('yc-zc', zcH.rows, 'ZC', 'cents/bu', zcH.isReal, zcH.error);
+    mkChart('yc-zs', zsH.rows, 'ZS', 'cents/bu', zsH.isReal, zsH.error);
   }
 }
 
@@ -2882,5 +2868,7 @@ function installPWA() {
   }
 }
 </script>
+<footer class="verline">화면 v382 · 서버 <span id="srv-ver">확인 중</span></footer>
+<script>fetch('/api/version').then(r => r.json()).then(j => { document.getElementById('srv-ver').textContent = j.version || '버전 정보 없음'; }).catch(() => { document.getElementById('srv-ver').textContent = '응답 없음'; });</script>
 </body>
 </html>
