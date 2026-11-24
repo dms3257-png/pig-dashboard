@@ -255,6 +255,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .trc.on{background:#1e3a5f;border-color:#38bdf8;color:#e0f2fe}
 .trr{border-radius:6px;margin-left:4px}.trr.on{background:#334155;color:#f1f5f9}
 
+/* v376 이번 주 변동 · 재고없음 추이 · 엑셀 점검 */
+.pxmv,.pxna{margin:8px 0 14px}
+.pxmvt tbody tr,.pxnat tbody tr{cursor:pointer}
+.pxmvt tbody tr:hover td,.pxnat tbody tr:hover td{background:#16213a}
+.nab{display:inline-flex;align-items:flex-end;gap:2px;height:28px;vertical-align:middle}
+.nab i{display:inline-block;width:7px;background:#fbbf24;border-radius:1px}
+.nab i.nx{height:1px;background:#334155}
+.pxck{margin-top:10px}
+.pxckt td{font-size:.74rem;vertical-align:top;white-space:nowrap}
+.pxckt td:nth-child(3),.pxckt td:nth-child(4){white-space:normal;min-width:110px;max-width:260px}
+
 .verline{text-align:center;color:#56637a;font-size:.7rem;padding:18px 0 22px}
 /* ── v380 디자인 ── */
 html,body{font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo','Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums;background:#0e1520}
@@ -1282,6 +1293,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script>
+// v376: 재고없음 추이 · 이번 주 변동 · 엑셀 점검 목록
 // ==ITEMS-CORE-START==
 // ───────────────────────────────────────────────────────────────
 // 품목 전략 · 계산 로직 (화면과 무관한 순수 함수 — 테스트에서 이 구간만 따로 실행함)
@@ -1858,7 +1870,7 @@ function itPriceSheetParse(aoa, sheetName, ymOver) {
       else if (pv && pv.ok) k = itPxAddDays(pv.key, 7 * d);
     }
     const use = k && fits(k, w.mo, w.ord) ? k : null;
-    fixes.push({ label: w.lab.replace(/\s+/g, ' ').trim(), written: w.key, used: use });
+    fixes.push({ label: w.lab.replace(/\s+/g, ' ').trim(), written: w.key, used: use, i: h, c: w.col, val: String(hdr[w.col] == null ? '' : hdr[w.col]).trim() });
     w.key = use; w.fixed = !!use;
   });
   const weeks = [];
@@ -1872,15 +1884,18 @@ function itPriceSheetParse(aoa, sheetName, ymOver) {
   // 맨 앞 칸이 다음 칸보다 2주 넘게 앞선 날짜면(지난 시트 제목을 통째로 복사한 칸) 날짜를 알 수 없어 버림
   while (weeks.length > 2 && itPxDays(weeks[0].key, weeks[1].key) > 14) {
     const w0 = weeks.shift();
-    fixes.push({ label: w0.lab.replace(/\s+/g, ' ').trim(), written: w0.key, used: null, why: '다음 칸과 ' + itPxDays(w0.key, weeks[0].key) + '일 차이' });
+    fixes.push({ label: w0.lab.replace(/\s+/g, ' ').trim(), written: w0.key, used: null, why: '다음 칸과 ' + itPxDays(w0.key, weeks[0].key) + '일 차이', i: h, c: w0.col, val: String(hdr[w0.col] == null ? '' : hdr[w0.col]).trim() });
   }
   if (weeks.length < 2) return null;
   // 저가·고가·평균가 열 위치 확인 (제목 아래 2~3줄 안에 '저가'가 있어야 함)
   let sub = -1;
   for (let i = h + 1; i <= h + 4 && i < aoa.length; i++) if (String((aoa[i] || [])[weeks[0].col] || '').trim() === '저가') { sub = i; break; }
   if (sub < 0) return null;
-  const rows = [];
+  // v376 재고없음 = '재고없음' 글자 또는 #VALUE! (다른 엑셀 오류 #REF! 등은 수식이 깨진 칸 → 재고없음으로 세지 않고 점검 목록에 올림)
+  const rows = [], issues = [];
   let item = '';
+  const cellT = x => String(x == null ? '' : x).trim();
+  const blankish = t => !t || /^0+(\.0+)?$/.test(t) || /^[-–—]+$/.test(t);          // 빈칸·0·'-' = 시세 없음 (점검 대상 아님)
   for (let i = sub + 1; i < aoa.length; i++) {
     const r = aoa[i] || [];
     const a = String(r[0] == null ? '' : r[0]).trim(), b = String(r[1] == null ? '' : r[1]).replace(/\s+/g, ' ').trim();
@@ -1889,16 +1904,23 @@ function itPriceSheetParse(aoa, sheetName, ymOver) {
     const v = {};
     let any = false;
     for (const w of weeks) {
-      const low = itPxNum(r[w.col]), high = itPxNum(r[w.col + 1]), avgCell = itPxNum(r[w.col + 2]);
-      const txt = [r[w.col], r[w.col + 1]].join(' ');
-      let avg = avgCell;
-      if (avg == null && low != null && high != null) avg = (low + high) / 2;
+      const t3 = [r[w.col], r[w.col + 1], r[w.col + 2]].map(cellT);
+      const low = itPxNum(t3[0]), high = itPxNum(t3[1]), avgCell = itPxNum(t3[2]);
+      let avg = avgCell, res = avgCell != null ? 'cell' : 'none';
+      if (avg == null && low != null && high != null) { avg = (low + high) / 2; res = 'mid'; }
       if (avg != null) { v[w.key] = { avg: avg, low: low, high: high }; any = true; }
-      else if (/재고\s*없/.test(txt) || [r[w.col], r[w.col + 1], r[w.col + 2]].some(itPxErr)) v[w.key] = { na: true };
+      else if (t3.some(x => /재고\s*없/.test(x)) || t3.indexOf('#VALUE!') >= 0) { v[w.key] = { na: true }; res = 'na'; }
+      const base = { i: i, item: item, brand: b, wk: w.lab.replace(/\s+/g, ' ').trim(), res: res, avg: avg };
+      if (low != null && high != null && low > high) issues.push(Object.assign({ t: 'lh', c: w.col, val: t3[0], low: low, high: high, avgCell: avgCell }, base));
+      if (low != null && high != null && avgCell != null && low <= high && (avgCell < low - 0.5 || avgCell > high + 0.5)) issues.push(Object.assign({ t: 'avg', c: w.col + 2, val: t3[2], low: low, high: high, avgCell: avgCell }, base));
+      t3.forEach((x, j) => {
+        if (blankish(x) || itPxNum(x) != null || /재고\s*없/.test(x) || x === '#VALUE!') return;
+        issues.push(Object.assign({ t: itPxErr(x) ? 'err' : 'txt', c: w.col + j, val: x, part: j }, base));
+      });
     }
     if (any || Object.keys(v).length) rows.push({ item: item, brand: b, v: v });
   }
-  return rows.length ? { ym: ym, weeks: weeks, rows: rows, fixes: fixes } : null;
+  return rows.length ? { ym: ym, weeks: weeks, rows: rows, fixes: fixes, issues: issues } : null;
 }
 // 여러 시트를 시간순으로 합쳐 (겹치는 주는 나중 시트 값 사용) 최근 n주를 요약 문장으로
 function itPriceBookText(parsedList, nWeeks) {
@@ -2054,7 +2076,9 @@ function itPriceBook(sheets, todayYmd) {
   ser.forEach((e, k) => { e.na = Object.keys(naMap[k] || {}).sort(); });
   const fixList = [];
   monthly.forEach(p => (p.fixes || []).forEach(f => fixList.push(Object.assign({ sheet: p.name }, f))));
-  const check = { inferredYears: inferred, dateFixes: fixList, data: !!data.length, monthlySheets: monthly.length, compared: 0, equal: 0, rate: null, lastYear: null, approxWeeks: 0, yearBasis: null };
+  const issueList = [];
+  monthly.forEach(p => (p.issues || []).forEach(x => issueList.push(Object.assign({ sheet: p.name }, x))));
+  const check = { issues: issueList, firstMonthly: monthly.length ? itPxWeekMon(monthly[0].weeks[0].key) : null, inferredYears: inferred, dateFixes: fixList, data: !!data.length, monthlySheets: monthly.length, compared: 0, equal: 0, rate: null, lastYear: null, approxWeeks: 0, yearBasis: null };
   const mVal = {};
   ser.forEach((e, k) => { mVal[k] = Object.assign({}, e.v); });
   const ty = +(todayYmd || '2026-01-01').slice(0, 4);
@@ -2110,6 +2134,21 @@ function itPriceBook(sheets, todayYmd) {
   return { weeks: weeks, rows: order.map(k => ser.get(k)).filter(e => Object.keys(e.v).length), check: check };
 }
 
+// v376 점검 목록의 칸 주소: meta[시트] = { rowNo: [aoa 줄 → 엑셀 줄(0부터)], get: (R, c) => 그 칸 글자 }
+function itPxSetAddrs(check, meta) {
+  if (!check) return;
+  const list = (check.issues || []).concat(check.dateFixes || []);
+  const bad = {};
+  list.forEach(x => {
+    const m = meta[x.sheet];
+    if (x.i == null || x.c == null || !m || !m.rowNo || x.i >= m.rowNo.length) { x.addr = null; bad[x.sheet] = true; return; }
+    const R = m.rowNo[x.i];
+    if (m.get && String(m.get(R, x.c) == null ? '' : m.get(R, x.c)).trim() !== String(x.val == null ? '' : x.val).trim()) bad[x.sheet] = true;
+    x.addr = itColLetter(x.c) + (R + 1);
+  });
+  list.forEach(x => { if (bad[x.sheet]) x.addr = null; });
+  check.addrBad = Object.keys(bad);
+}
 // 주 시작 월요일 (토·일은 다음 주 월요일)
 function itPxWeekMon(k) {
   const t = Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)), wd = new Date(t).getUTCDay();   // 0=일 … 6=토
@@ -2126,10 +2165,18 @@ function itPxAt(keys, v, ref, days, tol) {
   }
   return best;
 }
+// v376 a주 → b주: 두 주 모두 시세가 있는 같은 브랜드끼리 비교 (변동률 = 가격 비율의 평균, 원 = 차이의 평균)
+function itPxPairChg(rs, a, b) {
+  const pr = rs.filter(e => e.v[a] > 0 && e.v[b] > 0);
+  if (!pr.length) return null;
+  const r = pr.reduce((s, e) => s + e.v[b] / e.v[a], 0) / pr.length - 1;
+  return { pct: Math.round(r * 1000) / 10, won: Math.round(pr.reduce((s, e) => s + e.v[b] - e.v[a], 0) / pr.length), n: pr.length };
+}
 const itPxPct = (a, b) => (a > 0 && b > 0) ? Math.round((b / a - 1) * 1000) / 10 : null;
 function itPriceStats(book) {
   if (!book || !book.rows.length) return null;
   const last = book.weeks[book.weeks.length - 1];
+  const W = book.weeks, FM = (book.check && book.check.firstMonthly) || null;
   const rows = book.rows.map(e => {
     const keys = Object.keys(e.v).sort();
     const lk = keys[keys.length - 1], lv = e.v[lk];
@@ -2179,6 +2226,30 @@ function itPriceStats(book) {
       });
     });
     const season = acc.map(a => a.length >= 2 ? Math.round(mean(a)) : null);
+    // v376 이번 주 변동: 이번 주와 바로 앞 주에 둘 다 시세가 있는 같은 브랜드끼리 (가격 비율의 평균), 같은 방향이 이어진 주 수
+    let move = null;
+    const li = W.length - 1;
+    if (li > 0 && book1.some(e => e.v[last] > 0)) {
+      const p = itPxPairChg(book1, W[li - 1], W[li]);
+      if (p) {
+        const sg = x => x > 0 ? 1 : x < 0 ? -1 : 0, s0 = sg(p.pct);
+        let streak = 0;
+        if (s0) for (let j = li; j > 0 && streak < 104; j--) { const q = itPxPairChg(book1, W[j - 1], W[j]); if (!q || sg(q.pct) !== s0) break; streak++; }
+        move = { from: W[li - 1], to: W[li], days: itPxDays(W[li - 1], W[li]), pct: p.pct, won: p.won, n: p.n, dir: s0, streak: streak };
+      }
+    }
+    // v376 재고없음 브랜드 수: 최근 12주, 그 주 시세표에 재고없음/#VALUE! 로 적힌 브랜드 수 / 그 주 시세표에 오른 브랜드 수 (월별 시트 이전 주는 알 수 없음)
+    const naS = book1.map(e => new Set(e.na || []));
+    const naCnt = k => {
+      if (!FM || k < FM) return { k: k, out: null, listed: null };
+      let o = 0, n = 0;
+      book1.forEach((e, ix) => { if (e.v[k] != null) n++; else if (naS[ix].has(k)) o++; });
+      return { k: k, out: o, listed: o + n };
+    };
+    const naW = W.slice(-12).map(naCnt), naNow = naW[naW.length - 1];
+    const k4 = W.find(k => itPxDays(k, last) === 28), na4 = k4 ? naCnt(k4) : null;
+    const na12 = { weeks: naW, now: naNow.out, listed: naNow.listed, before: na4 ? na4.out : null, beforeKey: na4 && na4.out != null ? k4 : null,
+      chg: na4 && na4.out != null && naNow.out != null ? naNow.out - na4.out : null };
     return {
       item: item, brands: rs.length, active: act.length, out: rs.filter(r => r.soldOut).length,
       avg: same.length ? Math.round(mean(same.map(r => r.last))) : null, avgKey: lhKey || null, avgN: same.length,
@@ -2188,7 +2259,7 @@ function itPriceStats(book) {
       low: lh ? { brand: lh.low.join(' · '), price: lh.min, n: lh.low.length } : null,
       high: lh && lh.n > 1 ? { brand: lh.max === lh.min ? '모두 같은 가격' : lh.high.join(' · '), price: lh.max, n: lh.high.length } : null,
       spread: lh && lh.n > 1 ? itPxPct(lh.min, lh.max) : null,
-      season: season, rows: rs,
+      season: season, rows: rs, move: move, na12: na12,
     };
   });
   return { last: last, first: book.weeks[0], items: items, rows: rows, check: book.check };
@@ -2202,6 +2273,18 @@ function itPriceForAI(st, cap) {
   const L = ['기준: 최신 주 ' + st.last + ' · 자료 시작 ' + st.first + (st.check && st.check.rate != null ? ' · 그래프 원본(데이터서식)과 월별 시트 대조 일치율 ' + st.check.rate + '%' : ''),
     '', '[품목 요약] (평균 시세 = 기준주에 시세가 있는 브랜드 평균, 변화율·52주 위치·3년평균比 = 최근 3주 안 시세가 있는 브랜드 값의 평균)', '| 품목 | 브랜드(최근 시세 있음/시세표 전체) | 평균 시세 | 4주 | 12주 | 전년비 | 52주 위치 | 3년평균比 | 최저 브랜드 | 최고 브랜드 | 브랜드 가격차 | 계절지수 1~12월 |', '|---|---|---|---|---|---|---|---|---|---|---|---|'];
   st.items.forEach(it => L.push('| ' + it.item + ' | ' + it.active + '/' + it.brands + (it.out ? ' (재고없음 ' + it.out + ')' : '') + ' | ' + w(it.avg) + ' | ' + f(it.chg4) + ' | ' + f(it.chg12) + ' | ' + f(it.yoy) + ' | ' + (it.pos52 == null ? '-' : it.pos52 + '%') + ' | ' + f(it.dev3) + ' | ' + (it.low ? it.low.brand + ' ' + w(it.low.price) : '-') + ' | ' + (it.high ? it.high.brand + ' ' + w(it.high.price) : '-') + ' | ' + f(it.spread) + ' | ' + it.season.map(x => x == null ? '-' : x).join(' ') + ' |'));
+  const mvs = st.items.filter(it => it.move).sort((a, b) => Math.abs(b.move.pct) - Math.abs(a.move.pct));
+  if (mvs.length) {
+    const m0 = mvs[0].move;
+    L.push('', '[이번 주 변동] ' + m0.to + ' 주, ' + (m0.days === 7 ? '지난주' : m0.days + '일 전 주') + '(' + m0.from + ') 대비 · 두 주 모두 시세가 있는 같은 브랜드끼리 비교 · 연속 = 같은 방향이 이어진 주 수');
+    mvs.forEach(it => L.push('- ' + it.item + ': ' + f(it.move.pct) + ' (' + (it.move.won > 0 ? '+' : '') + w(it.move.won) + '원/kg, ' + it.move.n + '개 브랜드, ' + (it.move.dir ? it.move.streak + '주째 ' + (it.move.dir > 0 ? '상승' : '하락') : '보합') + ')'));
+  }
+  const nas = st.items.filter(it => it.na12 && it.na12.weeks.some(x => x.out));
+  if (nas.length) {
+    const ws = nas[0].na12.weeks;
+    L.push('', '[재고없음 브랜드 수 추이] ' + ws[0].k + ' ~ ' + ws[ws.length - 1].k + ' 주별 (재고없음·#VALUE! 로 적힌 브랜드 수 / 그 주 시세표에 오른 브랜드 수, - = 월별 시트 이전이라 모름)');
+    nas.forEach(it => L.push('- ' + it.item + ': ' + it.na12.weeks.map(x => x.out == null ? '-' : x.out + '/' + x.listed).join(' ')));
+  }
   L.push('', '[브랜드별] (재고없음 = 시세표에 재고없음 또는 #VALUE! 로 적힌 주부터, 최근 시세 없음 = 최신 주보다 3주 넘게 시세가 끊긴 브랜드, - = 비교할 값 없음 또는 자료 기간 부족: 52주 위치는 52주, 3년평균比는 3년치 자료가 있는 브랜드만 계산)', '| 품목/브랜드 | 시세(기준주) | 4주 | 12주 | 전년비 | 52주 최저~최고 | 52주 위치 | 3년평균比 |', '|---|---|---|---|---|---|---|---|');
   let text = L.join('\n');
   if (text.length > cap - 40) return text.slice(0, cap - 60) + '\n…(일부 생략 — 글자 수 제한)';
@@ -2283,11 +2366,11 @@ function itLoadXlsx() {
 // ── 저장 / 복원 ──
 function itPxPack(p) {
   const wi = {}; p.book.weeks.forEach((w, i) => { wi[w] = i; });
-  return { v: 3, name: p.name, sig: p.sig, include: p.include, at: p.at, weeks: p.book.weeks, check: p.book.check,
+  return { v: 4, name: p.name, sig: p.sig, include: p.include, at: p.at, weeks: p.book.weeks, check: p.book.check,
     rows: p.book.rows.map(e => { const a = new Array(p.book.weeks.length).fill(null); Object.keys(e.v).forEach(k => { a[wi[k]] = e.v[k]; }); return [e.item, e.brand, a, e.na || []]; }) };
 }
 function itPxUnpack(d) {
-  if (!d || d.v !== 3 || !Array.isArray(d.weeks) || !Array.isArray(d.rows)) return null;
+  if (!d || d.v !== 4 || !Array.isArray(d.weeks) || !Array.isArray(d.rows)) return null;
   const rows = d.rows.map(r => { const v = {}; (r[2] || []).forEach((x, i) => { if (x != null && d.weeks[i]) v[d.weeks[i]] = x; }); return { item: r[0], brand: r[1], v: v, src: {}, na: Array.isArray(r[3]) ? r[3].filter(k => typeof k === 'string') : [] }; }).filter(e => Object.keys(e.v).length);
   if (!rows.length) return null;
   const book = { weeks: d.weeks.slice(), rows: rows, check: d.check || {} };
@@ -2314,7 +2397,11 @@ function itLoadSaved() {
     IT.meeting = Array.isArray(d.meeting) ? d.meeting.filter(f => f && typeof f.text === 'string') : [];
     IT.ai = d.ai || null;
   }
-  try { IT.price = itPxUnpack(JSON.parse(localStorage.getItem(IT_LS_PX) || 'null')); } catch (e) { IT.price = null; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(IT_LS_PX) || 'null');
+    IT.price = itPxUnpack(raw);
+    if (!IT.price && raw && raw.v && raw.v < 4) IT.msg = { text: '주간 시세표 계산 기준이 바뀌어(재고없음 기준 정리 · 이번 주 변동 · 엑셀 점검 목록 추가) 예전에 올린 시세표는 쓰지 않았습니다. 시세표 엑셀을 다시 올려 주세요.', level: 'warn' };
+  } catch (e) { IT.price = null; }
 }
 
 // ── 파일 읽기 ──
@@ -2372,9 +2459,22 @@ function itTrimSheet(XLSX, ws) {
   ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.min(maxR, IT_MAX_ROWS - 1), c: Math.min(maxC, 1023) } });
   return { rows: maxR + 1, cut: maxR >= IT_MAX_ROWS };
 }
+// v376 sheet_to_json(blankrows:false) 가 남기는 줄 = 값이 있는 칸이 하나라도 있는 줄 → aoa 줄 번호 ↔ 엑셀 줄 번호
+function itPxRowNos(XLSX, ws) {
+  if (!ws['!ref']) return null;
+  const rg = XLSX.utils.decode_range(ws['!ref']), has = new Set();
+  for (const k in ws) {
+    if (k.charCodeAt(0) === 33) continue;
+    const c = ws[k];
+    if (!c || c.t === undefined || c.t === 'z' || c.v == null) continue;
+    const a = XLSX.utils.decode_cell(k);
+    if (a.r >= rg.s.r && a.r <= rg.e.r && a.c >= rg.s.c && a.c <= rg.e.c) has.add(a.r);
+  }
+  return Array.from(has).sort((x, y) => x - y);
+}
 // 엑셀 하나 → 주간 시세표면 IT.price, 아니면 회의 글
 function itAddWorkbook(XLSX, file, wb) {
-  const sheets = [], texts = [];
+  const sheets = [], texts = [], meta = {};
   let hidden = 0;
   wb.SheetNames.forEach((sn, i) => {
     if (itIsHidden(wb, i)) { hidden++; return; }
@@ -2384,10 +2484,15 @@ function itAddWorkbook(XLSX, file, wb) {
     itErrToText(ws);
     if (!itTrimSheet(XLSX, ws).rows) return;
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: false });
+    let rowNo = itPxRowNos(XLSX, ws);
+    if (rowNo && rowNo.length !== aoa.length) rowNo = null;                      // 줄 수가 다르면 칸 주소를 쓰지 않음
+    meta[sn] = { rowNo: rowNo, get: (R, c) => { const x = ws[XLSX.utils.encode_cell({ r: R, c: c })]; return x ? (x.w != null ? x.w : x.v) : ''; } };
     sheets.push({ name: sn, aoa: aoa });
   });
   const book = itPriceBook(sheets, itToday());
   if (book && (book.check.monthlySheets >= 2 || book.check.data) && book.rows.length) {
+    itPxSetAddrs(book.check, meta);
+    (book.check.issues || []).concat(book.check.dateFixes || []).forEach(x => { delete x.i; delete x.c; });
     IT.price = { name: file.name, sig: file.name + '|' + file.size, include: true, at: itToday(), book: book, stats: itPriceStats(book) };
     IT.pxSel = null;
     return { kind: 'price', hidden: hidden };
@@ -2586,11 +2691,82 @@ function itLowHigh(it) {
 function itBrandCnt(it) {
   return '<span title="최근 3주 안에 시세가 있는 브랜드 ' + it.active + '개 / 시세표에 나온 적 있는 브랜드 ' + it.brands + '개"><b>' + it.active + '</b>개 <span class="fn">/ ' + it.brands + '개</span></span>' + (it.out ? '<div class="fn" style="color:#fbbf24" title="최근 주가 재고없음(또는 #VALUE!)으로 적힌 브랜드">재고없음 ' + it.out + '개</div>' : '');
 }
+// v376 이번 주 크게 움직인 품목
+const itMd = k => k ? k.slice(5).replace('-', '/') : '';
+function itMoveTxt(m) { return m.dir ? m.streak + '주째 ' + (m.dir > 0 ? '상승' : '하락') : '보합'; }
+function itMoveBox(st, open) {
+  const mv = st.items.filter(it => it.move);
+  const skip = st.items.filter(it => !it.move && it.active > 0).map(it => it.item);
+  const skipTxt = skip.length ? '<div class="fn">이번 주와 지난주에 함께 시세가 있는 브랜드가 없어 뺀 품목: ' + itEsc(skip.join(', ')) + '</div>' : '';
+  if (!mv.length) return '<div class="pxmv" id="it-mv"><div class="slb">이번 주 크게 움직인 품목</div><p class="fn">이번 주와 지난주에 함께 시세가 있는 브랜드가 없어 비교하지 못했습니다.</p>' + skipTxt + '</div>';
+  mv.sort((a, b) => (Math.abs(b.move.pct) - Math.abs(a.move.pct)) || a.item.localeCompare(b.item, 'ko'));
+  const m0 = mv[0].move;
+  const top = mv.filter(it => it.move.pct !== 0).slice(0, 8), rest = mv.filter(it => top.indexOf(it) < 0);
+  const tr = it => '<tr data-pxj="' + itEsc(it.item) + '"><td class="l"><b>' + itEsc(it.item) + '</b></td><td>' + itPc(it.move.pct) + '</td><td class="num">' + (it.move.won > 0 ? '+' : '') + itW(it.move.won) + '</td><td class="' + (it.move.dir > 0 ? 'cu' : it.move.dir < 0 ? 'cd' : 'fn') + '">' + itMoveTxt(it.move) + '</td><td>' + it.move.n + '개</td></tr>';
+  const tb = list => '<div class="tscroll"><table class="dt pxmvt"><thead><tr><th class="l">품목</th><th>지난주 대비</th><th>원/kg</th><th>흐름</th><th>비교 브랜드</th></tr></thead><tbody>' + list.map(tr).join('') + '</tbody></table></div>';
+  return '<div class="pxmv" id="it-mv"><div class="slb">이번 주 크게 움직인 품목 <span class="fn">' + itMd(m0.to) + ' 주 · ' + (m0.days === 7 ? '지난주' : m0.days + '일 전 주') + '(' + itMd(m0.from) + ') 대비 · 두 주 모두 시세가 있는 같은 브랜드끼리 비교</span></div>' +
+    (top.length ? tb(top) : '<p class="fn">이번 주 시세가 바뀐 품목이 없습니다.</p>') +
+    (rest.length ? '<details class="xn" id="it-mv-more"' + (open ? ' open' : '') + '><summary>' + (top.length ? '나머지 품목 ' : '보합 품목 ') + rest.length + '개</summary>' + tb(rest) + '</details>' : '') + skipTxt +
+    '<div class="fn">흐름 = 지난주 대비 같은 방향(상승·하락)이 이어진 주 수 · 품목을 누르면 브랜드별 표가 열립니다.</div></div>';
+}
+// v376 재고없음 브랜드 수 (공급 신호)
+function itNaBox(st, open) {
+  const any = st.items.find(it => it.na12);
+  if (!any) return '';
+  const ws = any.na12.weeks;
+  const head = '<div class="slb">재고없음 브랜드 수 — 공급 신호 <span class="fn">' + itMd(ws[0].k) + ' ~ ' + itMd(ws[ws.length - 1].k) + ' 주 · 그 주 시세표에 재고없음 또는 #VALUE! 로 적힌 브랜드</span></div>';
+  const list = st.items.filter(it => it.na12 && it.na12.weeks.some(x => x.out));
+  if (!list.length) return '<div class="pxna" id="it-na">' + head + '<p class="fn">최근 12주 시세표에 재고없음으로 적힌 브랜드가 없습니다.</p></div>';
+  const cv = x => x == null ? -1e9 : x;
+  list.sort((a, b) => (cv(b.na12.chg) - cv(a.na12.chg)) || (cv(b.na12.now) - cv(a.na12.now)) || a.item.localeCompare(b.item, 'ko'));
+  const bars = n => { const mx = Math.max(1, ...n.weeks.map(x => x.listed || 0)); return '<span class="nab">' + n.weeks.map(x => x.out == null ? '<i class="nx" title="' + itMd(x.k) + ' 주: 월별 시트 이전이라 알 수 없음"></i>' : '<i style="height:' + (x.out ? Math.max(3, Math.round(x.out / mx * 26)) : 1) + 'px" title="' + itMd(x.k) + ' 주: 재고없음 ' + x.out + '개 / 시세표 ' + x.listed + '개"></i>').join('') + '</span>'; };
+  const chg = c => c == null ? '<span class="fn">-</span>' : c > 0 ? '<span class="cu">+' + c + '개</span>' : c < 0 ? '<span class="cd">' + c + '개</span>' : '<span class="fn">변화 없음</span>';
+  const tr = it => { const n = it.na12; return '<tr data-pxj="' + itEsc(it.item) + '"><td class="l"><b>' + itEsc(it.item) + '</b></td><td>' + (n.now == null ? '-' : '<b>' + n.now + '</b>개 <span class="fn">/ ' + n.listed + '개</span>') + '</td><td>' + (n.before == null ? '<span class="fn">-</span>' : n.before + '개') + '</td><td>' + chg(n.chg) + '</td><td>' + bars(n) + '</td></tr>'; };
+  // 12주 동안 숫자가 바뀐 품목을 위에, 내내 같은 품목(오래 재고없음으로 남아 있는 브랜드 등)은 접어 둠
+  const moved = n => new Set(n.weeks.filter(x => x.out != null).map(x => x.out)).size > 1;
+  const A = list.filter(it => moved(it.na12)), B = list.filter(it => !moved(it.na12));
+  const tb = xs => '<div class="tscroll"><table class="dt pxnat"><thead><tr><th class="l">품목</th><th>이번 주<br><span class="fn">재고없음 / 시세표</span></th><th>4주 전</th><th>변화</th><th>최근 12주</th></tr></thead><tbody>' + xs.map(tr).join('') + '</tbody></table></div>';
+  return '<div class="pxna" id="it-na">' + head + (A.length ? tb(A) : '<p class="fn">최근 12주 동안 재고없음 브랜드 수가 바뀐 품목은 없습니다.</p>') +
+    (B.length ? '<details class="xn" id="it-na-more"' + (open ? ' open' : '') + '><summary>12주 내내 같은 품목 ' + B.length + '개</summary>' + tb(B) + '</details>' : '') +
+    '<div class="fn">재고없음으로 적힌 브랜드가 늘면 공급이 빠듯해지는 신호입니다. 시세표에서 아예 빠진 브랜드는 세지 않습니다. 위 표의 \'재고없음 N개\'는 최근 시세가 끊기고 재고없음으로 바뀐 브랜드 수라 이 숫자와 다를 수 있습니다.</div></div>';
+}
+// v376 엑셀 자료 점검 목록
+const IT_CK_NM = { lh: '저가가 고가보다 큼', avg: '평균가가 저가~고가 밖', txt: '숫자로 읽을 수 없는 값', err: '수식 오류', date: '주 제목과 날짜가 안 맞음' };
+function itResTxt(x) { return x.res === 'cell' ? '평균가 칸 ' + itW(x.avg) + ' 사용' : x.res === 'mid' ? '저가·고가 중간 ' + itW(x.avg) + ' 사용' : x.res === 'na' ? '재고없음으로 처리' : '시세 없음으로 처리'; }
+function itAddrRuns(list) {   // 같은 열의 이어진 줄은 J12:J20 으로 묶음
+  const out = []; let s = null, p = null;
+  list.forEach(a => { const m = /^([A-Z]+)(\d+)$/.exec(a); if (s && p && m && m[1] === p[1] && +m[2] === +p[2] + 1) { p = m; return; } if (s) out.push(s[0] === p[0] ? s[0] : s[0] + ':' + p[0]); s = p = m || [a, a, 0]; });
+  if (s) out.push(s[0] === p[0] ? s[0] : s[0] + ':' + p[0]);
+  return out.join(', ');
+}
+function itCheckBox(ck, open) {
+  if (!ck || !Array.isArray(ck.issues)) return '';
+  const is = ck.issues, df = ck.dateFixes || [];
+  const cnt = k => is.filter(x => x.t === k).length;
+  const sum = [['lh', '저가>고가'], ['avg', '평균가 범위 밖'], ['txt', '읽을 수 없는 값'], ['err', '수식 오류']].filter(([k]) => cnt(k)).map(([k, l]) => l + ' ' + cnt(k)).concat(df.length ? ['날짜 불일치 ' + df.length] : []);
+  const total = is.length + df.length;
+  if (!total) return '<p class="fn" id="it-px-ck">엑셀 자료 점검: 고칠 만한 칸을 찾지 못했습니다.</p>';
+  const sh = s => itEsc(String(s).trim());
+  const ad = a => a ? '<b>' + itEsc(a) + '</b>' : '<span class="fn" title="칸 위치를 확인하지 못했습니다">-</span>';
+  const rows = [];
+  is.filter(x => x.t !== 'err').forEach(x => rows.push('<tr><td class="l">' + IT_CK_NM[x.t] + '</td><td class="l">' + sh(x.sheet) + '</td><td class="l">' + ad(x.addr) + '</td><td class="l">' + itEsc(x.item + ' / ' + x.brand) + '</td><td class="l">' + itEsc(x.wk) + '</td><td class="l">' +
+    (x.t === 'txt' ? '\'' + itEsc(x.val) + '\'' : '저가 ' + itW(x.low) + ' · 고가 ' + itW(x.high) + (x.avgCell != null ? ' · 평균가 ' + itW(x.avgCell) : '')) + '</td><td class="l">' + itResTxt(x) + '</td></tr>'));
+  const g = new Map();
+  is.filter(x => x.t === 'err').forEach(x => { const k = x.sheet + '|' + x.part + '|' + x.val + '|' + x.res; if (!g.has(k)) g.set(k, []); g.get(k).push(x); });
+  const part = ['저가', '고가', '평균가'];
+  g.forEach(xs => { const x = xs[0], addrs = xs.map(y => y.addr).filter(Boolean); rows.push('<tr><td class="l">' + IT_CK_NM.err + ' (' + itEsc(x.val) + ')</td><td class="l">' + sh(x.sheet) + '</td><td class="l">' + (addrs.length ? '<b>' + itEsc(itAddrRuns(addrs)) + '</b>' : ad(null)) + '</td><td class="l">' + itEsc(Array.from(new Set(xs.map(y => y.item))).join(', ')) + '</td><td class="l">' + part[x.part] + ' 칸 ' + xs.length + '곳</td><td class="l">\'' + itEsc(x.val) + '\'</td><td class="l">' + (x.res === 'mid' ? '저가·고가 중간값으로 계산' : x.res === 'cell' ? '평균가 칸 값 사용' : itResTxt(x)) + '</td></tr>'); });
+  df.forEach(x => rows.push('<tr><td class="l">' + IT_CK_NM.date + '</td><td class="l">' + sh(x.sheet) + '</td><td class="l">' + ad(x.addr) + '</td><td class="l">-</td><td class="l">' + itEsc(x.label) + '</td><td class="l">시작일 ' + itEsc(x.written || '-') + '</td><td class="l">' + (x.used ? '제목에 맞춰 ' + itEsc(x.used) + ' 주로 사용' : '날짜를 알 수 없어 이 주 칸은 뺌' + (x.why ? ' (' + itEsc(x.why) + ')' : '')) + '</td></tr>'));
+  return '<details class="xn pxck" id="it-px-ck"' + (open ? ' open' : '') + '><summary>엑셀 자료 점검 — 확인해 볼 칸 ' + total.toLocaleString('ko-KR') + '곳 (' + sum.join(' · ') + ')</summary>' +
+    '<div class="fn" style="margin:4px 0 6px;line-height:1.7">분석은 아래 \'분석에서는\' 열처럼 처리해 계속했습니다. 엑셀에서 고치고 다시 올리면 그 값으로 다시 계산합니다. 빈칸·0·\'-\' 는 시세 없음으로 보고 목록에 넣지 않았고, 같은 주가 두 시트에 있으면 두 곳 모두 적었습니다.' + (ck.addrBad && ck.addrBad.length ? ' 칸 위치를 확인하지 못한 시트(' + itEsc(ck.addrBad.map(s => String(s).trim()).join(', ')) + ')는 칸을 - 로 표시했습니다.' : '') + '</div>' +
+    '<div class="tscroll"><table class="dt pxckt"><thead><tr><th class="l">내용</th><th class="l">시트</th><th class="l">칸</th><th class="l">품목 / 브랜드</th><th class="l">주</th><th class="l">적힌 값</th><th class="l">분석에서는</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div></details>';
+}
 function itRenderPrice() {
   const box = itEl('it-px');
   const px = IT.price;
   if (!px) { box.innerHTML = ''; return; }
   const st = px.stats, ck = px.book.check || {};
+  const wasOpen = id => { const d = itEl(id); return !!(d && d.open); };
+  const mvOpen = wasOpen('it-mv-more'), ckOpen = wasOpen('it-px-ck'), naOpen = wasOpen('it-na-more');
   const src = [];
   if (ck.monthlySheets) src.push('날짜가 적힌 월별 시트 ' + ck.monthlySheets + '장');
   if (ck.data) src.push('그래프 원본 시트(데이터서식)' + (ck.approxWeeks ? '로 월별 시트 이전 ' + ck.approxWeeks.toLocaleString('ko-KR') + '칸 보충(대략 날짜)' : ''));
@@ -2612,7 +2788,7 @@ function itRenderPrice() {
   }
   box.innerHTML = '<div class="card" id="it-px-card"><div class="ch"><span class="ct">주간 시세표 분석 — ' + itEsc(px.name) + '</span><span class="tag tg">최신 ' + itEsc(st.last) + '</span></div>' +
     '<div class="fn" style="margin:0 0 8px;line-height:1.7">' + itEsc(src.join(' + ')) + '으로 ' + itEsc(st.first) + ' ~ ' + itEsc(st.last) + ' (' + px.book.weeks.length + '주)를 읽었습니다. ' + chk + '<br>품목을 누르면 브랜드별 표와 추이 그래프가 열립니다. <b>평균 시세</b>는 기준주(그 품목의 최신 주)에 시세가 있는 브랜드의 평균, <b>변화율·52주 위치·3년평균比</b>는 최근 3주 안에 시세가 있는 브랜드 값의 평균입니다.' + (ck.mergedWeeks ? ' 달이 바뀌는 주를 두 칸에 나눠 적은 곳 등은 그 주(월요일 기준) 하나로 합쳤습니다.' : '') + '</div>' +
-    itTrendBox(st) + '<div class="tscroll"><table class="dt pxmain"><thead><tr><th class="l">품목</th><th>브랜드 수<br><span class="fn">시세 있음 / 전체</span></th><th>평균 시세<br><span class="fn">원/kg</span></th><th>4주</th><th>12주</th><th>전년비</th><th>52주 위치</th><th>3년평균比</th><th class="l">최저 ~ 최고 브랜드<br><span class="fn">원/kg · 같은 주끼리 비교</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    itMoveBox(st, mvOpen) + itTrendBox(st) + '<div class="tscroll"><table class="dt pxmain"><thead><tr><th class="l">품목</th><th>브랜드 수<br><span class="fn">시세 있음 / 전체</span></th><th>평균 시세<br><span class="fn">원/kg</span></th><th>4주</th><th>12주</th><th>전년비</th><th>52주 위치</th><th>3년평균比</th><th class="l">최저 ~ 최고 브랜드<br><span class="fn">원/kg · 같은 주끼리 비교</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' + itNaBox(st, naOpen) + itCheckBox(ck, ckOpen) +
     '<details class="xn"><summary>표 보는 법</summary><p class="fn" style="line-height:1.7"><b>재고없음</b> = 시세표에 재고없음 또는 #VALUE! 로 적힌 주 (값을 매길 수 없어 계산에서 뺌) · <b>브랜드 수</b> = 최근 3주 안에 시세가 있는 브랜드 / 시세표에 한 번이라도 나온 브랜드 · <b>최저~최고 브랜드</b> = 그 품목의 가장 최근 주에 시세가 있는 브랜드끼리 비교(같은 값이면 모두 표시) · <b>52주 위치</b> = 0~20% 저점권 · 20~40% 낮은 편 · 40~60% 중간 · 60~80% 높은 편 · 80~100% 고점권 (품목은 브랜드 위치의 평균)<br>4주·12주 = 그 기간 전 같은 브랜드 값 대비 · 전년비 = 약 52주 전(±10일) 대비 · 52주 위치 = 최근 52주 최저(0%)~최고(100%) 중 현재 · 3년평균比 = 최근 3년 평균 대비 (52주 위치·3년평균比는 그만큼 자료가 쌓인 브랜드만 계산, 짧으면 - 또는 N주치로 표시). 값은 엑셀 숫자로 계산했고 고정값·추정값은 쓰지 않았습니다.</p></details></div>' + detail;
   itRenderTrend();
   if (sel) itRenderPxChart(sel);
@@ -2699,7 +2875,7 @@ function itRenderPxChart(sel) {
 // ── AI ──
 function itAiPayload() {
   const mt = itMeetingForAI(IT.meeting);
-  const price = IT.price && IT.price.include ? itPriceForAI(IT.price.stats, 24000) : '';
+  const price = IT.price && IT.price.include ? itPriceForAI(IT.price.stats, 25900) : '';
   return { payload: { meeting: mt.text, price: price }, meeting: mt };
 }
 function itSig(o) {
@@ -2793,8 +2969,8 @@ function itOnClick(e) {
     if (trm) t.mode = trm.dataset.trm;
     itTrendSave(t); itRenderPrice(); return;
   }
-  const row = e.target.closest('tr[data-pxi]');
-  if (row) { IT.pxSel = IT.pxSel === row.dataset.pxi ? null : row.dataset.pxi; itRenderPrice(); const d = itEl('it-px-det'); if (d && d.scrollIntoView) d.scrollIntoView({ block: 'nearest' }); return; }
+  const row = e.target.closest('tr[data-pxi],tr[data-pxj]');
+  if (row) { const nm = row.dataset.pxi || row.dataset.pxj; IT.pxSel = IT.pxSel === nm ? null : nm; itRenderPrice(); const d = itEl('it-px-det'); if (d && d.scrollIntoView) d.scrollIntoView({ block: 'nearest' }); return; }
   const a = e.target.closest('[data-act]');
   if (!a) return;
   const act = a.dataset.act;
@@ -2868,7 +3044,7 @@ function installPWA() {
   }
 }
 </script>
-<footer class="verline">화면 v382 · 서버 <span id="srv-ver">확인 중</span></footer>
+<footer class="verline">화면 v383 · 서버 <span id="srv-ver">확인 중</span></footer>
 <script>fetch('/api/version').then(r => r.json()).then(j => { document.getElementById('srv-ver').textContent = j.version || '버전 정보 없음'; }).catch(() => { document.getElementById('srv-ver').textContent = '응답 없음'; });</script>
 </body>
 </html>
