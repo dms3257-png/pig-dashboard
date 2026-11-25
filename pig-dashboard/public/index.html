@@ -324,8 +324,11 @@ details.xn>summary::-webkit-details-marker{display:none}
 details.xn[open]>summary{margin-bottom:2px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .mnav{display:none}
+.rfb{background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:5px 10px;border-radius:6px;font-size:.74rem;cursor:pointer;white-space:nowrap}
+.rfb:hover{background:#243041}.rfb:disabled{opacity:.6;cursor:default}
+.asof.old{color:#fbbf24}
 @media (max-width:640px){
-  header{padding:10px 16px}.asof,.fsz{display:none}
+  header{padding:10px 16px}.fsz{display:none}.asof{font-size:.66rem;text-align:right;line-height:1.3}.rfb{padding:4px 8px;font-size:.7rem}
   .tab-nav{display:none}
   .mnav{display:block;position:sticky;top:0;z-index:99;background:#0e1520;border-bottom:1px solid #243041;padding:10px 16px}
   .mnav select{width:100%;font:600 1rem inherit;font-family:inherit;padding:9px 10px;border:1px solid #334155;border-radius:6px;background:#151e2b;color:#f1f5f9}
@@ -349,6 +352,7 @@ details.xn[open]>summary{margin-bottom:2px}
     </button>
     <span class="fsz" role="group" aria-label="AI 분석 글자 크기"><button type="button" id="fs-down" onclick="setAiFs(-1)" title="AI 분석 글자 작게" aria-label="글자 작게">가−</button><button type="button" id="fs-up" onclick="setAiFs(1)" title="AI 분석 글자 크게" aria-label="글자 크게">가+</button></span>
     <span class="asof" id="asof">—</span>
+    <button type="button" id="btn-refresh" class="rfb" onclick="refreshAll(false)" title="시세를 지금 새로 받습니다">새로 받기</button>
   </div>
 </header>
 <div class="tab-nav">
@@ -579,6 +583,10 @@ function lsSet(key, data) {
 
 
 // ─── 환율 표시 도우미 (출처·기준·기준일, 수집 실패) ───────────
+// AI 글(마크다운)을 화면에 넣기 전 위험한 태그·속성 제거 (품목 전략과 같은 itSafeHtml). 없으면 글자 그대로
+function safeHtml(html) { return typeof itSafeHtml === 'function' ? itSafeHtml(html) : fxEsc(html); }
+// 외부 링크는 http(s) 주소만 (javascript: 같은 주소는 막음)
+function safeUrl(u) { const s = String(u == null ? '' : u).trim(); return /^https?:\/\//i.test(s) ? fxEsc(s) : '#'; }
 function fxEsc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -650,13 +658,55 @@ function switchTab(name, btn) {
   const sel = document.getElementById('tab-sel'); if (sel) sel.value = name;
   if (!loaded.has(name)) {
     loaded.add(name);
-    if (name === 'timing')      loadTiming().catch(e => console.error('timing:', e));
-    else if (name === 'fx')     loadFx().catch(e => console.error('fx:', e));
-    else if (name === 'market') loadMarket().catch(e => console.error('market:', e));
-    else if (name === 'items')  { try { initItems(); } catch (e) { console.error('items:', e); } }
-    else                        loadPeriod(name).catch(e => console.error(name + ':', e));
+    loadTab(name);
   }
 }
+function loadTab(name) {
+  if (name === 'timing')      return loadTiming().catch(e => console.error('timing:', e));
+  if (name === 'fx')          return loadFx().catch(e => console.error('fx:', e));
+  if (name === 'market')      return loadMarket().catch(e => console.error('market:', e));
+  if (name === 'items')       { try { initItems(); } catch (e) { console.error('items:', e); } return Promise.resolve(); }
+  return loadPeriod(name).catch(e => console.error(name + ':', e));
+}
+// ── 기준 시각 · 새로 받기 ──
+// 기준 시각 = 서버가 시세를 받은 시각. 몇 분 전인지 같이 보여 주고, 30분 넘으면 노란색
+let asofMs = null, lastLoadAt = Date.now(), refreshing = false;
+const REFRESH_AFTER = 10 * 60000;
+function setAsof(fetchedAt) {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(String(fetchedAt || ''));
+  asofMs = m ? Date.parse(m[1] + '-' + m[2] + '-' + m[3] + 'T' + m[4] + ':' + m[5] + ':00+09:00') : null;
+  updAsof();
+}
+function updAsof() {
+  const el = document.getElementById('asof'); if (!el) return;
+  if (asofMs == null) { el.textContent = '—'; el.classList.remove('old'); return; }
+  const k = new Date(asofMs + 9 * 3600000).toISOString();
+  const min = Math.max(0, Math.floor((Date.now() - asofMs) / 60000));
+  el.textContent = k.slice(5, 7) + '/' + k.slice(8, 10) + ' ' + k.slice(11, 16) + ' 기준 · ' + (min < 1 ? '방금' : min < 60 ? min + '분 전' : min < 1440 ? Math.floor(min / 60) + '시간 ' + (min % 60) + '분 전' : Math.floor(min / 1440) + '일 전');
+  el.classList.toggle('old', min >= 30);
+}
+// 지금 보는 탭을 새로 받고, 다른 탭은 열 때 새로 받는다 (품목 전략은 올린 엑셀 자료라 그대로). AI 분석은 버튼을 눌러야만 돈다
+async function refreshAll(auto) {
+  if (refreshing) return;
+  refreshing = true;
+  const b = document.getElementById('btn-refresh');
+  if (b) { b.disabled = true; b.textContent = '받는 중'; }
+  curData = null; Object.keys(hcache).forEach(k => delete hcache[k]); cutsCache = null;
+  Array.from(loaded).forEach(n => { if (n !== 'items') loaded.delete(n); });
+  const act = document.querySelector('.page.active');
+  const name = act ? act.id.replace('page-', '') : 'timing';
+  lastLoadAt = Date.now();
+  try {
+    if (name === 'items') await ensureCurrent();
+    else { loaded.add(name); await loadTab(name); }
+  } finally {
+    refreshing = false;
+    if (b) { b.disabled = false; b.textContent = '새로 받기'; }
+  }
+}
+const staleNow = () => document.visibilityState === 'visible' && Date.now() - lastLoadAt > REFRESH_AFTER;
+document.addEventListener('visibilitychange', () => { if (staleNow()) refreshAll(true); else updAsof(); });   // 휴대폰에서 앱을 다시 열었을 때
+setInterval(() => { updAsof(); if (staleNow()) refreshAll(true); }, 60000);                                // 열어 둔 채 10분이 지나면
 
 // ─── Chart.js 헬퍼 ───────────────────────────────────
 const CHART_NM = { LH: 'CME Lean Hog', ZC: '옥수수 선물', ZS: '대두 선물', KAMIS: '국내 지육 도매가' };
@@ -863,18 +913,13 @@ function renderTimingMain(json) {
 // ─── 데이터 로드 ─────────────────────────────────────
 async function ensureCurrent() {
   if (curData && curData.USDKRW?.price) return curData;
-  // 최대 3번 재시도
-  for (let i = 0; i < 3; i++) {
+  // 서버가 이미 모든 수집처를 시도하고 답하므로 같은 요청을 되풀이하지 않는다 (연결 실패일 때만 한 번 더)
+  for (let i = 0; i < 2; i++) {
     try {
       const j = await fetch('/api/current').then(r => r.json());
-      if (j.ok && j.data) {
-        curData = j.data;
-        const asof = document.getElementById('asof');
-        if (asof) asof.textContent = j.fetchedAt || '';
-        if (curData.USDKRW?.price || curData.LH?.price) return curData;
-      }
+      if (j.ok && j.data) { curData = j.data; setAsof(j.fetchedAt); return curData; }
     } catch(e) {}
-    if (i < 2) await new Promise(r => setTimeout(r, 1000));
+    if (i < 1) await new Promise(r => setTimeout(r, 1500));
   }
   return curData || {};
 }
@@ -974,7 +1019,7 @@ function renderRisk() {
   const codes = Object.keys(d.counts || {}).sort((a, b) => d.counts[b].n - d.counts[a].n);
   fl.innerHTML = ['ALL'].concat(codes).map(c => '<button type="button" data-rk="' + c + '" class="' + (riskSel === c ? 'on' : '') + '">' + (c === 'ALL' ? '전체 ' + d.items.length : fxEsc(d.counts[c].name) + ' ' + d.counts[c].n) + '</button>').join('');
   const items = d.items.filter(i => riskSel === 'ALL' || i.countries.some(c => c.code === riskSel));
-  list.innerHTML = items.length ? items.map(i => '<div class="rk-i"><a href="' + fxEsc(i.link) + '" target="_blank" rel="noopener noreferrer">' + fxEsc(i.title) + '</a><div class="rk-m"><span>' + fxEsc(i.date) + '</span><span>' + fxEsc(i.source || '') + '</span>' +
+  list.innerHTML = items.length ? items.map(i => '<div class="rk-i"><a href="' + safeUrl(i.link) + '" target="_blank" rel="noopener noreferrer">' + fxEsc(i.title) + '</a><div class="rk-m"><span>' + fxEsc(i.date) + '</span><span>' + fxEsc(i.source || '') + '</span>' +
     i.countries.map(c => '<span>' + fxEsc(c.name) + '</span>').join('') + i.topics.map(t => '<span class="rk-t ' + (RK_TOPIC_CLS[t] || '') + '">' + fxEsc(t) + '</span>').join('') + '</div></div>').join('')
     : '<p style="color:#94a3b8;font-size:.86rem;padding:12px 0">최근 30일 동안 조건에 맞는 보도가 없습니다.</p>';
 }
@@ -1069,7 +1114,7 @@ async function runAI(period) {
   try {
     const j = await fetch('/api/analysis/' + period).then(r => r.json());
     if (typeof marked !== 'undefined') {
-      box.innerHTML = marked.parse(j.analysis || '분석 결과 없음');
+      box.innerHTML = safeHtml(marked.parse(j.analysis || '분석 결과 없음'));
     } else {
       box.innerHTML = '<pre style="white-space:pre-wrap;font-size:inherit;font-family:inherit;color:#e2e8f0;line-height:1.85">' + fxEsc(j.analysis||'') + '</pre>';
     }
@@ -1250,7 +1295,7 @@ async function loadFx() {
   const nt = document.getElementById('fx-n-tag'), nb = document.getElementById('fx-news');
   if (news && news.ok) {
     nt.className = 'tag tg'; nt.textContent = Math.min(5, news.data.items.length) + '건 · ' + news.data.fetchedAt.slice(11, 16);
-    nb.innerHTML = news.data.items.slice(0, 5).map(n => '<div class="fxn-i"><a href="' + fxEsc(n.url) + '" target="_blank" rel="noopener noreferrer">' + fxEsc(n.title) + '</a><div class="fxn-m">' + fxEsc([n.press, n.when].filter(Boolean).join(' · ')) + '</div></div>').join('') + (news.data.note ? '<p class="fn" style="color:#fbbf24">' + fxEsc(news.data.note) + '</p>' : '') + '<p class="fn">출처: ' + fxEsc(news.data.source) + ' (제목만 표시, 내용은 원문 확인) · <a href="https://stock.naver.com/news" target="_blank" rel="noopener noreferrer">네이버 증권 뉴스 열기</a></p>';
+    nb.innerHTML = news.data.items.slice(0, 5).map(n => '<div class="fxn-i"><a href="' + safeUrl(n.url) + '" target="_blank" rel="noopener noreferrer">' + fxEsc(n.title) + '</a><div class="fxn-m">' + fxEsc([n.press, n.when].filter(Boolean).join(' · ')) + '</div></div>').join('') + (news.data.note ? '<p class="fn" style="color:#fbbf24">' + fxEsc(news.data.note) + '</p>' : '') + '<p class="fn">출처: ' + fxEsc(news.data.source) + ' (제목만 표시, 내용은 원문 확인) · <a href="https://stock.naver.com/news" target="_blank" rel="noopener noreferrer">네이버 증권 뉴스 열기</a></p>';
   } else { nt.className = 'tag tz'; nt.textContent = '수집 실패'; nb.innerHTML = '<div style="padding:12px 0;color:#f87171;font-size:.86rem">' + fxEsc((news && news.error) || '알 수 없는 오류') + '<br><a href="https://stock.naver.com/news" target="_blank" rel="noopener noreferrer">네이버 증권 뉴스 직접 열기</a></div>'; }
 }
 function fxIntraChart(sym, j, col) {
@@ -1282,12 +1327,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById('timing-main');
     if(el) el.innerHTML = `<p style="color:#f87171;padding:20px;font-size:.78rem">로드 실패: ${e.message}</p>`;
   });
-  // 10분마다 서버 캐시 초기화 (localStorage는 유지)
-  setInterval(() => {
-    curData = null;
-    Object.keys(hcache).forEach(k => delete hcache[k]);
-    cutsCache = null;
-  }, 10 * 60 * 1000);
+  // 10분마다 새로 받기는 refreshAll (위) 이 맡는다
   // 예전 버전이 저장해 둔 지육 도매가 캐시(가짜일 수 있음)는 지운다
   try { ['kamis_weekly','kamis_monthly','kamis_yearly'].forEach(k => localStorage.removeItem(k)); } catch (e) {}
 });
@@ -3044,7 +3084,7 @@ function installPWA() {
   }
 }
 </script>
-<footer class="verline">화면 v383 · 서버 <span id="srv-ver">확인 중</span></footer>
+<footer class="verline">화면 v384 · 서버 <span id="srv-ver">확인 중</span></footer>
 <script>fetch('/api/version').then(r => r.json()).then(j => { document.getElementById('srv-ver').textContent = j.version || '버전 정보 없음'; }).catch(() => { document.getElementById('srv-ver').textContent = '응답 없음'; });</script>
 </body>
 </html>
