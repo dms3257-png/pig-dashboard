@@ -1,4 +1,5 @@
-// server.js - 수안푸드 지육가 대시보드 v3.6.6
+// server.js - 수안푸드 지육가 대시보드 v3.6.7
+// v3.6.7: 예비 수집처 겹쳐 묻기(1순위 우선은 그대로, 늦으면 다음 곳 미리 시작) · 국채 한국·미국 동시 수집 · 쓰지 않는 무작위 시세 함수 삭제
 // v3.6.6: 가짜 자료 제거 — 린호그 85.0 고정값·수집 실패 시 추정 이력(시드) 삭제, 못 받으면 '수집 실패 + 이유'. 무료에서 늘 거절되는 gemini-3.1-pro-preview 기본 순서에서 뺌
 // v3.6.5: 품목 전략 AI 를 작업(job) 방식으로 — POST {async:true} 는 바로 작업 번호를 돌려주고 GET /api/analysis/items/job/:id 로 진행 확인 (AI 최대 240초), 모델별 걸린 시간 로그
 // v3.6.4: Gemini 3.x 생각 단계를 low 로(기본 medium 은 1~2분 걸려 시간 초과), 2.5 는 생각 예산 1024, AI 시간 제한 늘림 — 생각 설정이 거절되면 설정 없이 한 번 더
@@ -306,6 +307,30 @@ const FX_SOURCES = [
   { id: 'm.stock.naver.com', pageSize: 10, attempts: 1, timeout: 5000,
     url: (code, page, size) => `https://m.stock.naver.com/front-api/marketIndex/prices?category=exchange&reutersCode=${code}&page=${page}&pageSize=${size}` },
 ];
+// 겹쳐 묻기: tasks 는 우선순위 순서. 결과는 항상 '살아 있는 가장 앞 순위'의 것을 쓴다.
+// 앞 순위가 HEDGE.ms 안에 끝나지 않거나 실패하면 다음 곳을 미리 시작해 둔다 (평소엔 1순위만 묻는다)
+// 모두 실패하면 순서대로 모은 오류(errors)를 담아 던진다
+const HEDGE = { ms: 2500 };
+async function prioHedge(tasks, hedgeMs = HEDGE.ms) {
+  const run = [], ok = [], errors = [], timers = [];
+  let done = false;
+  const start = i => {
+    if (done || i >= tasks.length || run[i]) return;
+    run[i] = Promise.resolve().then(tasks[i]);
+    run[i].then(() => { ok[i] = true; }, () => start(i + 1));               // 실패하면 바로 다음 곳
+    timers.push(setTimeout(() => { if (!ok[i]) start(i + 1); }, hedgeMs));  // hedgeMs 안에 끝나지 않으면 다음 곳도 시작
+  };
+  try {
+    for (let i = 0; i < tasks.length; i++) {
+      start(i);
+      try { return { value: await run[i], index: i, errors }; }
+      catch (e) { errors.push(e); }
+    }
+  } finally { done = true; timers.forEach(clearTimeout); }
+  const err = new Error(errors.map(e => e && e.message).join(' / '));
+  err.errors = errors;
+  throw err;
+}
 const FX_RETRY = { ms: 250 };                       // 같은 주소를 한 번 더 시도하기 전 대기 (테스트에서는 0)
 const fxSleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -428,15 +453,16 @@ async function naverFxPage(src, code, page, fetcher, attempts = src.attempts) {
 
 // 첫 페이지를 읽을 수 있는 주소를 찾는다 → { src, parsed }. 전부 실패하면 주소별 실패 이유를 모아 던진다
 async function naverFxFirstPage(code, fetcher) {
-  const errs = [];
-  for (const src of FX_SOURCES) {
-    try {
-      const parsed = await naverFxPage(src, code, 1, fetcher);
-      if (!parsed.rows.length) throw new Error(`읽을 수 있는 줄이 없음(${parsed.items}건 중 ${parsed.skipped}건 제외)`);
-      return { src, parsed };
-    } catch (e) { errs.push(`${src.id}: ${e.message}`); }
-  }
-  throw new Error('네이버 환율 수집 실패 — ' + errs.join(' / '));
+  try {
+    const r = await prioHedge(FX_SOURCES.map(src => async () => {
+      try {
+        const parsed = await naverFxPage(src, code, 1, fetcher);
+        if (!parsed.rows.length) throw new Error(`읽을 수 있는 줄이 없음(${parsed.items}건 중 ${parsed.skipped}건 제외)`);
+        return { src, parsed };
+      } catch (e) { throw new Error(`${src.id}: ${e.message}`); }
+    }));
+    return r.value;
+  } catch (e) { throw new Error('네이버 환율 수집 실패 — ' + e.errors.map(x => x.message).join(' / ')); }
 }
 
 // startYmd 이후 일별 환율 줄을 최신 → 과거 순서로 페이지를 넘기며 수집 → { rows, src, pages, stopped }
@@ -1060,7 +1086,7 @@ async function fetchEuPigPrices() {
   const endDate = dmy(new Date()), startDate = dmy(new Date(Date.now() - 90 * 86400000));
   const codes = EU_COUNTRIES.map(c => c.code).join(',');
   const reasons = [];
-  for (const ep of EU_PIG_ENDPOINTS) {
+  const apiTask = ep => async () => {
     try {
       const get = async list => {
         const url = `${ep.base}?memberStateCodes=${list}&pigClasses=S&beginDate=${startDate}&endDate=${endDate}`;
@@ -1079,20 +1105,22 @@ async function fetchEuPigPrices() {
         console.warn(`EU 지육가 ${ep.name}: 일괄 요청 ${e.message} → 나라별 재요청 성공 (${items.length}건)`);
       }
       const { byCountry, histByCountry, skipped } = parseEuPig(items);
-      const result = { byCountry, histByCountry, fetchedAt: kstNow(), source: 'agridata.ec.europa.eu', endpoint: ep.name, skipped };
-      aCache.set('eu_pig', { data: result, ts: Date.now() });
-      aCache.set('eu_pig_last', { data: result, ts: Date.now() });
-      console.log(`✅ EU 지육가: ${Object.keys(byCountry).length}개국 (${ep.name})`);
-      return result;
-    } catch (e) { reasons.push(`${ep.name}: ${e.message}`); console.warn(`EU 지육가 ${ep.name} 실패:`, e.message); }
-  }
-  try {                                                                          // API 가 안 되면 같은 공식 자료의 주간 PDF 보고서에서 읽는다
-    const r = await fetchEuPigFromPdf();
-    aCache.set('eu_pig', { data: r, ts: Date.now() - 5 * 3600000 });             // 1시간 뒤에는 API 를 다시 시도
+      return { pdf: false, r: { byCountry, histByCountry, fetchedAt: kstNow(), source: 'agridata.ec.europa.eu', endpoint: ep.name, skipped } };
+    } catch (e) { console.warn(`EU 지육가 ${ep.name} 실패:`, e.message); throw new Error(`${ep.name}: ${e.message}`); }
+  };
+  const pdfTask = async () => {                                                  // API 가 안 되면 같은 공식 자료의 주간 PDF 보고서에서 읽는다
+    try { return { pdf: true, r: await fetchEuPigFromPdf() }; }
+    catch (e) { console.warn('EU 지육가 PDF 실패:', e.message); throw new Error('PDF 주간 보고서: ' + e.message); }
+  };
+  try {
+    const got = await prioHedge(EU_PIG_ENDPOINTS.map(apiTask).concat([pdfTask]));
+    const { pdf, r } = got.value, before = got.errors.map(x => x.message);
+    aCache.set('eu_pig', { data: r, ts: pdf ? Date.now() - 5 * 3600000 : Date.now() });   // PDF 로 받았으면 1시간 뒤 API 를 다시 시도
     aCache.set('eu_pig_last', { data: r, ts: Date.now() });
-    console.log(`✅ EU 지육가: ${Object.keys(r.byCountry).length}개국 (PDF 주간 보고서, 갱신 ${r.reportUpdated || '?'}) — API 실패: ${reasons.join(' / ')}`);
+    if (pdf) console.log(`✅ EU 지육가: ${Object.keys(r.byCountry).length}개국 (PDF 주간 보고서, 갱신 ${r.reportUpdated || '?'}) — API 실패: ${before.join(' / ')}`);
+    else console.log(`✅ EU 지육가: ${Object.keys(r.byCountry).length}개국 (${r.endpoint})`);
     return r;
-  } catch (e) { reasons.push('PDF 주간 보고서: ' + e.message); console.warn('EU 지육가 PDF 실패:', e.message); }
+  } catch (e) { e.errors.forEach(x => reasons.push(x.message)); }
   const msg = 'EU 공식 데이터를 받지 못했습니다 (' + reasons.join(' / ') + ')';
   aCache.set('eu_pig_err', { msg, ts: Date.now() });
   // 이전에 공식 서버에서 실제로 받은 값이 있으면(14일 이내) 그 값을 '지난 값'으로 표시해서 보여준다 — 새로 지어낸 값이 아님
@@ -1110,22 +1138,6 @@ function getStartYmd() {
 }
 const START_YMD = getStartYmd();
 
-function genSeed(sym) {
-  const s = { LH:{b:85,v:0.06}, ZC:{b:455,v:0.05}, ZS:{b:1020,v:0.05}, KAMIS:{b:4700,v:0.04} }[sym] || {b:100,v:0.05};
-  const rows = []; let p = s.b;
-  // 오늘 기준 420일 전부터 생성
-  const start = new Date(Date.now() - 420*86400000);
-  for (let d = 0; d < 430; d++) {
-    const date = new Date(start); date.setUTCDate(date.getUTCDate() + d);
-    if ([0,6].includes(date.getUTCDay())) continue;
-    if (date > new Date()) break; // 미래 제외
-    p *= 1 + (Math.random()-0.5)*s.v;
-    p = Math.max(s.b*0.7, Math.min(s.b*1.4, p));
-    const ymd = date.toISOString().slice(0,10), pr = +p.toFixed(2);
-    rows.push({ time:dateToUnix(ymd), open:pr, high:+(pr*1.005).toFixed(2), low:+(pr*0.995).toFixed(2), close:pr });
-  }
-  return rows;
-}
 
 async function getHistory(sym) {
   const c = histCache[sym];
@@ -1851,7 +1863,7 @@ app.get('/api/risk-news', async (_, res) => {
 // ════════════════════════════════════════════════════
 // API 라우터
 // ════════════════════════════════════════════════════
-app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.6' }));
+app.get('/api/version', (_, res) => res.json({ buildId: BUILD_ID, version: '3.6.7' }));
 
 app.get('/api/current', async (_, res) => {
   try {
@@ -2034,9 +2046,12 @@ const BOND_SOURCES = [
   { id: 'm.stock.naver.com', url: c => `https://m.stock.naver.com/front-api/marketIndex/prices?category=bond&reutersCode=${c}&page=1&pageSize=10` },
 ];
 async function naverBondLatest(code, fetcher = fetchNaverJson) {
-  const errs = [];
-  for (const src of BOND_SOURCES) {
-    try {
+  try { return (await prioHedge(BOND_SOURCES.map(src => async () => { try { return await naverBondOne(src, code, fetcher); } catch (e) { throw new Error(src.id + ': ' + e.message); } }))).value; }
+  catch (e) { throw new Error(e.errors.map(x => x.message).join(' / ')); }
+}
+async function naverBondOne(src, code, fetcher) {
+  {
+    {
       const payload = await fetcher(src.url(code), 7000);
       const items = fxItemsFrom(payload);                                  // 환율과 같은 모양(localTradedAt·closePrice)이지만 값 범위가 달라 따로 읽는다
       if (!items) throw new Error('응답에서 금리 목록을 찾지 못함');
@@ -2045,24 +2060,25 @@ async function naverBondLatest(code, fetcher = fetchNaverJson) {
       const v = rows[0].std;
       if (!(v > -2 && v < 25)) throw new Error('금리 값이 이상함(' + v + ')');
       return { value: v, date: rows[0].ymd, prev: rows[1] ? rows[1].std : null, source: '네이버 ' + src.id };
-    } catch (e) { errs.push(src.id + ': ' + e.message); }
+    }
   }
-  throw new Error(errs.join(' / '));
 }
 async function fxBonds(fetcher = fetchNaverJson, getter = httpGet) {
   const hit = aCache.get('fxt_bonds'); if (hit && Date.now() - hit.ts < 15 * 60000) return hit.data;
   const out = { KR10Y: null, US10Y: null, errors: {} };
-  try { out.KR10Y = await naverBondLatest('KR10YT=RR', fetcher); } catch (e) { out.errors.KR10Y = '한국 10년물: ' + e.message; }
-  try { out.US10Y = await naverBondLatest('US10YT=RR', fetcher); }
-  catch (e) {
-    try {
-      const j = JSON.parse(await getter('https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=5d', { Referer: 'https://finance.yahoo.com/', Accept: 'application/json' }));
-      const m = j?.chart?.result?.[0]?.meta || {};
-      let v = Number(m.regularMarketPrice); if (v > 20) v = v / 10;
-      if (!(v > 0 && v < 25)) throw new Error('값 없음');
-      out.US10Y = { value: +v.toFixed(3), date: null, prev: null, source: 'Yahoo ^TNX' };
-    } catch (e2) { out.errors.US10Y = '미국 10년물: ' + e.message + ' / Yahoo: ' + e2.message; }
-  }
+  // 한국·미국을 동시에 받는다. 미국은 네이버(1순위)가 늦으면 Yahoo 를 미리 시작해 두지만, 네이버가 되면 네이버 값을 쓴다
+  const usYahoo = async () => {
+    const j = JSON.parse(await getter('https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=5d', { Referer: 'https://finance.yahoo.com/', Accept: 'application/json' }));
+    const m = j?.chart?.result?.[0]?.meta || {};
+    let v = Number(m.regularMarketPrice); if (v > 20) v = v / 10;
+    if (!(v > 0 && v < 25)) throw new Error('값 없음');
+    return { value: +v.toFixed(3), date: null, prev: null, source: 'Yahoo ^TNX' };
+  };
+  await Promise.all([
+    naverBondLatest('KR10YT=RR', fetcher).then(v => { out.KR10Y = v; }, e => { out.errors.KR10Y = '한국 10년물: ' + e.message; }),
+    prioHedge([() => naverBondLatest('US10YT=RR', fetcher), usYahoo]).then(r => { out.US10Y = r.value; },
+      e => { out.errors.US10Y = '미국 10년물: ' + (e.errors[0] && e.errors[0].message) + ' / Yahoo: ' + (e.errors[1] && e.errors[1].message); }),
+  ]);
   out.spread = out.KR10Y && out.US10Y ? +(out.KR10Y.value - out.US10Y.value).toFixed(3) : null;
   out.fetchedAt = kstNow();
   if (out.KR10Y || out.US10Y) aCache.set('fxt_bonds', { data: out, ts: Date.now() });
@@ -2148,18 +2164,22 @@ const NEWS_SOURCES = [
 async function fxNews(getters) {
   const hit = aCache.get('fxt_news'); if (hit && Date.now() - hit.ts < 15 * 60000) return hit.data;
   const he = aCache.get('fxt_news_err'); if (he && Date.now() - he.ts < 5 * 60000) throw new Error(he.msg);
-  const errs = [];
-  for (const src of NEWS_SOURCES) {
-    try {
-      const get = getters && getters[src.key] ? getters[src.key] : src.get;
-      const items = src.parse(await get());
-      if (!items.length) throw new Error('기사 목록을 찾지 못함');
-      const data = { items, source: src.label, link: src.link, fetchedAt: kstNow(), note: errs.length ? 'stock.naver.com/news 를 읽지 못해 ' + src.label + ' 로 대신 표시 — ' + errs.join(' / ') : '' };
-      aCache.set('fxt_news', { data, ts: Date.now() });
-      if (errs.length) console.warn('[fx-news] ' + data.note);
-      return data;
-    } catch (e) { errs.push(src.key + ': ' + e.message); }
-  }
+  let errs = [];
+  try {
+    const r = await prioHedge(NEWS_SOURCES.map(src => async () => {
+      try {
+        const get = getters && getters[src.key] ? getters[src.key] : src.get;
+        const items = src.parse(await get());
+        if (!items.length) throw new Error('기사 목록을 찾지 못함');
+        return { src, items };
+      } catch (e) { throw new Error(src.key + ': ' + e.message); }
+    }));
+    const { src, items } = r.value, before = r.errors.map(x => x.message);
+    const data = { items, source: src.label, link: src.link, fetchedAt: kstNow(), note: before.length ? 'stock.naver.com/news 를 읽지 못해 ' + src.label + ' 로 대신 표시 — ' + before.join(' / ') : '' };
+    aCache.set('fxt_news', { data, ts: Date.now() });
+    if (before.length) console.warn('[fx-news] ' + data.note);
+    return data;
+  } catch (e) { errs = e.errors.map(x => x.message); }
   const msg = '시장 뉴스를 받지 못했습니다 (' + errs.join(' / ') + ')';
   aCache.set('fxt_news_err', { msg, ts: Date.now() });
   throw new Error(msg);
@@ -2703,7 +2723,7 @@ app.get('/pig', (req, res) => {
   } catch (e) { res.status(500).send('index.html 오류: ' + e.message); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { index:false, etag:false, maxAge:0 }));
-app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.6', buildId:BUILD_ID, time:kstNow() }));
+app.get('/health', (_, res) => res.json({ ok:true, version:'3.6.7', buildId:BUILD_ID, time:kstNow() }));
 
 // 예전 화면이 브라우저로 KAMIS 키를 받아 가던 주소 — 키는 이제 서버만 쓰므로 내려주지 않는다
 app.get('/api/kamis-config', (_, res) => res.status(410).json({ ok: false, error: 'KAMIS 키는 서버만 사용합니다 (부위별 가격은 /api/kamis-cuts)' }));
@@ -2920,7 +2940,7 @@ app.use((err, req, res, next) => {
 // 테스트에서 불러다 쓸 수 있게 내보냄 (npm start → node server.js 일 때만 실제로 서버를 켬)
 module.exports = {
   app, aCache,
-  _test: { IT_JOBS, geminiThinking, GEMINI_CHAINS, geminiChain, geminiAvailable, geminiPick, GEM_LIST, callGemini, parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, parseNewsObjects, parseNewsAnchors, parseStockNaverNews, newsWhen, NEWS_SOURCES, fxNews, buildFxPrompt,
+  _test: { prioHedge, HEDGE, IT_JOBS, geminiThinking, GEMINI_CHAINS, geminiChain, geminiAvailable, geminiPick, GEM_LIST, callGemini, parseNaverFxItems, fxPickBasis, naverFxLatest, naverFxHistoryCrawl, naverFxRowsSince, fetchNaverRaw, fetchNaverJson, FX_SOURCES, FX_RETRY, FX_DEBUG, FX_CFG, TIMING_CFG, fetchFxHistory, parseKamisCuts, getKamisCuts, kamisCutsState, kamisCutsText, KAMIS_CUTS, fetchEuPigPrices, parseEuPig, euYmd, euPrice, EU_PIG_ENDPOINTS, pdfTextItems, parseEuPdfPages, fetchEuPigFromPdf, EU_PDF_URL, ocrCalls, OCR_PROMPT, parseRiskRss, riskTag, fetchRiskNews, RISK_FEEDS, parseCustomsXml, fetchCustomsPork, customsText, ymShift, parseYahooIntraday, fxIntraday, fxRatesAll, naverBondLatest, fxBonds, parseNaverMainNews, parseNewsObjects, parseNewsAnchors, parseStockNaverNews, newsWhen, NEWS_SOURCES, fxNews, buildFxPrompt,
            naverFxDailySince, fxDailyProblems, fxMonthlyFromDaily, getFxMonthly,
            getHistory, getCurrentPrices, analyzeImportTiming, buildTimingPrompt, buildPigPrompt, buildMarketPrompt,
            sanitizeItemsPayload, buildItemsPrompt, callGemini, histCache },
@@ -2928,7 +2948,7 @@ module.exports = {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🐷 수안푸드 v3.6.6 실행: http://localhost:${PORT}/pig`);
+    console.log(`🐷 수안푸드 v3.6.7 실행: http://localhost:${PORT}/pig`);
     console.log(`⚡ 서버 워밍업 시작...`);
     // 백그라운드 프리로드 (실패해도 무시)
     setTimeout(() => {
